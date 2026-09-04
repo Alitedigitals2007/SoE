@@ -8,6 +8,7 @@ import {
 import { prisma } from "@/lib/prisma";
 import { generateMatchCode } from "@/lib/matchCode";
 import { publishMatchUpdate } from "@/lib/realtime/server";
+import { GOAL_POINTS } from "@/lib/platform/engine";
 import type { ActionResult, ErrResult, Role, TeamSide as TeamSideView } from "@/lib/domain";
 
 type Tx = Prisma.TransactionClient;
@@ -484,6 +485,13 @@ export async function decideRound(
         awayScore: scorerTeam === "AWAY" ? { increment: 1 } : undefined,
       },
     });
+    // Fantasy: every manager in this competition who picked the scorer earns points
+    if (match.competitionId) {
+      await tx.fantasyEntry.updateMany({
+        where: { competitionId: match.competitionId, picks: { some: { playerUserId: sub.player.userId } } },
+        data: { points: { increment: GOAL_POINTS } },
+      });
+    }
     const scorerName = rosterNameOf(match, sub.playerId);
     const teamName = teamNameOf(match, scorerTeam);
     const scoreLine =

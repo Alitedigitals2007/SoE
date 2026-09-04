@@ -46,7 +46,7 @@ export default async function AdminMatchPage({ params }: { params: Promise<{ cod
               {match.homeName} <span className="text-subtle">v</span> {match.awayName}
             </h1>
             <p className="text-sm text-muted">
-              Match code <span className="font-semibold text-gold">{match.code}</span> · {match.referee.name ?? "No referee"}
+              Match code <span className="font-semibold text-gold">{match.code}</span> · {match.referee?.name ?? "No referee"}
             </p>
           </div>
           <div className="flex items-center gap-2">

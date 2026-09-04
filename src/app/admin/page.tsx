@@ -67,7 +67,7 @@ export default async function AdminHome() {
                           {m.homeName} <span className="text-subtle">v</span> {m.awayName}
                         </span>
                         <span className="text-xs text-subtle">
-                          Code {m.code} · {m.referee.name}
+                          Code {m.code} · {m.referee?.name ?? "Unassigned"}
                         </span>
                       </span>
                       <StatusBadge status={m.status} />
@@ -82,7 +82,9 @@ export default async function AdminHome() {
             <CardHeader title="Quick actions" />
             <div className="flex flex-col gap-2 p-3 text-sm">
               <ActionLink href="/admin/users" label="Manage accounts" hint="Create referee & player logins" />
-              <ActionLink href="/admin/matches/new" label="Create a match" hint="Pick teams and assign a referee" />
+              <ActionLink href="/admin/teams" label="Teams" hint="Create clubs and add their 8 players" />
+              <ActionLink href="/admin/competitions" label="Competitions" hint="Leagues, cups, fixtures & referees" />
+              <ActionLink href="/admin/matches/new" label="Create a friendly" hint="A one-off match with teams of your choice" />
               <ActionLink href="/admin/matches" label="Open a roster" hint="Assign players to a match's teams" />
             </div>
           </Card>

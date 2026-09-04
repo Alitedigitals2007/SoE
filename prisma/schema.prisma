@@ -28,6 +28,8 @@ model User {
   rosterSlots     MatchPlayer[]
   requestedSubs   SubstitutionRequest[]
   timelineAuthored TimelineEvent[] @relation("TimelineAuthor")
+  teams           TeamPlayer[]
+  fantasyEntries  FantasyEntry[]
 }
 
 /* --------------------------------- Matches --------------------------------- */
@@ -49,9 +51,18 @@ model Match {
   homeName         String
   awayName         String
   status           MatchStatus   @default(DRAFT)
-  refereeId        String
-  referee          User          @relation("MatchReferee", fields: [refereeId], references: [id])
+  refereeId        String?
+  referee          User?         @relation("MatchReferee", fields: [refereeId], references: [id], onDelete: SetNull)
   countdownSeconds Int           @default(15)
+
+  // Optional tournament context. Friendly matches carry none of these.
+  competitionId String?
+  competition   Competition? @relation(fields: [competitionId], references: [id], onDelete: SetNull)
+  homeTeamId    String?
+  homeTeam      Team?        @relation("TeamHomeMatches", fields: [homeTeamId], references: [id], onDelete: SetNull)
+  awayTeamId    String?
+  awayTeam      Team?        @relation("TeamAwayMatches", fields: [awayTeamId], references: [id], onDelete: SetNull)
+  cupRound      Int? // knockout round index, 1-based (1 = first round)
 
   // "20 prepared questions, 10 played": the played set is Rounds 1..10,
   // which reference the prepared bank. A round can only be created while in DRAFT.
@@ -268,4 +279,106 @@ model TimelineEvent {
   createdAt DateTime     @default(now())
 
   @@index([matchId, seq])
+}
+
+/* --------------------------------- Teams ----------------------------------- */
+
+model Team {
+  id        String @id @default(cuid())
+  name      String
+  slug      String @unique
+  code      String // short tag, e.g. "LAG"
+  createdAt DateTime @default(now())
+
+  members         TeamPlayer[]
+  competitionEntries CompetitionTeam[]
+  homeMatches     Match[] @relation("TeamHomeMatches")
+  awayMatches     Match[] @relation("TeamAwayMatches")
+
+  @@index([slug])
+}
+
+model TeamPlayer {
+  id        String @id @default(cuid())
+  teamId    String
+  team      Team   @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  number    Int // squad number 1..8
+  createdAt DateTime @default(now())
+
+  @@unique([teamId, userId])
+  @@unique([teamId, number])
+  @@index([userId])
+}
+
+/* ------------------------------- Competitions ------------------------------ */
+
+enum CompetitionType {
+  LEAGUE // round-robin, standings table
+  CUP // single-elimination knockout bracket
+}
+
+enum CompetitionStatus {
+  DRAFT
+  ACTIVE
+  FINISHED
+}
+
+model Competition {
+  id        String            @id @default(cuid())
+  slug      String            @unique
+  name      String
+  type      CompetitionType   @default(LEAGUE)
+  status    CompetitionStatus @default(DRAFT)
+  season    String // e.g. "2026/27"
+  createdAt DateTime          @default(now())
+
+  teams          CompetitionTeam[]
+  matches        Match[]
+  fantasyEntries FantasyEntry[]
+}
+
+model CompetitionTeam {
+  id            String @id @default(cuid())
+  competitionId String
+  competition   Competition @relation(fields: [competitionId], references: [id], onDelete: Cascade)
+  teamId        String
+  team          Team   @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  seed          Int? // knockout seeding / league order
+  createdAt     DateTime @default(now())
+
+  @@unique([competitionId, teamId])
+}
+
+/* ------------------------------- Fantasy ----------------------------------- */
+
+model FantasyEntry {
+  id            String @id @default(cuid())
+  competitionId String
+  competition   Competition @relation(fields: [competitionId], references: [id], onDelete: Cascade)
+  userId        String
+  user          User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name          String
+  points        Int    @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  picks FantasyPick[]
+
+  @@unique([competitionId, userId])
+  @@index([competitionId, points])
+}
+
+model FantasyPick {
+  id            String @id @default(cuid())
+  entryId       String
+  entry         FantasyEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  competitionId String
+  playerUserId  String
+  createdAt     DateTime @default(now())
+
+  @@unique([entryId, playerUserId])
+  @@unique([competitionId, entryId, playerUserId])
+  @@index([competitionId, playerUserId])
 }

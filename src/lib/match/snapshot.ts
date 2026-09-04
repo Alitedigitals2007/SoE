@@ -222,8 +222,8 @@ export function buildSnapshot(
       !lockedPendingRef
         ? match.currentRound + 1
         : null,
-    refereeId: match.refereeId,
-    refereeName: match.referee.name,
+    refereeId: match.refereeId ?? "",
+    refereeName: match.referee?.name ?? "Unassigned",
     viewer: {
       role: viewer.role,
       userId: viewer.userId,

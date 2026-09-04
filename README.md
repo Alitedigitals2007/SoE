@@ -52,7 +52,7 @@ Server publish failures are logged and never crash an action.
 ## Getting started
 
 1. Install: `npm install`
-2. Create a Neon project (neon.tech) and copy the pooled Prisma connection string.
+2. Create a Neon project (neon.tech) and copy the **direct** (non-pooler) Prisma connection string — the app relies on interactive transactions that the `-pooler` endpoint cannot carry.
 3. `cp .env.example .env`, then fill in:
    - `DATABASE_URL`
    - `AUTH_SECRET` (generate with the command in the example)
@@ -77,7 +77,7 @@ seed once (`npx prisma migrate deploy`, then `npm run db:seed`).
 1. Push this repo to GitHub.
 2. In Vercel: **Add New → Project → import** the repo (framework auto-detected as Next.js — build command `npm run build` is already correct; `postinstall` regenerates the Prisma client).
 3. Add these **Environment Variables** in Project → Settings → Environment Variables (Production):
-   - `DATABASE_URL` — Neon pooled connection string (`?sslmode=require`)
+   - `DATABASE_URL` — Neon **direct** (non-pooler) connection string (`?sslmode=require`)
    - `AUTH_SECRET` — long random string
    - `AUTH_URL` — your `https://<project>.vercel.app`
    - `AUTH_TRUST_HOST=true`

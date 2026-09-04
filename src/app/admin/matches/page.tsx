@@ -45,7 +45,7 @@ export default async function AdminMatchesPage() {
                         {m.homeName} <span className="text-subtle">v</span> {m.awayName}
                       </span>
                       <span className="text-xs text-subtle">
-                        Code {m.code} · Referee {m.referee.name} · {m._count.roster}/16 shirts filled
+                        Code {m.code} · Referee {m.referee?.name ?? "Unassigned"} · {m._count.roster}/16 shirts filled
                       </span>
                     </span>
                     <span className="flex items-center gap-2">
