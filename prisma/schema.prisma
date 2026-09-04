@@ -1,0 +1,271 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/* ---------------------------------- Users ---------------------------------- */
+
+enum Role {
+  ADMIN
+  REFEREE
+  PLAYER
+}
+
+model User {
+  id           String       @id @default(cuid())
+  email        String       @unique
+  name         String
+  passwordHash String
+  role         Role
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  matchesRefereed Match[]         @relation("MatchReferee")
+  rosterSlots     MatchPlayer[]
+  requestedSubs   SubstitutionRequest[]
+  timelineAuthored TimelineEvent[] @relation("TimelineAuthor")
+}
+
+/* --------------------------------- Matches --------------------------------- */
+
+enum MatchStatus {
+  DRAFT // admin built the shell, referee may still be preparing questions
+  LIVE // kicked off, rounds run until 10 are decided
+  FINISHED // full time, summary available
+}
+
+enum TeamSide {
+  HOME
+  AWAY
+}
+
+model Match {
+  id               String        @id @default(cuid())
+  code             String        @unique
+  homeName         String
+  awayName         String
+  status           MatchStatus   @default(DRAFT)
+  refereeId        String
+  referee          User          @relation("MatchReferee", fields: [refereeId], references: [id])
+  countdownSeconds Int           @default(15)
+
+  // "20 prepared questions, 10 played": the played set is Rounds 1..10,
+  // which reference the prepared bank. A round can only be created while in DRAFT.
+  currentRound Int @default(0) // number of rounds decided so far (0..10)
+  version      Int @default(0) // bumped on every state change for realtime
+  startedAt    DateTime?
+  finishedAt   DateTime?
+
+  homeScore Int @default(0)
+  awayScore Int @default(0)
+
+  roster       MatchPlayer[]
+  questions Question[]
+  rounds    Round[]
+  requests  SubstitutionRequest[]
+  substitutions Substitution[]
+  incidents ConductIncident[]
+  timeline  TimelineEvent[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([refereeId])
+}
+
+/* ------------------------------ Roster / lineup ----------------------------- */
+
+enum LineupRole {
+  STARTER // on the field, can answer
+  SUB     // on the bench, cannot answer until subbed in
+  OUT     // left the match (red card or otherwise removed)
+}
+
+model MatchPlayer {
+  id        String    @id @default(cuid())
+  matchId   String
+  match     Match     @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  team      TeamSide
+  number    Int // shirt number, 1..8
+  isCaptain Boolean   @default(false)
+  role      LineupRole @default(STARTER)
+
+  submissions Submission[]
+  incidents   ConductIncident[]
+  outInSubs   Substitution[]    @relation("SubPlayerOut")
+  inInSubs    Substitution[]    @relation("SubPlayerIn")
+
+  @@unique([matchId, userId])
+  @@unique([matchId, team, number])
+}
+
+/* ------------------------------- Question bank ------------------------------ */
+
+model Question {
+  id              String  @id @default(cuid())
+  matchId         String
+  match           Match   @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  order           Int // 1-based position inside the bank as prepared by the referee
+  text            String
+  referenceAnswer String
+  roundNumber     Int? // null = prepared but not part of the 10 to be played
+
+  rounds Round[]
+
+  @@unique([matchId, order])
+  @@unique([matchId, roundNumber])
+}
+
+/* --------------------------------- Rounds ---------------------------------- */
+
+enum RoundStatus {
+  PENDING // set up in the played list, not yet shown
+  OPEN // question live, countdown running, submissions accepted
+  LOCKED // countdown over, answers frozen + revealed anonymously, waiting on referee
+  DECIDED // referee chose a goal OR no-goal, reveal done
+}
+
+enum RoundDecision {
+  GOAL
+  NO_GOAL
+}
+
+model Round {
+  id        String      @id @default(cuid())
+  matchId   String
+  match     Match       @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  number    Int // 1..10, the order the ten questions are played
+  questionId String
+  question  Question    @relation(fields: [questionId], references: [id])
+  status    RoundStatus @default(PENDING)
+  openedAt  DateTime?
+  closesAt  DateTime?
+  lockedAt  DateTime?
+  decidedAt DateTime?
+  decision  RoundDecision?
+  goalSubmissionId String?       @unique
+
+  submissions  Submission[]
+  goalSubmission Submission? @relation("RoundWinner", fields: [goalSubmissionId], references: [id])
+
+  @@unique([matchId, number])
+  @@unique([matchId, questionId])
+}
+
+/* ------------------------------- Submissions -------------------------------- */
+
+model Submission {
+  id          String   @id @default(cuid())
+  roundId     String
+  round       Round    @relation(fields: [roundId], references: [id], onDelete: Cascade)
+  playerId    String
+  player      MatchPlayer @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  answer      String
+  seq         Int // 1-based submission order inside the round
+  submittedAt DateTime @default(now())
+
+  winningRound Round? @relation("RoundWinner")
+
+  @@unique([roundId, playerId])
+  @@index([roundId, seq])
+}
+
+/* ----------------------------- Substitutions ------------------------------- */
+
+enum SubRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model SubstitutionRequest {
+  id           String           @id @default(cuid())
+  matchId      String
+  match        Match            @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  team         TeamSide
+  playerInId   String
+  playerOutId  String
+  requestedById String
+  requestedBy  User             @relation(fields: [requestedById], references: [id], onDelete: Cascade)
+  status       SubRequestStatus @default(PENDING)
+  createdAt    DateTime         @default(now())
+  decidedAt    DateTime?
+}
+
+model Substitution {
+  id        String     @id @default(cuid())
+  matchId   String
+  match     Match      @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  team      TeamSide
+  playerIn  MatchPlayer @relation("SubPlayerIn", fields: [playerInId], references: [id])
+  playerInId String
+  playerOut MatchPlayer @relation("SubPlayerOut", fields: [playerOutId], references: [id])
+  playerOutId String
+  at        DateTime   @default(now())
+}
+
+/* ------------------------------ Conduct cards ------------------------------ */
+
+enum IncidentType {
+  OUTSIDE_TIME
+  ANSWER_MANIPULATION
+  ANSWER_SHARING
+  ABUSIVE_BEHAVIOUR
+  CHAT_SPAM
+  ACCOUNT_MISUSE
+  UNAUTHORIZED_ASSISTANCE
+  DISRESPECT_REFEREE
+  OTHER
+}
+
+enum IncidentAction {
+  WARNING
+  YELLOW_CARD
+  RED_CARD
+}
+
+model ConductIncident {
+  id        String         @id @default(cuid())
+  matchId   String
+  match     Match          @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  playerId  String
+  player    MatchPlayer    @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  type      IncidentType
+  action    IncidentAction
+  note      String?
+  at        DateTime       @default(now())
+}
+
+/* -------------------------------- Timeline --------------------------------- */
+
+enum TimelineType {
+  KICKOFF
+  QUESTION_OPEN
+  ANSWERS_LOCKED
+  GOAL
+  NO_GOAL
+  SUBSTITUTION
+  CARD
+  FULL_TIME
+}
+
+model TimelineEvent {
+  id        String       @id @default(cuid())
+  matchId   String
+  match     Match        @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  type      TimelineType
+  roundNumber Int?
+  label     String // human readable one-liner, e.g. "GOAL — David (Newton) 1–0"
+  detail    String? // optional second line
+  authoredById String?
+  authoredBy User?      @relation("TimelineAuthor", fields: [authoredById], references: [id])
+  seq       Int
+  createdAt DateTime     @default(now())
+
+  @@index([matchId, seq])
+}

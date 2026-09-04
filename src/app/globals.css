@@ -1,0 +1,127 @@
+@import "tailwindcss";
+
+:root {
+  color-scheme: dark;
+  /* Stadium of Elite palette — deep-night stands, floodlight white, pitch green, trophy gold */
+  --bg: #070c14;
+  --bg-elevated: #0b1220;
+  --bg-raised: #101a2c;
+  --surface: #111c31;
+  --line: #1e2c47;
+  --line-strong: #2c3f63;
+  --fg: #e9effa;
+  --fg-muted: #9fb0c9;
+  --fg-subtle: #6b7c99;
+  --gold: #e8b53b;
+  --gold-strong: #ffd166;
+  --gold-ink: #241a04;
+  --pitch: #1fae63;
+  --pitch-deep: #127a44;
+  --pitch-ink: #03281a;
+  --success: #35d07f;
+  --warning: #f5b841;
+  --danger: #f2605f;
+  --info: #54a0ff;
+  --team-a: #ff9f43;
+  --team-b: #4da3ff;
+  --radius: 14px;
+}
+
+@theme {
+  --color-bg: #070c14;
+  --color-bg-elevated: #0b1220;
+  --color-bg-raised: #101a2c;
+  --color-surface: #111c31;
+  --color-line: #1e2c47;
+  --color-line-strong: #2c3f63;
+  --color-fg: #e9effa;
+  --color-muted: #9fb0c9;
+  --color-subtle: #6b7c99;
+  --color-gold: #e8b53b;
+  --color-gold-strong: #ffd166;
+  --color-gold-ink: #241a04;
+  --color-pitch: #1fae63;
+  --color-pitch-deep: #127a44;
+  --color-pitch-ink: #03281a;
+  --color-success: #35d07f;
+  --color-warning: #f5b841;
+  --color-danger: #f2605f;
+  --color-info: #54a0ff;
+  --color-teama: #ff9f43;
+  --color-teamb: #4da3ff;
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+  --font-display: "Segoe UI", ui-sans-serif, system-ui, -apple-system,
+    Roboto, Arial, sans-serif;
+  --radius-lg: 14px;
+}
+
+* {
+  border-color: var(--line);
+}
+
+html {
+  background: var(--bg);
+}
+
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  min-height: 100vh;
+}
+
+/* Subtle stadium floodlight glow at the very top of the page */
+.stadium-glow {
+  background:
+    radial-gradient(1200px 420px at 50% -120px, rgba(232, 181, 59, 0.09), transparent 70%),
+    radial-gradient(900px 320px at 18% -140px, rgba(31, 174, 99, 0.08), transparent 70%);
+}
+
+/* Live pitch-line pattern used behind scoreboards */
+.pitch-bg {
+  background-color: var(--pitch-deep);
+  background-image:
+    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.06) 0 2px, transparent 2px 34px),
+    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.06) 0 2px, transparent 2px 34px);
+}
+
+::selection {
+  background: var(--gold);
+  color: var(--gold-ink);
+}
+
+@keyframes soe-pulse-gold {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(232, 181, 59, 0.55); }
+  50% { box-shadow: 0 0 0 10px rgba(232, 181, 59, 0); }
+}
+
+.animate-soe-gold {
+  animation: soe-pulse-gold 1.6s ease-in-out infinite;
+}
+
+@keyframes soe-pop {
+  0% { transform: scale(0.6); opacity: 0; }
+  60% { transform: scale(1.12); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+.animate-soe-pop {
+  animation: soe-pop 0.45s cubic-bezier(0.2, 0.9, 0.3, 1.2) both;
+}
+
+@keyframes soe-fade-up {
+  from { transform: translateY(10px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+.animate-soe-fade-up {
+  animation: soe-fade-up 0.35s ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-soe-gold, .animate-soe-pop, .animate-soe-fade-up {
+    animation: none;
+  }
+}
