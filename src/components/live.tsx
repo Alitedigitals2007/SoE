@@ -27,16 +27,18 @@ export function MatchLiveCard({ matches }: { matches: { id: string; code: string
         <Link
           key={m.id}
           href={`/match/${m.code}`}
-          className="group overflow-hidden rounded-2xl border border-line bg-white shadow-sm transition-all hover:-translate-y-1 hover:border-brand/40 hover:shadow-lg"
+          className="group overflow-hidden rounded-2xl border-2 border-fg/15 bg-bg-elevated shadow-[4px_4px_0_rgba(11,32,48,.08)] transition-all hover:-translate-y-1 hover:border-brand/40 hover:shadow-lg"
         >
+          {/* Scoreboard strip */}
           <div className="pitch-bg flex items-center justify-between gap-2 px-5 py-4 text-sm font-bold text-white">
-            <span className="truncate">{m.homeName}</span>
+            <span className="truncate text-right flex-1">{m.homeName}</span>
             <span className="flex items-center gap-1.5 rounded-full bg-white/15 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-widest">
               <span aria-hidden className="size-1.5 animate-pulse rounded-full bg-red-400" />
               Live
             </span>
-            <span className="truncate text-right">{m.awayName}</span>
+            <span className="truncate flex-1">{m.awayName}</span>
           </div>
+          {/* Score */}
           <div className="px-5 py-4 text-center">
             <p className="text-4xl font-black tabular-nums text-fg">
               {m.homeScore}<span className="text-subtle"> – </span>{m.awayScore}

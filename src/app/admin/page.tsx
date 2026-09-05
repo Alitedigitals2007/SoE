@@ -82,6 +82,7 @@ export default async function AdminHome() {
             <CardHeader title="Quick actions" />
             <div className="flex flex-col gap-2 p-3 text-sm">
               <ActionLink href="/admin/users" label="Manage accounts" hint="Create referee & player logins" />
+              <ActionLink href="/admin/imports" label="Import centre" hint="Bulk-load accounts, squads, questions and fixtures" />
               <ActionLink href="/admin/teams" label="Teams" hint="Create clubs and add their 8 players" />
               <ActionLink href="/admin/competitions" label="Competitions" hint="Leagues, cups, fixtures & referees" />
               <ActionLink href="/admin/matches/new" label="Create a friendly" hint="A one-off match with teams of your choice" />

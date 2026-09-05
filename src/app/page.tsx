@@ -51,13 +51,16 @@ export default async function Home() {
       <SiteHeader />
       <main className="flex-1">
         {/* HERO */}
-        <section className="stadium-glow relative overflow-hidden border-b border-line">
+        <section className="stadium-glow broadcast-grid relative overflow-hidden border-b-2 border-fg">
+          <div className="scoreboard-strip flex items-center justify-center gap-8 py-2">
+            <span>THE QUIZ LEAGUE</span><span className="text-gold">● MATCHDAY 01</span><span>ANSWER. SCORE. ADVANCE.</span>
+          </div>
           <div className="mx-auto grid max-w-7xl items-center gap-10 px-4 py-16 lg:grid-cols-2 lg:py-24">
             <div className="animate-fade-up">
               <Badge tone="pitch" className="mb-4">
                 <span aria-hidden className="size-1.5 animate-pulse rounded-full bg-brand" /> Live quiz football
               </Badge>
-              <h1 className="text-4xl font-black leading-[1.05] tracking-tight text-fg sm:text-6xl">
+              <h1 className="font-display text-5xl font-black uppercase leading-[.92] tracking-[-.04em] text-fg sm:text-7xl">
                 Every correct answer<br />
                 is a <span className="text-gradient-brand">goal</span>.
               </h1>
@@ -92,7 +95,7 @@ export default async function Home() {
 
             {/* Hero pitch card */}
             <div className="animate-pop">
-              <div className="pitch-bg rounded-3xl p-8 shadow-xl">
+              <div className="pitch-bg animate-float rounded-[2rem] border-2 border-fg p-8 shadow-[10px_10px_0_rgba(11,32,48,.22)]">
                 <div className="flex items-center justify-between gap-4">
                   <p className="text-lg font-extrabold uppercase tracking-wide text-white">Lagos United</p>
                   <div className="text-center">
@@ -117,7 +120,7 @@ export default async function Home() {
         </section>
 
         {/* STATS */}
-        <section className="border-b border-line bg-white">
+        <section className="scoreboard-strip border-b-0">
           <div className="mx-auto grid max-w-7xl grid-cols-2 gap-4 px-4 py-8 sm:grid-cols-4">
             <Stat value={players} label="Registered players" />
             <Stat value={teams} label="Teams" />
@@ -127,7 +130,7 @@ export default async function Home() {
         </section>
 
         {/* LIVE NOW */}
-        <section className="mx-auto max-w-7xl px-4 py-12">
+        <section className="mx-auto max-w-7xl px-4 py-14">
           <SectionHead
             title="Live now"
             subtitle="Matches currently on the pitch"
@@ -145,7 +148,7 @@ export default async function Home() {
         </section>
 
         {/* UPCOMING */}
-        <section className="mx-auto max-w-7xl px-4 pb-12">
+        <section className="mx-auto max-w-7xl px-4 pb-14">
           <SectionHead title="Scheduled" subtitle="Next fixtures to watch" action={{ href: "/fixtures", label: "All fixtures" }} />
           {upcoming.length === 0 ? (
             <EmptyCard text="Fixtures will appear here once leagues and cups are set up." />
@@ -159,8 +162,8 @@ export default async function Home() {
         </section>
 
         {/* COMPETITIONS */}
-        <section className="border-y border-line bg-white">
-          <div className="mx-auto max-w-7xl px-4 py-12">
+        <section className="border-y-2 border-fg/15 bg-bg-elevated/70">
+          <div className="mx-auto max-w-7xl px-4 py-14">
             <SectionHead
               title="Leagues & knockout cups"
               subtitle="Round-robin tables and single-elimination brackets"
@@ -189,7 +192,7 @@ export default async function Home() {
 
         {/* TOP SCORERS */}
         {topScorers.length > 0 ? (
-          <section className="mx-auto max-w-7xl px-4 py-12">
+          <section className="mx-auto max-w-7xl px-4 py-14">
             <SectionHead title="Golden boot" subtitle="Most goals scored across all finished matches" action={{ href: "/players", label: "All players" }} />
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {topScorers.map((s, i) => (
@@ -213,11 +216,11 @@ export default async function Home() {
         ) : null}
 
         {/* HOW IT WORKS */}
-        <section className="border-t border-line brand-gradient">
+        <section className="border-t-2 border-fg pitch-bg">
           <div className="mx-auto max-w-7xl px-4 py-16">
             <div className="grid gap-6 text-center text-white md:grid-cols-3">
               {[
-                { n: "01", t: "Join a team", d: "Register, join a club's eight and get named among the five starters." },
+                 { n: "01", t: "Follow the game", d: "Register as a fan, explore teams and build your fantasy entry." },
                 { n: "02", t: "Win the match", d: "Ten questions, one referee. Answer fast — accepted answers are goals." },
                 { n: "03", t: "Claim the trophy", d: "Win the league table or cut through the knockout bracket, and score fantasy points." },
               ].map((s) => (
@@ -233,7 +236,7 @@ export default async function Home() {
                 href="/register"
                 className="inline-flex h-12 items-center gap-2 rounded-xl bg-white px-7 text-base font-bold text-brand-deep shadow-lg transition-transform hover:scale-[1.03]"
               >
-                Register & build your fantasy squad
+                 Register & build your fantasy squad
               </Link>
             </div>
           </div>
@@ -281,7 +284,7 @@ function SectionHead({
 
 function EmptyCard({ text, action }: { text: string; action?: React.ReactNode }) {
   return (
-    <div className="rounded-2xl border border-dashed border-line-strong bg-white p-8 text-center">
+    <div className="rounded-2xl border border-dashed border-line-strong bg-bg-elevated p-8 text-center">
       <p className="text-sm text-muted">{text}</p>
       {action ? <div className="mt-3">{action}</div> : null}
     </div>
@@ -292,7 +295,7 @@ function MatchCard({ m, live }: { m: { id: string; code: string; homeName: strin
   return (
     <Link
       href={`/match/${m.code}`}
-      className="rounded-2xl border border-line bg-white p-5 shadow-sm transition-all hover:-translate-y-0.5 hover:border-brand/40 hover:shadow-md"
+      className="group overflow-hidden rounded-2xl border-2 border-fg/15 bg-bg-elevated p-5 shadow-[4px_4px_0_rgba(11,32,48,.08)] transition-all hover:-translate-y-0.5 hover:border-brand/40 hover:shadow-md"
     >
       <div className="flex items-center justify-between text-sm font-bold">
         <span className="flex-1 truncate text-fg">{m.homeName}</span>

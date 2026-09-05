@@ -21,16 +21,21 @@ export function AuthCard({ mode }: { mode: "login" | "register" }) {
     <Card className="w-full max-w-md">
       <div className="p-7">
         <div className="mb-6 text-center">
-          <div className="flex justify-center">
-            <SiteLogo href="/" />
+          <div className="mb-3 flex justify-center">
+            <div className="relative">
+              <div className="absolute -inset-2 rounded-full bg-brand/10 blur-xl" />
+              <span className="relative grid size-16 place-items-center rounded-2xl border-2 border-fg brand-gradient text-3xl text-white shadow-[3px_3px_0_rgba(11,32,48,.2)]">
+                ⚽
+              </span>
+            </div>
           </div>
-          <h1 className="mt-4 text-xl font-black tracking-tight text-fg">
+          <h1 className="font-display text-2xl font-black uppercase tracking-wider text-fg">
             {isLogin ? "Welcome back" : "Join the Stadium"}
           </h1>
           <p className="mt-1 text-sm text-muted">
             {isLogin
               ? "Sign in to your account"
-              : "Free account — jump straight into fantasy and team rosters."}
+              : "Free fan account — follow competitions and manage fantasy."}
           </p>
         </div>
 
@@ -84,8 +89,8 @@ export function AuthCard({ mode }: { mode: "login" | "register" }) {
           </Field>
           {!isLogin ? (
             <p className="text-xs text-subtle">
-              Creating an account makes you a Player immediately — you can build a fantasy squad and be
-              picked for team rosters.
+              You are registering as an ordinary user/fan. You can use fantasy, profiles and comparisons;
+              an admin must separately create a Player account before you can enter a match or team roster.
             </p>
           ) : null}
           {error ? (

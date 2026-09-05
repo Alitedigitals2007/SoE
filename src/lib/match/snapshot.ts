@@ -123,13 +123,13 @@ function roundToView(
 export function buildSnapshot(
   match: MatchFull,
   viewer: {
-    role: "ADMIN" | "REFEREE" | "PLAYER" | "PUBLIC";
+    role: "ADMIN" | "REFEREE" | "PLAYER" | "USER" | "PUBLIC";
     userId: string | null;
   },
   now = new Date(),
 ): MatchSnapshot {
   const isReferee =
-    viewer.role === "ADMIN" || (viewer.role === "REFEREE" && match.refereeId === viewer.userId);
+      viewer.role === "ADMIN" || (viewer.role === "REFEREE" && match.refereeId === viewer.userId);
   const isAdmin = viewer.role === "ADMIN";
 
   const roster: RosterSlotView[] = match.roster.map((m) => ({
@@ -142,7 +142,7 @@ export function buildSnapshot(
   }));
 
   const viewerRosterSlot =
-    viewer.userId && viewer.role === "PLAYER"
+      viewer.userId && viewer.role === "PLAYER"
       ? match.roster.find((m) => m.userId === viewer.userId)
       : null;
 

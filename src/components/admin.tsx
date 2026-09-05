@@ -64,6 +64,7 @@ export function UsersManager({ users }: { users: UserRow[] }) {
             <Select id="urole" value={role} onChange={(e) => setRole(e.target.value as Role)}>
               <option value="REFEREE">Referee</option>
               <option value="PLAYER">Player</option>
+              <option value="USER">Fan / User</option>
             </Select>
           </Field>
           {notice ? <NoticeLine notice={notice} /> : null}
@@ -111,9 +112,10 @@ function UserRowItem({ user, flash }: { user: UserRow; flash: (r: { ok: boolean;
           onChange={(e) =>
             void updateUserAction({ userId: user.id, role: e.target.value as Role }).then((r) => flash(r, "Role updated."))
           }
-        >
-          <option value="REFEREE">Referee</option>
-          <option value="PLAYER">Player</option>
+          >
+            <option value="REFEREE">Referee</option>
+            <option value="PLAYER">Player</option>
+            <option value="USER">Fan / User</option>
         </Select>
       </td>
       <td className="px-4 py-2.5">

@@ -4,7 +4,7 @@
  * never need to import the generated Prisma client.
  */
 
-export type Role = "ADMIN" | "REFEREE" | "PLAYER";
+export type Role = "ADMIN" | "REFEREE" | "PLAYER" | "USER";
 export type TeamSide = "HOME" | "AWAY";
 export type MatchStatus = "DRAFT" | "LIVE" | "FINISHED";
 export type LineupRole = "STARTER" | "SUB" | "OUT";

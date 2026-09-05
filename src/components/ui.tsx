@@ -20,17 +20,17 @@ type ButtonSize = "sm" | "md" | "lg";
 
 const variantClasses: Record<ButtonVariant, string> = {
   primary:
-    "bg-gold text-gold-ink hover:bg-gold-strong focus-visible:outline-gold disabled:bg-line disabled:text-subtle",
+    "brand-gradient text-white shadow-[3px_3px_0_rgba(11,32,48,.16)] hover:brightness-105 focus-visible:outline-gold disabled:bg-line disabled:text-subtle disabled:shadow-none",
   secondary:
-    "bg-surface text-fg border border-line-strong hover:border-line-strong hover:bg-bg-raised focus-visible:outline-gold disabled:opacity-50",
+    "bg-bg-elevated text-fg border-2 border-fg shadow-[2px_2px_0_rgba(11,32,48,.12)] hover:-translate-y-0.5 hover:bg-bg-raised focus-visible:outline-gold disabled:opacity-50 disabled:shadow-none",
   ghost:
     "text-muted hover:text-fg hover:bg-surface focus-visible:outline-gold disabled:opacity-50",
   danger:
-    "bg-danger/15 text-danger border border-danger/40 hover:bg-danger/25 focus-visible:outline-danger disabled:opacity-50",
+    "bg-danger/10 text-danger border-2 border-danger/50 hover:bg-danger/20 focus-visible:outline-danger disabled:opacity-50",
   success:
-    "bg-success/15 text-success border border-success/40 hover:bg-success/25 focus-visible:outline-success disabled:opacity-50",
+    "bg-success/10 text-success border-2 border-success/50 hover:bg-success/20 focus-visible:outline-success disabled:opacity-50",
   pitch:
-    "bg-pitch text-pitch-ink font-semibold hover:brightness-110 focus-visible:outline-pitch disabled:bg-line disabled:text-subtle",
+    "bg-pitch text-pitch-ink font-semibold shadow-[3px_3px_0_rgba(11,32,48,.16)] hover:brightness-110 focus-visible:outline-pitch disabled:bg-line disabled:text-subtle disabled:shadow-none",
   teamA:
     "bg-teama/15 text-teama border border-teama/40 hover:bg-teama/25 focus-visible:outline-teama disabled:opacity-50",
   teamB:
@@ -65,7 +65,7 @@ export function Button({
       type={type}
       disabled={disabled || loading}
       className={cn(
-        "inline-flex items-center justify-center rounded-lg font-medium transition-colors",
+        "inline-flex items-center justify-center rounded-xl font-bold transition-all duration-200 active:translate-y-0.5",
         "focus-visible:outline-2 focus-visible:outline-offset-2",
         "disabled:cursor-not-allowed",
         variantClasses[variant],
@@ -89,7 +89,7 @@ export function Card({
   return (
     <div
       className={cn(
-        "rounded-lg border border-line bg-bg-elevated shadow-sm",
+        "rounded-2xl border-2 border-fg/15 bg-bg-elevated shadow-[4px_4px_0_rgba(11,32,48,.08)]",
         className,
       )}
       {...rest}
@@ -111,7 +111,7 @@ export function CardHeader({
   return (
     <div
       className={cn(
-        "flex flex-wrap items-start justify-between gap-3 border-b border-line px-4 py-3",
+        "flex flex-wrap items-start justify-between gap-3 border-b-2 border-line px-5 py-4",
         className,
       )}
     >

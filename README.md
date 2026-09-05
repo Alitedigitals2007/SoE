@@ -11,7 +11,7 @@ the standards in [`ai-coding-standards.md`](./ai-coding-standards.md).
 
 - **Next.js 16 (App Router, TypeScript, Tailwind v4)** — full-stack
 - **PostgreSQL on Neon** via **Prisma**
-- **Auth.js (v5, credentials)** — roles: `ADMIN`, `REFEREE`, `PLAYER`
+- **Auth.js (v5, credentials)** — roles: `ADMIN`, `REFEREE`, `PLAYER`, `USER`
 - **Realtime with failover**: Pusher → Ably → polling (details below)
 
 ## Roles & flow
@@ -20,7 +20,8 @@ the standards in [`ai-coding-standards.md`](./ai-coding-standards.md).
 | ------- | ------ |
 | Admin (seeded) | Create referee/player accounts, create matches, assign a referee, build the 8-per-team rosters |
 | Referee (per match) | Prepare up to 20 questions, pick the 10 played, name 5 starters + captain per team, kick off, run every round (open question, lock answers, award GOAL or NO GOAL), approve captain substitution requests, issue warnings/yellow/red cards, end the match |
-| Player | Answer open questions while on the field; bench players wait; the captain can request substitutions |
+| User / fan | Public account for fantasy, profiles and comparisons; cannot enter a match or become a roster player |
+| Player | Admin-provisioned match account only. Answer open questions while on the field; bench players wait; the captain can request substitutions |
 | Spectator | Anyone with the match code can watch live at `/watch/<CODE>` (no account needed) |
 
 ## The match cycle

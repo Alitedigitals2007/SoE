@@ -17,33 +17,50 @@ export default async function PlayerDetail({ params }: { params: Promise<{ id: s
   return (
     <PublicShell>
       <div className="mx-auto max-w-5xl px-4 py-10">
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex items-center gap-4">
-            <span aria-hidden className="grid size-14 place-items-center rounded-2xl brand-gradient text-2xl font-black text-white shadow-md">
-              {stats.name.slice(0, 1)}
-            </span>
-            <div>
-              <h1 className="text-3xl font-black tracking-tight text-fg">{stats.name}</h1>
-              <div className="mt-1 flex flex-wrap gap-2">
-                <Badge tone="pitch">Player</Badge>
-                {stats.teams.map((t) => (
-                  <Badge key={t.slug} tone="info">
-                    {t.name}
-                  </Badge>
-                ))}
+        {/* Broadcast header banner */}
+        <div className="relative overflow-hidden rounded-2xl border-2 border-fg/15 bg-bg-elevated p-6 shadow-[4px_4px_0_rgba(11,32,48,.08)]">
+          <div className="absolute -right-16 -top-20 w-72 h-72 rounded-full bg-brand/10 blur-3xl" />
+          <div className="relative z-10 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div className="flex items-center gap-4">
+              <span aria-hidden className="grid size-16 shrink-0 place-items-center rounded-xl brand-gradient text-2xl font-black text-white shadow-md">
+                {stats.name.slice(0, 1)}
+              </span>
+              <div>
+                <h1 className="font-display text-2xl font-black uppercase tracking-wider text-fg">{stats.name}</h1>
+                <div className="mt-1 flex flex-wrap gap-2">
+                  <Badge tone="pitch">Player</Badge>
+                  {stats.teams.map((t) => (
+                    <Badge key={t.slug} tone="info">
+                      {t.name}
+                    </Badge>
+                  ))}
+                </div>
               </div>
             </div>
+            <Link href="/compare" className="inline-flex h-10 items-center rounded-lg bg-surface px-4 text-sm font-semibold text-fg hover:bg-line">
+              ⚖ Compare
+            </Link>
           </div>
-          <Link href="/compare" className="inline-flex h-10 items-center rounded-lg bg-surface px-4 text-sm font-semibold text-fg hover:bg-line">
-            ⚖ Compare
-          </Link>
-        </div>
 
-        <div className="mt-6 grid grid-cols-3 gap-3 rounded-2xl border border-line bg-white p-5 text-center shadow-sm sm:grid-cols-4">
-          <StatCell label="Goals" value={stats.goals} accent="text-brand" icon="⚽" />
-          <StatCell label="Matches" value={stats.matches} />
-          <StatCell label="Wins" value={stats.wins} accent="text-success" />
-          <StatCell label="Teams" value={stats.teams.length} />
+          {/* Stat strips */}
+          <div className="relative z-10 mt-5 grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="rounded-lg bg-surface/80 p-3">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-muted">Goals</p>
+              <p className="mt-0.5 text-xl font-black tabular-nums text-brand">{stats.goals}</p>
+            </div>
+            <div className="rounded-lg bg-surface/80 p-3">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-muted">Matches</p>
+              <p className="mt-0.5 text-xl font-black tabular-nums text-fg">{stats.matches}</p>
+            </div>
+            <div className="rounded-lg bg-surface/80 p-3">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-muted">Wins</p>
+              <p className="mt-0.5 text-xl font-black tabular-nums text-success">{stats.wins}</p>
+            </div>
+            <div className="rounded-lg bg-surface/80 p-3">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-muted">Teams</p>
+              <p className="mt-0.5 text-xl font-black tabular-nums text-fg">{stats.teams.length}</p>
+            </div>
+          </div>
         </div>
 
         <div className="mt-8">
@@ -54,7 +71,7 @@ export default async function PlayerDetail({ params }: { params: Promise<{ id: s
             <ul className="mt-3 space-y-1.5">
               {stats.recent.map((r, i) => (
                 <li key={i}>
-                  <Link href={`/match/${r.code}`} className="flex items-center justify-between gap-2 rounded-lg border border-line bg-white px-4 py-2.5 text-sm transition-colors hover:border-brand/40">
+                  <Link href={`/match/${r.code}`} className="flex items-center justify-between gap-2 rounded-xl border border-fg/15 bg-bg-elevated px-4 py-2.5 text-sm transition-colors hover:border-brand/40 hover:bg-bg-raised">
                     <span className="font-medium text-fg">vs {r.opponent}</span>
                     <span className="flex items-center gap-2">
                       <span className="font-black tabular-nums text-fg">{r.myScore}–{r.oppScore}</span>

@@ -24,8 +24,8 @@ export async function createUserAction(input: {
   if (!EMAIL_RE.test(email)) return { ok: false, error: "Enter a valid email address." };
   if (input.password.length < 8)
     return { ok: false, error: "Password must be at least 8 characters." };
-  if (input.role !== "REFEREE" && input.role !== "PLAYER")
-    return { ok: false, error: "Accounts can only be referee or player." };
+  if (input.role !== "REFEREE" && input.role !== "PLAYER" && input.role !== "USER")
+    return { ok: false, error: "Accounts can only be referee, player, or user." };
 
   try {
     const user = await prisma.user.create({
@@ -57,8 +57,8 @@ export async function updateUserAction(input: {
     data.name = input.name.trim();
   }
   if (input.role !== undefined) {
-    if (input.role !== "REFEREE" && input.role !== "PLAYER")
-      return { ok: false, error: "Accounts can only be referee or player." };
+    if (input.role !== "REFEREE" && input.role !== "PLAYER" && input.role !== "USER")
+      return { ok: false, error: "Accounts can only be referee, player, or user." };
     data.role = input.role;
   }
   if (input.password !== undefined && input.password.length > 0) {

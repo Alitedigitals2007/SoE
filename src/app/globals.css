@@ -2,164 +2,179 @@
 
 :root {
   color-scheme: light;
-  /* Stadium of Elite — fresh light football-platform look */
-  --bg: #f4f7fb;
-  --bg-elevated: #ffffff;
-  --bg-raised: #edf2f8;
-  --surface: #e4ebf4;
-  --line: #d8e2ee;
-  --line-strong: #b7c6da;
-  --fg: #0e1a2e;
-  --muted: #4f617c;
-  --subtle: #8595ac;
-  --brand: #0f9d5c;
-  --brand-strong: #0cb668;
-  --brand-deep: #0a6e42;
+  /* Matchday print + broadcast palette. */
+  --bg: #f4f1e9;
+  --bg-elevated: #fffdf8;
+  --bg-raised: #eeeae1;
+  --surface: #e4dfd4;
+  --line: #d4ccbd;
+  --line-strong: #b9ad9b;
+  --fg: #0b2030;
+  --muted: #536474;
+  --subtle: #87939b;
+  --brand: #087a55;
+  --brand-strong: #0b9a69;
+  --brand-deep: #07543d;
   --brand-ink: #ffffff;
-  --pitch: #12a463;
-  --pitch-deep: #087a48;
+  --pitch: #138c58;
+  --pitch-deep: #07563a;
   --pitch-ink: #ffffff;
-  --success: #129a5b;
-  --warning: #e0930b;
-  --danger: #e5484d;
-  --info: #2f7cf6;
-  --team-a: #f2682b;
-  --team-b: #2f7cf6;
-  --radius: 14px;
+  --gold: #ff6b2c;
+  --gold-strong: #ff8d53;
+  --gold-ink: #1b2430;
+  --success: #087a55;
+  --warning: #cc8100;
+  --danger: #d83d48;
+  --info: #2364d2;
+  --team-a: #ff6b2c;
+  --team-b: #2364d2;
 }
 
 @theme {
-  --color-bg: #f4f7fb;
-  --color-bg-elevated: #ffffff;
-  --color-bg-raised: #edf2f8;
-  --color-surface: #e4ebf4;
-  --color-line: #d8e2ee;
-  --color-line-strong: #b7c6da;
-  --color-fg: #0e1a2e;
-  --color-muted: #4f617c;
-  --color-subtle: #8595ac;
-  --color-brand: #0f9d5c;
-  --color-brand-strong: #0cb668;
-  --color-brand-deep: #0a6e42;
+  --color-bg: #f4f1e9;
+  --color-bg-elevated: #fffdf8;
+  --color-bg-raised: #eeeae1;
+  --color-surface: #e4dfd4;
+  --color-line: #d4ccbd;
+  --color-line-strong: #b9ad9b;
+  --color-fg: #0b2030;
+  --color-muted: #536474;
+  --color-subtle: #87939b;
+  --color-brand: #087a55;
+  --color-brand-strong: #0b9a69;
+  --color-brand-deep: #07543d;
   --color-brand-ink: #ffffff;
-  --color-gold: #0f9d5c;
-  --color-gold-strong: #0cb668;
-  --color-gold-ink: #ffffff;
-  --color-pitch: #12a463;
-  --color-pitch-deep: #087a48;
+  --color-gold: #ff6b2c;
+  --color-gold-strong: #ff8d53;
+  --color-gold-ink: #1b2430;
+  --color-pitch: #138c58;
+  --color-pitch-deep: #07563a;
   --color-pitch-ink: #ffffff;
-  --color-success: #129a5b;
-  --color-warning: #e0930b;
-  --color-danger: #e5484d;
-  --color-info: #2f7cf6;
-  --color-teama: #f2682b;
-  --color-teamb: #2f7cf6;
+  --color-success: #087a55;
+  --color-warning: #cc8100;
+  --color-danger: #d83d48;
+  --color-info: #2364d2;
+  --color-teama: #ff6b2c;
+  --color-teamb: #2364d2;
   --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
     "Helvetica Neue", Arial, sans-serif;
-  --font-display: "Segoe UI", ui-sans-serif, system-ui, -apple-system,
-    Roboto, Arial, sans-serif;
-  --radius-lg: 14px;
+  --font-display: "Arial Narrow", "Roboto Condensed", Impact, ui-sans-serif,
+    system-ui, sans-serif;
+  --radius-lg: 16px;
 }
 
-* {
-  border-color: var(--line);
-}
+* { border-color: var(--line); }
 
-html {
-  background: var(--bg);
-}
+html { background: var(--bg); }
 
 body {
-  background: var(--bg);
+  background:
+    linear-gradient(rgba(11, 32, 48, 0.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(11, 32, 48, 0.025) 1px, transparent 1px),
+    var(--bg);
+  background-size: 24px 24px;
   color: var(--fg);
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
   min-height: 100vh;
 }
 
-/* Soft, bright top wash — daylight stadium, not a night club */
+::selection { background: var(--gold); color: var(--gold-ink); }
+
 .stadium-glow {
   background:
-    radial-gradient(1100px 480px at 78% -180px, rgba(18, 164, 99, 0.10), transparent 65%),
-    radial-gradient(900px 420px at 12% -160px, rgba(47, 124, 246, 0.08), transparent 60%);
+    radial-gradient(900px 500px at 88% -120px, rgba(255, 107, 44, 0.16), transparent 68%),
+    radial-gradient(900px 500px at 8% -140px, rgba(8, 122, 85, 0.16), transparent 66%);
 }
 
-/* Vertical green pitch pattern used on scoreboards / heroes */
 .pitch-bg {
+  position: relative;
+  overflow: hidden;
   background-color: var(--pitch-deep);
   background-image:
-    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.08) 0 2px, transparent 2px 30px),
-    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.08) 0 2px, transparent 2px 30px);
+    linear-gradient(90deg, rgba(255,255,255,.045) 1px, transparent 1px),
+    linear-gradient(rgba(255,255,255,.045) 1px, transparent 1px),
+    repeating-linear-gradient(90deg, rgba(255,255,255,.04) 0 28px, transparent 28px 56px);
+  background-size: 28px 28px, 28px 28px, 100% 100%;
 }
 
-.brand-gradient {
-  background-image: linear-gradient(135deg, #0fb868 0%, #0a6e42 100%);
+.pitch-bg::after {
+  content: "";
+  position: absolute;
+  inset: 12px;
+  border: 1px solid rgba(255,255,255,.18);
+  border-radius: 18px;
+  pointer-events: none;
 }
 
+.broadcast-grid {
+  background-image:
+    linear-gradient(rgba(11,32,48,.08) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(11,32,48,.08) 1px, transparent 1px);
+  background-size: 18px 18px;
+}
+
+.brand-gradient { background-image: linear-gradient(135deg, #087a55 0%, #07543d 100%); }
 .text-gradient-brand {
-  background-image: linear-gradient(100deg, #0a6e42 0%, #0f9d5c 45%, #14b866 100%);
+  background-image: linear-gradient(100deg, #07543d 0%, #087a55 42%, #ff6b2c 100%);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
 }
 
-::selection {
-  background: var(--brand);
-  color: #fff;
+.section-kicker {
+  display: inline-flex;
+  align-items: center;
+  gap: .5rem;
+  color: var(--gold);
+  font-size: .7rem;
+  font-weight: 900;
+  letter-spacing: .18em;
+  text-transform: uppercase;
 }
 
-/* ------------------------------ animations -------------------------------- */
-
-@keyframes soe-fade-up {
-  from { transform: translateY(14px); opacity: 0; }
-  to { transform: translateY(0); opacity: 1; }
+.section-kicker::before {
+  content: "";
+  width: 24px;
+  height: 3px;
+  background: currentColor;
 }
 
-@keyframes soe-fade-in {
-  from { opacity: 0; }
-  to { opacity: 1; }
+.scoreboard-strip {
+  border-block: 2px solid var(--fg);
+  background: var(--fg);
+  color: white;
+  text-transform: uppercase;
+  letter-spacing: .13em;
+  font-size: .68rem;
+  font-weight: 900;
 }
 
-@keyframes soe-pop {
-  0% { transform: scale(0.6); opacity: 0; }
-  60% { transform: scale(1.08); opacity: 1; }
-  100% { transform: scale(1); opacity: 1; }
+.paper-panel {
+  background: var(--bg-elevated);
+  border: 2px solid var(--fg);
+  box-shadow: 6px 6px 0 rgba(11,32,48,.12);
 }
 
-@keyframes soe-pulse-brand {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(15, 157, 92, 0.45); }
-  50% { box-shadow: 0 0 0 12px rgba(15, 157, 92, 0); }
-}
+@keyframes soe-fade-up { from { transform: translateY(18px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+@keyframes soe-fade-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes soe-pop { 0% { transform: scale(.72) rotate(-2deg); opacity: 0; } 65% { transform: scale(1.05) rotate(1deg); opacity: 1; } 100% { transform: scale(1) rotate(0); opacity: 1; } }
+@keyframes soe-pulse-brand { 0%,100% { box-shadow: 0 0 0 0 rgba(255,107,44,.45); } 50% { box-shadow: 0 0 0 12px rgba(255,107,44,0); } }
+@keyframes soe-marquee { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+@keyframes soe-shimmer { from { background-position: -400px 0; } to { background-position: 400px 0; } }
+@keyframes soe-scan { from { transform: translateY(-110%); } to { transform: translateY(110%); } }
+@keyframes soe-float { 0%,100% { transform: translateY(0) rotate(-1deg); } 50% { transform: translateY(-8px) rotate(1deg); } }
 
-@keyframes soe-marquee {
-  from { transform: translateX(0); }
-  to { transform: translateX(-50%); }
-}
-
-@keyframes soe-shimmer {
-  from { background-position: -400px 0; }
-  to { background-position: 400px 0; }
-}
-
-.animate-fade-up { animation: soe-fade-up 0.6s cubic-bezier(0.2, 0.7, 0.3, 1) both; }
-.animate-fade-in { animation: soe-fade-in 0.5s ease-out both; }
-.animate-pop { animation: soe-pop 0.5s cubic-bezier(0.2, 0.9, 0.3, 1.2) both; }
+.animate-fade-up { animation: soe-fade-up .65s cubic-bezier(.2,.7,.3,1) both; }
+.animate-fade-in { animation: soe-fade-in .5s ease-out both; }
+.animate-pop { animation: soe-pop .55s cubic-bezier(.2,.9,.3,1.2) both; }
 .animate-pulse-brand { animation: soe-pulse-brand 1.8s ease-in-out infinite; }
-.animate-marquee { animation: soe-marquee 40s linear infinite; }
-.animate-shimmer {
-  background-image: linear-gradient(90deg, #e7edf5 25%, #f4f7fb 50%, #e7edf5 75%);
-  background-size: 800px 100%;
-  animation: soe-shimmer 1.4s linear infinite;
-}
+.animate-marquee { animation: soe-marquee 34s linear infinite; }
+.animate-float { animation: soe-float 4s ease-in-out infinite; }
+.animate-scan { animation: soe-scan 4s linear infinite; }
+.animate-shimmer { background-image: linear-gradient(90deg,#e7e1d6 25%,#fffdf8 50%,#e7e1d6 75%); background-size: 800px 100%; animation: soe-shimmer 1.4s linear infinite; }
 
-/* Scroll-into-view reveal (add .reveal and set --reveal-delay inline) */
 @media (prefers-reduced-motion: reduce) {
-  .animate-fade-up,
-  .animate-fade-in,
-  .animate-pop,
-  .animate-pulse-brand,
-  .animate-marquee,
-  .animate-shimmer {
-    animation: none !important;
-  }
+  .animate-fade-up,.animate-fade-in,.animate-pop,.animate-pulse-brand,
+  .animate-marquee,.animate-float,.animate-scan,.animate-shimmer { animation: none !important; }
 }

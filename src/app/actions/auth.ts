@@ -46,7 +46,7 @@ export async function registerAction(input: {
 
   try {
     await prisma.user.create({
-      data: { name, email, passwordHash: await hashPassword(password), role: "PLAYER" },
+      data: { name, email, passwordHash: await hashPassword(password), role: "USER" },
     });
   } catch (e) {
     if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002")

@@ -12,6 +12,8 @@ export function homePath(role: Role): string {
       return "/referee";
     case "PLAYER":
       return "/player";
+    case "USER":
+      return "/fantasy";
   }
 }
 

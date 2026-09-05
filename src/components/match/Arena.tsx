@@ -50,7 +50,7 @@ function ArenaInner({
   const matchLive = snapshot.status === "LIVE";
 
   return (
-    <div className="mx-auto w-full max-w-6xl px-4 py-5">
+    <div className="mx-auto w-full max-w-7xl px-4 py-6">
       <MatchHeader snapshot={snapshot} mode={mode} />
 
       <div className="mt-4 grid gap-4 lg:grid-cols-3">
@@ -116,11 +116,11 @@ function MatchHeader({ snapshot, mode }: { snapshot: MatchSnapshot; mode: LiveMo
         </div>
       </div>
 
-      <div className="pitch-bg mt-3 overflow-hidden rounded-lg">
+      <div className="pitch-bg mt-4 overflow-hidden rounded-[1.5rem] border-2 border-fg shadow-[8px_8px_0_rgba(11,32,48,.2)]">
         <div className="flex items-center justify-center gap-3 px-3 py-5 sm:gap-6">
           <TeamName name={snapshot.homeName} team="HOME" align="right" />
           <div className="min-w-28 shrink-0 text-center">
-            <div className="text-4xl font-black tabular-nums tracking-tight text-white sm:text-6xl">
+            <div className="font-display text-5xl font-black tabular-nums tracking-tight text-white sm:text-7xl">
               {snapshot.homeScore}<span className="mx-1 text-white/40">–</span>{snapshot.awayScore}
             </div>
             <p className="mt-1 text-xs font-semibold uppercase tracking-widest text-white/70">{label}</p>
