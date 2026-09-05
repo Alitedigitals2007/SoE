@@ -468,11 +468,19 @@ export async function teamStats(teamId: string) {
     const home = m.homeTeamId === teamId;
     const myScore = home ? m.homeScore : m.awayScore;
     const oppScore = home ? m.awayScore : m.homeScore;
-    p++; gf += myScore; ga += oppScore;
-    if (myScore > oppScore) { w++; return { code: m.code, opponent: home ? m.awayTeam!.name : m.homeTeam!.name, result: "W" as const, myScore, oppScore, comp: m.competition?.name ?? null, compSlug: m.competition?.slug ?? null }; }
-    if (myScore < oppScore) { l++; return { code: m.code, opponent: home ? m.awayTeam!.name : m.homeTeam!.name, result: "L" as const, myScore, oppScore, comp: m.competition?.name ?? null, compSlug: m.competition?.slug ?? null }; }
-    d++; return { code: m.code, opponent: home ? m.awayTeam!.name : m.homeTeam!.name, result: "D" as const, myScore, oppScore, comp: m.competition?.name ?? null, compSlug: m.competition?.slug ?? null };
+    if (myScore > oppScore) return { code: m.code, opponent: home ? m.awayTeam!.name : m.homeTeam!.name, result: "W" as const, myScore, oppScore, comp: m.competition?.name ?? null, compSlug: m.competition?.slug ?? null };
+    if (myScore < oppScore) return { code: m.code, opponent: home ? m.awayTeam!.name : m.homeTeam!.name, result: "L" as const, myScore, oppScore, comp: m.competition?.name ?? null, compSlug: m.competition?.slug ?? null };
+    return { code: m.code, opponent: home ? m.awayTeam!.name : m.homeTeam!.name, result: "D" as const, myScore, oppScore, comp: m.competition?.name ?? null, compSlug: m.competition?.slug ?? null };
   });
+  for (const m of finished) {
+    const home = m.homeTeamId === teamId;
+    const myScore = home ? m.homeScore : m.awayScore;
+    const oppScore = home ? m.awayScore : m.homeScore;
+    p++; gf += myScore; ga += oppScore;
+    if (myScore > oppScore) w++;
+    else if (myScore < oppScore) l++;
+    else d++;
+  }
 
   return { id: team.id, name: team.name, slug: team.slug, code: team.code, p, w, d, l, gf, ga, recent, members: team.members.map((m) => ({ id: m.user.id, name: m.user.name, number: m.number })) };
 }
