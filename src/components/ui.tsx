@@ -208,20 +208,20 @@ export function Field({
 }
 
 const controlClasses =
-  "w-full rounded-md border border-line-strong bg-bg-raised px-3 py-2 text-sm text-fg placeholder:text-subtle transition-colors focus:border-gold focus:outline-none focus:ring-1 focus:ring-gold disabled:cursor-not-allowed disabled:opacity-60";
+  "w-full rounded-xl border-2 border-fg/15 bg-bg-raised px-4 py-2.5 text-sm text-fg placeholder:text-subtle transition-all duration-200 focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20 focus:shadow-[0_0_0_4px_rgba(8,122,85,0.08)] disabled:cursor-not-allowed disabled:opacity-60 hover:border-fg/30";
 
 export function Input({
   className,
   ...rest
 }: React.InputHTMLAttributes<HTMLInputElement>) {
-  return <input className={cn(controlClasses, className)} {...rest} />;
+  return <input className={cn(controlClasses, "animate-fade-in", className)} {...rest} />;
 }
 
 export function Textarea({
   className,
   ...rest
 }: React.TextareaHTMLAttributes<HTMLTextAreaElement>) {
-  return <textarea className={cn(controlClasses, "min-h-24", className)} {...rest} />;
+  return <textarea className={cn(controlClasses, "min-h-24 resize-y", className)} {...rest} />;
 }
 
 export function Select({
@@ -230,9 +230,16 @@ export function Select({
   ...rest
 }: React.SelectHTMLAttributes<HTMLSelectElement>) {
   return (
-    <select className={cn(controlClasses, "pr-8", className)} {...rest}>
-      {children}
-    </select>
+    <div className="relative">
+      <select className={cn(controlClasses, "appearance-none pr-10", className)} {...rest}>
+        {children}
+      </select>
+      <span className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3 text-muted">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M4 6l4 4 4-4" />
+        </svg>
+      </span>
+    </div>
   );
 }
 
