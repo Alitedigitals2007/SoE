@@ -52,13 +52,18 @@ export default async function AdminMatchPage({ params }: { params: Promise<{ cod
           <div className="flex items-center gap-2">
             <StatusBadge status={match.status} />
             <Badge tone="neutral">{match.countdownSeconds}s / question</Badge>
+            <Link href={`/admin/matches/${match.code}/setup`} className="inline-flex h-10 items-center rounded-lg brand-gradient px-4 text-sm font-semibold text-white hover:brightness-105">
+              Setup match →
+            </Link>
             <Link href={`/match/${match.code}`} className="inline-flex h-10 items-center rounded-lg bg-surface px-4 text-sm font-medium text-fg hover:bg-bg-raised">
               Open match →
             </Link>
           </div>
         </div>
 
-        <p className="mb-5 mt-1 text-sm text-muted">Assign the 16 players — shirt 1–8 per team. The referee then names 5 starters and a captain per side and adds the ten questions.</p>
+        <p className="mb-5 mt-1 text-sm text-muted">
+          Use the full <Link href={`/admin/matches/${match.code}/setup`} className="font-semibold text-brand hover:underline">match setup page</Link> to assign the sixteen players, mark starters/subs, pick captains and add the ten questions in one place.
+        </p>
 
         <RosterManager
           code={match.code}
