@@ -1,7 +1,7 @@
 import { ImageResponse } from "next/og";
 import { loadMatchFullByCode } from "@/lib/match/snapshot";
 
-export const runtime = "edge";
+export const runtime = "nodejs";
 export const alt = "Match — Stadium of Elite";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
