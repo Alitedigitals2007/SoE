@@ -12,6 +12,8 @@ import {
   generateGroupFixturesAction,
   generateLeagueFixturesAction,
   removeTeamMemberAction,
+  setTeamCaptainAction,
+  setTeamImageAction,
 } from "@/app/actions/platform";
 import { Button, Card, CardHeader, cn, Field, Input, Select } from "@/components/ui";
 
@@ -86,8 +88,44 @@ export function CreateTeamForm() {
 
 /* --------------------------- team members manager -------------------------- */
 
-export type TeamMemberRow = { userId: string; name: string; number: number };
+export type TeamMemberRow = { userId: string; name: string; number: number; isCaptain: boolean };
 export type AvailablePlayer = { id: string; name: string };
+
+export function TeamCrestEditor({ teamId, imageUrl }: { teamId: string; imageUrl: string | null }) {
+  const { notice, flash } = useFlash();
+  const [value, setValue] = React.useState(imageUrl ?? "");
+  return (
+    <Card className="max-w-xl">
+      <CardHeader title="Crest / logo" description="A public image shown on the team card and team page." />
+      <form
+        className="flex flex-wrap items-end gap-3 p-4"
+        onSubmit={(e) => {
+          e.preventDefault();
+          void setTeamImageAction({ teamId, imageUrl: value || null }).then((r) => flash(r, "Crest updated."));
+        }}
+      >
+        <Field label="Image URL" className="min-w-64 flex-1">
+          <Input value={value} onChange={(e) => setValue(e.target.value)} placeholder="https://…/crest.png" />
+        </Field>
+        <Button type="submit" disabled={value.trim() === (imageUrl ?? "")}>
+          Save crest
+        </Button>
+        {imageUrl ? (
+          <Button type="button" variant="ghost" onClick={() => { setValue(""); void setTeamImageAction({ teamId, imageUrl: null }).then((r) => flash(r, "Crest removed.")); }}>
+            Remove
+          </Button>
+        ) : null}
+        {notice ? <div className="basis-full"><NoticeLine notice={notice} /></div> : null}
+        {imageUrl ? (
+          <div className="basis-full">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={imageUrl} alt="Team crest preview" className="h-16 w-16 rounded-xl border border-fg/15 bg-white object-cover" />
+          </div>
+        ) : null}
+      </form>
+    </Card>
+  );
+}
 
 export function TeamMembers({ teamId, members, available }: { teamId: string; members: TeamMemberRow[]; available: AvailablePlayer[] }) {
   const { notice, flash, router } = useFlash();
@@ -148,14 +186,36 @@ export function TeamMembers({ teamId, members, available }: { teamId: string; me
                 <span className="flex items-center gap-3">
                   <span className="w-5 text-right text-xs font-bold text-subtle">{m.number}</span>
                   <span className="font-medium text-fg">{m.name}</span>
+                  {m.isCaptain ? (
+                    <span className="rounded-full border border-gold/30 bg-gold/15 px-1.5 py-0.5 text-[10px] font-black uppercase tracking-wide text-gold">Captain</span>
+                  ) : null}
                 </span>
-                <button
-                  type="button"
-                  className="text-xs text-subtle underline-offset-2 hover:text-danger hover:underline"
-                  onClick={() => void removeTeamMemberAction({ teamId, userId: m.userId }).then((r) => flash(r, "Player removed."))}
-                >
-                  Remove
-                </button>
+                <span className="flex items-center gap-3">
+                  {!m.isCaptain ? (
+                    <button
+                      type="button"
+                      className="text-xs text-subtle underline-offset-2 hover:text-brand hover:underline"
+                      onClick={() => void setTeamCaptainAction({ teamId, userId: m.userId }).then((r) => flash(r, "Captain set."))}
+                    >
+                      Make captain
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      className="text-xs text-subtle underline-offset-2 hover:text-subtle hover:line-through"
+                      onClick={() => void setTeamCaptainAction({ teamId, userId: null }).then((r) => flash(r, "Captain cleared."))}
+                    >
+                      Remove captain
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    className="text-xs text-subtle underline-offset-2 hover:text-danger hover:underline"
+                    onClick={() => void removeTeamMemberAction({ teamId, userId: m.userId }).then((r) => flash(r, "Player removed."))}
+                  >
+                    Remove
+                  </button>
+                </span>
               </li>
             ))
         )}

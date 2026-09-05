@@ -8,6 +8,7 @@ import { cn } from "@/components/ui";
 const NAV = [
   { href: "/fixtures", label: "Fixtures" },
   { href: "/live", label: "Live" },
+  { href: "/news", label: "News" },
   { href: "/competitions", label: "Leagues & Cups" },
   { href: "/teams", label: "Teams" },
   { href: "/players", label: "Players" },

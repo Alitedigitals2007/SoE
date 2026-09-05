@@ -19,6 +19,8 @@ import {
   playerStats,
   removeTeamMember,
   setFantasyPicks,
+  setTeamCaptain,
+  setTeamImage,
   teamStats,
   type Actor,
 } from "@/lib/platform/engine";
@@ -51,6 +53,14 @@ export async function addTeamMemberAction(input: { teamId: string; userId: strin
 
 export async function removeTeamMemberAction(input: { teamId: string; userId: string }) {
   return runEngine((a) => removeTeamMember(a, input));
+}
+
+export async function setTeamImageAction(input: { teamId: string; imageUrl: string | null }) {
+  return runEngine((a) => setTeamImage(a, input));
+}
+
+export async function setTeamCaptainAction(input: { teamId: string; userId: string | null }) {
+  return runEngine((a) => setTeamCaptain(a, input));
 }
 
 /* ------------------------------- competitions ------------------------------ */

@@ -85,6 +85,7 @@ export default async function AdminHome() {
               <ActionLink href="/admin/imports" label="Import centre" hint="Bulk-load accounts, squads, questions and fixtures" />
               <ActionLink href="/admin/teams" label="Teams" hint="Create clubs and add their 8 players" />
               <ActionLink href="/admin/competitions" label="Competitions" hint="Leagues, cups, fixtures & referees" />
+              <ActionLink href="/admin/news" label="Newsroom" hint="Write and publish public posts" />
               <ActionLink href="/admin/matches/new" label="Create a friendly" hint="A one-off match with teams of your choice" />
               <ActionLink href="/admin/matches" label="Open a roster" hint="Assign players to a match's teams" />
             </div>

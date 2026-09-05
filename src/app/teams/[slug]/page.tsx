@@ -26,13 +26,23 @@ export default async function TeamDetail({ params }: { params: Promise<{ slug: s
           <div className="absolute -right-16 -top-20 w-72 h-72 rounded-full bg-brand/10 blur-3xl" />
           <div className="relative z-10 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div className="flex items-center gap-4">
-              <span className="grid size-16 shrink-0 place-items-center rounded-xl brand-gradient text-2xl font-black text-white shadow-md">
-                {stats.name.slice(0, 1)}
-              </span>
+              {stats.imageUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={stats.imageUrl} alt={`${stats.name} crest`} className="size-16 shrink-0 rounded-xl border-2 border-fg/15 bg-white object-cover shadow-md" />
+              ) : (
+                <span className="grid size-16 shrink-0 place-items-center rounded-xl brand-gradient text-2xl font-black text-white shadow-md">
+                  {stats.name.slice(0, 1)}
+                </span>
+              )}
               <div>
                 <h1 className="font-display text-2xl font-black uppercase tracking-wider text-fg">{stats.name}</h1>
                 <p className="mt-0.5 text-xs text-muted">
                   Code <Badge tone="neutral">{stats.code}</Badge> · {stats.p} matches played
+                  {stats.captain ? (
+                    <>
+                      {" "}· <Badge tone="gold">Captain: {stats.captain.name}</Badge>
+                    </>
+                  ) : null}
                 </p>
               </div>
             </div>
@@ -81,6 +91,7 @@ export default async function TeamDetail({ params }: { params: Promise<{ slug: s
                     <Link href={`/players/${m.id}`} className="flex items-center gap-3 rounded-xl border border-fg/15 bg-bg-elevated px-3 py-2.5 text-sm transition-colors hover:border-brand/40 hover:bg-bg-raised">
                       <span className="w-5 text-right text-xs font-bold text-subtle">{m.number}</span>
                       <span className="font-medium text-fg">{m.name}</span>
+                      {m.isCaptain ? <span className="ml-auto shrink-0 text-xs text-gold" aria-label="captain">C</span> : null}
                     </Link>
                   </li>
                 ))}

@@ -85,6 +85,31 @@ export async function removeTeamMember(actor: Actor, input: { teamId: string; us
   return ok(undefined);
 }
 
+export async function setTeamImage(actor: Actor, input: { teamId: string; imageUrl: string | null }) {
+  const blocked = await requireAdmin(actor);
+  if (blocked) return blocked;
+  const url = input.imageUrl?.trim() || null;
+  if (url && !/^https?:\/\/.+\..+/.test(url)) return err("Enter a full image URL (https://…).");
+  await prisma.team.update({ where: { id: input.teamId }, data: { imageUrl: url } });
+  return ok(undefined);
+}
+
+export async function setTeamCaptain(actor: Actor, input: { teamId: string; userId: string | null }) {
+  const blocked = await requireAdmin(actor);
+  if (blocked) return blocked;
+  const team = await prisma.team.findUnique({ where: { id: input.teamId }, include: { members: true } });
+  if (!team) return err("Team not found.");
+  if (input.userId && !team.members.some((m) => m.userId === input.userId))
+    return err("The captain must be in this team's squad.");
+  await prisma.$transaction([
+    prisma.teamPlayer.updateMany({ where: { teamId: team.id }, data: { isCaptain: false } }),
+    ...(input.userId
+      ? [prisma.teamPlayer.updateMany({ where: { teamId: team.id, userId: input.userId }, data: { isCaptain: true } })]
+      : []),
+  ]);
+  return ok(undefined);
+}
+
 /* ------------------------------ Competitions ------------------------------- */
 
 export type CompetitionType = "LEAGUE" | "CUP" | "LEAGUE_CUP" | "CUSTOM";
@@ -622,7 +647,24 @@ export async function teamStats(teamId: string) {
     else d++;
   }
 
-  return { id: team.id, name: team.name, slug: team.slug, code: team.code, p, w, d, l, gf, ga, recent, members: team.members.map((m) => ({ id: m.user.id, name: m.user.name, number: m.number })) };
+  const captain = team.members.find((m) => m.isCaptain);
+
+  return {
+    id: team.id,
+    name: team.name,
+    slug: team.slug,
+    code: team.code,
+    imageUrl: team.imageUrl,
+    p,
+    w,
+    d,
+    l,
+    gf,
+    ga,
+    recent,
+    captain: captain ? { id: captain.user.id, name: captain.user.name, number: captain.number } : null,
+    members: team.members.map((m) => ({ id: m.user.id, name: m.user.name, number: m.number, isCaptain: m.isCaptain })),
+  };
 }
 
 export async function fantasyBoard(competitionId: string) {

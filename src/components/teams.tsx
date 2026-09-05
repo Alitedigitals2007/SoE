@@ -6,7 +6,16 @@ import { Input, Badge } from "@/components/ui";
 
 type Rec = { p: number; w: number; d: number; l: number; gf: number; ga: number };
 
-type Team = { id: string; name: string; slug: string; members: number; matches: number; rec: Rec };
+type Team = {
+  id: string;
+  name: string;
+  slug: string;
+  imageUrl?: string | null;
+  captain?: string | null;
+  members: number;
+  matches: number;
+  rec: Rec;
+};
 
 export function TeamsIndex({ teams }: { teams: Team[] }) {
   const [q, setQ] = React.useState("");
@@ -34,18 +43,29 @@ export function TeamsIndex({ teams }: { teams: Team[] }) {
             const played = t.matches;
             return (
               <Link key={t.id} href={`/teams/${t.slug}`} className="group rounded-2xl border-2 border-fg/15 bg-bg-elevated p-6 shadow-[4px_4px_0_rgba(11,32,48,.08)] transition-all hover:-translate-y-1 hover:border-brand/40 hover:shadow-lg">
-                <div className="flex items-center justify-between gap-2">
-                  <div>
-                    <p className="text-lg font-extrabold text-fg group-hover:text-brand">{t.name}</p>
-                    <p className="text-xs text-subtle">@{t.slug}</p>
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex min-w-0 items-center gap-3">
+                    {t.imageUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={t.imageUrl} alt={`${t.name} crest`} className="size-12 shrink-0 rounded-xl border border-fg/15 bg-white object-cover" />
+                    ) : (
+                      <span aria-hidden className="grid size-12 shrink-0 place-items-center rounded-xl brand-gradient text-white shadow-sm">
+                        {t.name.slice(0, 1)}
+                      </span>
+                    )}
+                    <div className="min-w-0">
+                      <p className="truncate text-lg font-extrabold text-fg group-hover:text-brand">{t.name}</p>
+                      <p className="truncate text-xs text-subtle">@{t.slug}</p>
+                    </div>
                   </div>
-                  <span aria-hidden className="grid size-10 place-items-center rounded-xl brand-gradient text-white shadow-sm">
+                  <span aria-hidden className="grid size-8 shrink-0 place-items-center rounded-lg bg-surface text-sm font-black text-fg">
                     {t.members}
                   </span>
                 </div>
                 <div className="mt-4 flex flex-wrap gap-2">
                   <Badge tone="pitch">{t.members}/8 players</Badge>
                   <Badge tone="neutral">{played} played</Badge>
+                  {t.captain ? <Badge tone="gold">C {t.captain}</Badge> : null}
                 </div>
                 {played > 0 ? (
                   <div className="mt-4 grid grid-cols-4 gap-2 rounded-lg bg-surface/70 p-2 text-center">

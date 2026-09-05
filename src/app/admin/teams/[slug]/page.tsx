@@ -4,7 +4,12 @@ import { requireRole } from "@/lib/authz";
 import { prisma } from "@/lib/prisma";
 import { TopBar } from "@/components/app";
 import { Badge } from "@/components/ui";
-import { TeamMembers, type AvailablePlayer, type TeamMemberRow } from "@/components/platformAdmin";
+import {
+  TeamCrestEditor,
+  TeamMembers,
+  type AvailablePlayer,
+  type TeamMemberRow,
+} from "@/components/platformAdmin";
 
 export const dynamic = "force-dynamic";
 
@@ -17,7 +22,12 @@ export default async function AdminTeamDetail({ params }: { params: Promise<{ sl
   });
   if (!team) notFound();
 
-  const memberRows: TeamMemberRow[] = team.members.map((m) => ({ userId: m.userId, name: m.user.name, number: m.number }));
+  const memberRows: TeamMemberRow[] = team.members.map((m) => ({
+    userId: m.userId,
+    name: m.user.name,
+    number: m.number,
+    isCaptain: m.isCaptain,
+  }));
   const availableRows = await prisma.user.findMany({
     where: { role: "PLAYER", teams: { none: { teamId: team.id } } },
     orderBy: { name: "asc" },
@@ -33,13 +43,19 @@ export default async function AdminTeamDetail({ params }: { params: Promise<{ sl
           <div>
             <h1 className="text-2xl font-bold text-fg">{team.name}</h1>
             <p className="text-sm text-muted">
-              Code <Badge tone="neutral">{team.code}</Badge> · <Link className="text-subtle underline-offset-2 hover:text-brand hover:underline" href={`/teams/${team.slug}`}>Public page →</Link>
+              Code <Badge tone="neutral">{team.code}</Badge> ·{" "}
+              <Link className="text-subtle underline-offset-2 hover:text-brand hover:underline" href={`/teams/${team.slug}`}>
+                Public page →
+              </Link>
             </p>
           </div>
-          <Link href="/admin/teams" className="text-sm font-medium text-muted hover:text-fg">← All teams</Link>
+          <Link href="/admin/teams" className="text-sm font-medium text-muted hover:text-fg">
+            ← All teams
+          </Link>
         </div>
 
-        <div className="mt-5">
+        <div className="mt-5 grid gap-5 lg:grid-cols-2">
+          <TeamCrestEditor teamId={team.id} imageUrl={team.imageUrl} />
           <TeamMembers teamId={team.id} members={memberRows} available={available} />
         </div>
       </main>

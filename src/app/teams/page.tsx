@@ -7,7 +7,10 @@ export const dynamic = "force-dynamic";
 export default async function TeamsIndexPage() {
   const teams = await prisma.team.findMany({
     orderBy: { name: "asc" },
-    include: { _count: { select: { members: true, homeMatches: true, awayMatches: true } } },
+    include: {
+      _count: { select: { members: true, homeMatches: true, awayMatches: true } },
+      members: { where: { isCaptain: true }, select: { user: { select: { name: true } } }, take: 1 },
+    },
   });
 
   const finished = await prisma.match.findMany({
@@ -54,6 +57,8 @@ export default async function TeamsIndexPage() {
                 id: t.id,
                 name: t.name,
                 slug: t.slug,
+                imageUrl: t.imageUrl,
+                captain: t.members[0]?.user.name ?? null,
                 members: t._count.members,
                 matches: rec.p,
                 rec,
