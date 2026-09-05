@@ -2,14 +2,15 @@
 
 import * as React from "react";
 import { Button } from "@/components/ui";
+import type { ActionResult } from "@/lib/domain";
 
 export function CsvDownloadButton({
   label,
-  onExport,
+  action,
   filename,
 }: {
   label: string;
-  onExport: () => Promise<{ ok: boolean; data?: string; error?: string }>;
+  action: () => Promise<ActionResult<string>>;
   filename: string;
 }) {
   const [busy, setBusy] = React.useState(false);
@@ -18,7 +19,7 @@ export function CsvDownloadButton({
     if (busy) return;
     setBusy(true);
     try {
-      const result = await onExport();
+      const result = await action();
       if (result.ok && result.data) {
         const blob = new Blob([result.data], { type: "text/csv;charset=utf-8;" });
         const url = URL.createObjectURL(blob);

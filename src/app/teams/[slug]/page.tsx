@@ -40,7 +40,7 @@ export default async function TeamDetail({ params }: { params: Promise<{ slug: s
               <CsvDownloadButton
                 label="Export CSV"
                 filename={`${stats.slug}-stats.csv`}
-                onExport={() => exportTeamCsvAction(team.id)}
+                action={exportTeamCsvAction.bind(null, team.id)}
               />
               <Link href="/compare" className="inline-flex h-10 items-center rounded-lg bg-surface px-4 text-sm font-semibold text-fg hover:bg-line">
                 ⚖ Compare

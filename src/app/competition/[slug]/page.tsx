@@ -62,7 +62,7 @@ export default async function CompetitionDetail({ params }: { params: Promise<{ 
             <CsvDownloadButton
               label="Export Standings"
               filename={`${comp.slug}-standings.csv`}
-              onExport={() => exportCompetitionCsvAction(comp.id)}
+              action={exportCompetitionCsvAction.bind(null, comp.id)}
             />
           )}
           <a href="#fixtures" className="text-sm font-semibold text-brand underline-offset-2 hover:underline">
