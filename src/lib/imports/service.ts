@@ -36,6 +36,15 @@ function lower(valueToNormalize: string): string {
   return valueToNormalize.trim().toLowerCase();
 }
 
+function emailName(email: string): string {
+  const local = email.split("@")[0] ?? "player";
+  return local
+    .split(/[._-]+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
 function slugify(name: string): string {
   return (
     name
@@ -175,12 +184,16 @@ function validateRoster(rows: ImportRow[], context: Context): ImportIssue[] {
     const number = parseInteger(value(row, "number"), 1, 8);
     const user = context.users.find((candidate) => lower(candidate.email) === email);
     if (!team) issues.push(issue(row.row, "Team was not found.", "team"));
-    if (!user || user.role !== "PLAYER") issues.push(issue(row.row, "Player email must belong to an admin-provisioned PLAYER account.", "playerEmail"));
+    if (user && user.role !== "PLAYER")
+      issues.push(issue(row.row, "That email belongs to a non-player account. Convert it to PLAYER in Admin > Users, or use a different email.", "playerEmail"));
+    if (!user)
+      issues.push({ row: row.row, field: "playerEmail", message: "No player account exists yet — it will be created automatically on import.", severity: "warning" });
     if (!number) issues.push(issue(row.row, "Squad number must be an integer from 1 to 8.", "number"));
-    if (team && user && number) {
-      const userKey = `${team.id}:${user.id}`;
+    const resolvedUserId = user?.role === "PLAYER" ? user.id : null;
+    if (team && resolvedUserId && number) {
+      const userKey = `${team.id}:${resolvedUserId}`;
       const numberKey = `${team.id}:${number}`;
-      if (seenUsers.has(userKey) || team.members.some((member) => member.userId === user.id)) issues.push(issue(row.row, "Player is already in this team or repeated in the file.", "playerEmail"));
+      if (seenUsers.has(userKey) || team.members.some((member) => member.userId === resolvedUserId)) issues.push(issue(row.row, "Player is already in this team or repeated in the file.", "playerEmail"));
       if (seenNumbers.has(numberKey) || team.members.some((member) => member.number === number)) issues.push(issue(row.row, "Squad number is already occupied in this team.", "number"));
       seenUsers.add(userKey);
       seenNumbers.add(numberKey);
@@ -289,11 +302,20 @@ export async function commitImport(kind: ImportKind, csv: string): Promise<Impor
       }
       if (kind === "roster") {
         const teams = await tx.team.findMany({ include: { members: true } });
-        const users = await tx.user.findMany({ where: { role: "PLAYER" }, select: { id: true, email: true } });
+        const users = await tx.user.findMany({ select: { id: true, email: true, role: true } });
         for (const row of parsed.rows) {
           const team = teams.find((candidate) => lower(candidate.slug) === lower(value(row, "team")) || lower(candidate.code) === lower(value(row, "team")) || lower(candidate.name) === lower(value(row, "team")));
-          const user = users.find((candidate) => lower(candidate.email) === lower(value(row, "playerEmail")));
-          if (!team || !user) throw new Error(`Import row ${row.row} could not resolve its team or player.`);
+          if (!team) throw new Error(`Import row ${row.row} could not resolve its team.`);
+          const email = lower(value(row, "playerEmail"));
+          let user = users.find((candidate) => lower(candidate.email) === email);
+          if (user && user.role !== "PLAYER") throw new Error(`Import row ${row.row}: ${email} belongs to a non-player account.`);
+          if (!user) {
+            const displayName = value(row, "name").trim() || emailName(email);
+            const password = value(row, "password") || generatedPassword();
+            user = await tx.user.create({ data: { name: displayName, email, passwordHash: await hashPassword(password), role: "PLAYER" } });
+            users.push(user);
+            if (!value(row, "password")) generatedCredentials.push({ name: displayName, email, password, role: "PLAYER" });
+          }
           await tx.teamPlayer.create({ data: { teamId: team.id, userId: user.id, number: Number(value(row, "number")) } });
           imported++;
         }

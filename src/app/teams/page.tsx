@@ -10,6 +10,30 @@ export default async function TeamsIndexPage() {
     include: { _count: { select: { members: true, homeMatches: true, awayMatches: true } } },
   });
 
+  const finished = await prisma.match.findMany({
+    where: { status: "FINISHED" },
+    select: { homeTeamId: true, awayTeamId: true, homeScore: true, awayScore: true },
+  });
+
+  const records = new Map<string, { p: number; w: number; d: number; l: number; gf: number; ga: number }>();
+  for (const m of finished) {
+    const sides: [string | null, number, number][] = [
+      [m.homeTeamId, m.homeScore, m.awayScore],
+      [m.awayTeamId, m.awayScore, m.homeScore],
+    ];
+    for (const [teamId, scored, conceded] of sides) {
+      if (!teamId) continue;
+      const rec = records.get(teamId) ?? { p: 0, w: 0, d: 0, l: 0, gf: 0, ga: 0 };
+      rec.p++;
+      rec.gf += scored;
+      rec.ga += conceded;
+      if (scored > conceded) rec.w++;
+      else if (scored < conceded) rec.l++;
+      else rec.d++;
+      records.set(teamId, rec);
+    }
+  }
+
   return (
     <PublicShell>
       <div className="mx-auto max-w-6xl px-4 py-10">
@@ -23,7 +47,19 @@ export default async function TeamsIndexPage() {
             <p className="text-sm text-muted">Teams appear once an admin registers a club.</p>
           </div>
         ) : (
-          <TeamsIndex teams={teams.map((t) => ({ id: t.id, name: t.name, slug: t.slug, members: t._count.members, matches: t._count.homeMatches + t._count.awayMatches }))} />
+          <TeamsIndex
+            teams={teams.map((t) => {
+              const rec = records.get(t.id) ?? { p: 0, w: 0, d: 0, l: 0, gf: 0, ga: 0 };
+              return {
+                id: t.id,
+                name: t.name,
+                slug: t.slug,
+                members: t._count.members,
+                matches: rec.p,
+                rec,
+              };
+            })}
+          />
         )}
       </div>
     </PublicShell>

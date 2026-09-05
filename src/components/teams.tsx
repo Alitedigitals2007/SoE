@@ -4,7 +4,9 @@ import * as React from "react";
 import Link from "next/link";
 import { Input, Badge } from "@/components/ui";
 
-type Team = { id: string; name: string; slug: string; members: number; matches: number };
+type Rec = { p: number; w: number; d: number; l: number; gf: number; ga: number };
+
+type Team = { id: string; name: string; slug: string; members: number; matches: number; rec: Rec };
 
 export function TeamsIndex({ teams }: { teams: Team[] }) {
   const [q, setQ] = React.useState("");
@@ -28,23 +30,50 @@ export function TeamsIndex({ teams }: { teams: Team[] }) {
         </p>
       ) : (
         <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {filtered.map((t) => (
-            <Link key={t.id} href={`/teams/${t.slug}`} className="group rounded-2xl border-2 border-fg/15 bg-bg-elevated p-6 shadow-[4px_4px_0_rgba(11,32,48,.08)] transition-all hover:-translate-y-1 hover:border-brand/40 hover:shadow-lg">
-              <div className="flex items-center justify-between gap-2">
-                <div>
-                  <p className="text-lg font-extrabold text-fg group-hover:text-brand">{t.name}</p>
-                  <p className="text-xs text-subtle">@{t.slug}</p>
+          {filtered.map((t) => {
+            const played = t.matches;
+            return (
+              <Link key={t.id} href={`/teams/${t.slug}`} className="group rounded-2xl border-2 border-fg/15 bg-bg-elevated p-6 shadow-[4px_4px_0_rgba(11,32,48,.08)] transition-all hover:-translate-y-1 hover:border-brand/40 hover:shadow-lg">
+                <div className="flex items-center justify-between gap-2">
+                  <div>
+                    <p className="text-lg font-extrabold text-fg group-hover:text-brand">{t.name}</p>
+                    <p className="text-xs text-subtle">@{t.slug}</p>
+                  </div>
+                  <span aria-hidden className="grid size-10 place-items-center rounded-xl brand-gradient text-white shadow-sm">
+                    {t.members}
+                  </span>
                 </div>
-                <span aria-hidden className="grid size-10 place-items-center rounded-xl brand-gradient text-white shadow-sm">
-                  {t.members}
-                </span>
-              </div>
-              <div className="mt-4 flex flex-wrap gap-2">
-                <Badge tone="pitch">{t.members}/8 players</Badge>
-                <Badge tone="neutral">{t.matches} matches</Badge>
-              </div>
-            </Link>
-          ))}
+                <div className="mt-4 flex flex-wrap gap-2">
+                  <Badge tone="pitch">{t.members}/8 players</Badge>
+                  <Badge tone="neutral">{played} played</Badge>
+                </div>
+                {played > 0 ? (
+                  <div className="mt-4 grid grid-cols-4 gap-2 rounded-lg bg-surface/70 p-2 text-center">
+                    <div>
+                      <p className="text-base font-black tabular-nums text-success">{t.rec.w}</p>
+                      <p className="text-[9px] font-bold uppercase tracking-wider text-muted">Won</p>
+                    </div>
+                    <div>
+                      <p className="text-base font-black tabular-nums text-fg">{t.rec.d}</p>
+                      <p className="text-[9px] font-bold uppercase tracking-wider text-muted">Draw</p>
+                    </div>
+                    <div>
+                      <p className="text-base font-black tabular-nums text-danger">{t.rec.l}</p>
+                      <p className="text-[9px] font-bold uppercase tracking-wider text-muted">Lost</p>
+                    </div>
+                    <div>
+                      <p className="text-base font-black tabular-nums text-brand">{t.rec.gf}–{t.rec.ga}</p>
+                      <p className="text-[9px] font-bold uppercase tracking-wider text-muted">GF–GA</p>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="mt-4 rounded-lg bg-surface/70 px-3 py-2 text-center text-[11px] font-semibold uppercase tracking-wider text-subtle">
+                    No results yet
+                  </p>
+                )}
+              </Link>
+            );
+          })}
         </div>
       )}
     </div>

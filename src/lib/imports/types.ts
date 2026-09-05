@@ -79,13 +79,16 @@ export const IMPORT_DEFINITIONS: Record<
   },
   roster: {
     label: "Team rosters",
-    description: "Attach registered player emails to teams with squad numbers 1–8.",
+    description:
+      "Attach players to teams with squad numbers 1-8. Missing player accounts are created automatically as PLAYER logins (optional name/password columns control the display name and initial password; a random one is generated otherwise).",
     fields: [
       { key: "team", label: "Team slug, code, or name", required: true },
       { key: "playerEmail", label: "Player email", required: true },
-      { key: "number", label: "Squad number 1–8", required: true },
+      { key: "number", label: "Squad number 1-8", required: true },
+      { key: "name", label: "Player name (used when creating a new account)" },
+      { key: "password", label: "Password (min 8 chars, optional)" },
     ],
-    sample: ["lagos-united,player@example.com,7"],
+    sample: ["lagos-united,new.player@example.com,7,New Player,"],
   },
   questions: {
     label: "Match questions",
