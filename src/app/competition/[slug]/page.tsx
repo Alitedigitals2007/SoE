@@ -4,6 +4,8 @@ import { prisma } from "@/lib/prisma";
 import { leagueStandings } from "@/lib/platform/engine";
 import { PublicShell } from "@/components/site";
 import { Badge } from "@/components/ui";
+import { CsvDownloadButton } from "@/components/CsvDownloadButton";
+import { exportCompetitionCsvAction } from "@/app/actions/exports";
 
 export const dynamic = "force-dynamic";
 
@@ -56,6 +58,13 @@ export default async function CompetitionDetail({ params }: { params: Promise<{ 
               ⭐ Pick your fantasy XI
             </Link>
           ) : null}
+          {!cup && (
+            <CsvDownloadButton
+              label="Export Standings"
+              filename={`${comp.slug}-standings.csv`}
+              onExport={() => exportCompetitionCsvAction(comp.id)}
+            />
+          )}
           <a href="#fixtures" className="text-sm font-semibold text-brand underline-offset-2 hover:underline">
             Jump to fixtures ↓
           </a>

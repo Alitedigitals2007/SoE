@@ -1,16 +1,49 @@
 import Link from "next/link";
+import { Suspense } from "react";
 import { prisma } from "@/lib/prisma";
 import { PublicShell } from "@/components/site";
 import { Badge } from "@/components/ui";
+import { FixturesPagination } from "@/components/FixturesPagination";
 
 export const dynamic = "force-dynamic";
 
-export default async function FixturesPage() {
-  const [live, scheduled, results] = await Promise.all([
-    prisma.match.findMany({ where: { status: "LIVE" }, orderBy: { startedAt: "asc" } }),
-    prisma.match.findMany({ where: { status: "DRAFT" }, orderBy: { createdAt: "desc" }, take: 30 }),
-    prisma.match.findMany({ where: { status: "FINISHED" }, orderBy: { finishedAt: "desc" }, take: 30 }),
+const PAGE_SIZE = 12;
+
+export default async function FixturesPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ page?: string; livePage?: string; upcomingPage?: string }>;
+}) {
+  const sp = await searchParams;
+  const resultPage = Math.max(1, Number(sp.page) || 1);
+  const livePage = Math.max(1, Number(sp.livePage) || 1);
+  const upcomingPage = Math.max(1, Number(sp.upcomingPage) || 1);
+
+  const [liveMatches, liveTotal, scheduledMatches, scheduledTotal, results, resultsTotal] = await Promise.all([
+    prisma.match.findMany({
+      where: { status: "LIVE" },
+      orderBy: { startedAt: "asc" },
+      skip: (livePage - 1) * PAGE_SIZE,
+      take: PAGE_SIZE,
+    }),
+    prisma.match.count({ where: { status: "LIVE" } }),
+    prisma.match.findMany({
+      where: { status: "DRAFT" },
+      orderBy: { createdAt: "desc" },
+      skip: (upcomingPage - 1) * PAGE_SIZE,
+      take: PAGE_SIZE,
+    }),
+    prisma.match.count({ where: { status: "DRAFT" } }),
+    prisma.match.findMany({
+      where: { status: "FINISHED" },
+      orderBy: { finishedAt: "desc" },
+      skip: (resultPage - 1) * PAGE_SIZE,
+      take: PAGE_SIZE,
+    }),
+    prisma.match.count({ where: { status: "FINISHED" } }),
   ]);
+
+  const matchFields = { id: true, code: true, homeName: true, awayName: true, homeScore: true, awayScore: true, status: true } as const;
 
   return (
     <PublicShell>
@@ -18,9 +51,31 @@ export default async function FixturesPage() {
         <h1 className="text-3xl font-black tracking-tight text-fg">Fixtures</h1>
         <p className="mt-1 text-muted">Every match across leagues, cups and friendlies.</p>
 
-        <FixturesGroup title="Live now" tone="success" matches={live} live />
-        <FixturesGroup title="Upcoming" tone="warning" matches={scheduled} />
-        <FixturesGroup title="Results" tone="neutral" matches={results} />
+        <FixturesGroup
+          title="Live now"
+          tone="success"
+          matches={liveMatches}
+          live
+          page={livePage}
+          totalItems={liveTotal}
+          section="live"
+        />
+        <FixturesGroup
+          title="Upcoming"
+          tone="warning"
+          matches={scheduledMatches}
+          page={upcomingPage}
+          totalItems={scheduledTotal}
+          section="upcoming"
+        />
+        <FixturesGroup
+          title="Results"
+          tone="neutral"
+          matches={results}
+          page={resultPage}
+          totalItems={resultsTotal}
+          section="page"
+        />
       </div>
     </PublicShell>
   );
@@ -31,17 +86,25 @@ function FixturesGroup({
   matches,
   tone,
   live,
+  page,
+  totalItems,
+  section,
 }: {
   title: string;
   matches: { id: string; code: string; homeName: string; awayName: string; homeScore: number; awayScore: number; status: string }[];
   tone: "success" | "warning" | "neutral";
   live?: boolean;
+  page: number;
+  totalItems: number;
+  section: string;
 }) {
+  const totalPages = Math.max(1, Math.ceil(totalItems / PAGE_SIZE));
+
   return (
     <section className="mt-8">
       <div className="flex items-center gap-2">
         <h2 className="text-lg font-bold text-fg">{title}</h2>
-        <Badge tone={tone}>{matches.length}</Badge>
+        <Badge tone={tone}>{totalItems}</Badge>
       </div>
       {matches.length === 0 ? (
         <p className="mt-2 rounded-xl border border-dashed border-line-strong bg-white p-6 text-center text-sm text-muted">
@@ -76,6 +139,9 @@ function FixturesGroup({
           })}
         </div>
       )}
+      <Suspense>
+        <FixturesPagination section={section} page={page} totalPages={totalPages} />
+      </Suspense>
     </section>
   );
 }

@@ -18,8 +18,10 @@ import {
   requestSubstitution,
   setLineup,
   setQuestionSlot,
+  startPenalties,
   submitAnswer,
   syncMatchState,
+  takePenaltyKick,
   updateQuestion,
 } from "@/lib/match/engine";
 import type { Actor } from "@/lib/match/engine";
@@ -143,6 +145,16 @@ export async function decideRoundAction(input: {
 
 export async function endMatchAction(code: string): Promise<ActionResult> {
   return runEngine((actor) => endMatch(actor, { code }));
+}
+
+/* ------------------------------ penalty shootout -------------------------- */
+
+export async function startPenaltiesAction(code: string): Promise<ActionResult> {
+  return runEngine((actor) => startPenalties(actor, { code }));
+}
+
+export async function takePenaltyKickAction(code: string, scored: boolean): Promise<ActionResult> {
+  return runEngine((actor) => takePenaltyKick(actor, { code, scored }));
 }
 
 /* ------------------------------ substitutions ------------------------------ */

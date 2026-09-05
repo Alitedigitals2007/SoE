@@ -10,13 +10,24 @@ export const metadata: Metadata = {
     "Live head-to-head quiz football. Two teams, ten questions, one referee — every correct answer is a goal.",
   applicationName: "Stadium of Elite",
   keywords: ["quiz", "football", "multiplayer", "trivia", "match"],
+  manifest: "/manifest.json",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "Stadium of Elite",
+  },
+  other: {
+    "mobile-web-app-capable": "yes",
+  },
 };
 
 export const viewport: Viewport = {
-  themeColor: "#070c14",
-  colorScheme: "dark",
+  themeColor: "#087a55",
+  colorScheme: "light",
   width: "device-width",
   initialScale: 1,
+  minimumScale: 1,
+  userScalable: false,
 };
 
 export default function RootLayout({
@@ -24,7 +35,14 @@ export default function RootLayout({
 }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en" className="h-full antialiased">
-      <body className="min-h-full flex flex-col stadium-glow">{children}</body>
+      <body className="min-h-full flex flex-col stadium-glow">
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `if("serviceWorker" in navigator){window.addEventListener("load",function(){navigator.serviceWorker.register("/sw.js").catch(function(){})})}`,
+          }}
+        />
+        {children}
+      </body>
     </html>
   );
 }

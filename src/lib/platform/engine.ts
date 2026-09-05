@@ -87,9 +87,21 @@ export async function removeTeamMember(actor: Actor, input: { teamId: string; us
 
 /* ------------------------------ Competitions ------------------------------- */
 
+export type CompetitionType = "LEAGUE" | "CUP" | "LEAGUE_CUP" | "CUSTOM";
+
 export async function createCompetition(
   actor: Actor,
-  input: { name: string; type: "LEAGUE" | "CUP"; season: string; teamIds: string[] },
+  input: {
+    name: string;
+    type: CompetitionType;
+    season: string;
+    teamIds: string[];
+    groupsCount?: number;
+    teamsPerGroup?: number;
+    topAdvancing?: number;
+    roundsCount?: number;
+    countdownSecs?: number;
+  },
 ) {
   const blocked = await requireAdmin(actor);
   if (blocked) return blocked;
@@ -100,6 +112,12 @@ export async function createCompetition(
   if (teamIds.length < 2) return err("A competition needs at least 2 teams.");
   if (input.type === "CUP" && teamIds.length % 2 !== 0)
     return err("Knockout cups need an even number of teams (2, 4, 8, 16…).");
+  if (input.type === "LEAGUE_CUP") {
+    if (!input.groupsCount || !input.teamsPerGroup || !input.topAdvancing)
+      return err("Group competitions need groups count, teams per group, and top N advancing.");
+    if (input.groupsCount * input.teamsPerGroup > teamIds.length)
+      return err("Not enough teams for the configured group layout.");
+  }
   const teams = await prisma.team.findMany({ where: { id: { in: teamIds } }, select: { id: true } });
   if (teams.length !== teamIds.length) return err("One of the chosen teams does not exist.");
 
@@ -109,7 +127,18 @@ export async function createCompetition(
   try {
     const competition = await prisma.$transaction(async (tx) => {
       const comp = await tx.competition.create({
-        data: { name, slug, type: input.type, season, status: "DRAFT" },
+        data: {
+          name,
+          slug,
+          type: input.type,
+          season,
+          status: "DRAFT",
+          groupsCount: input.groupsCount ?? null,
+          teamsPerGroup: input.teamsPerGroup ?? null,
+          topAdvancing: input.topAdvancing ?? null,
+          roundsCount: input.roundsCount ?? null,
+          countdownSecs: input.countdownSecs ?? null,
+        },
       });
       for (const [i, teamId] of teamIds.entries()) {
         await tx.competitionTeam.create({
@@ -172,7 +201,7 @@ async function syncRosterFromTeams(tx: Prisma.TransactionClient, matchId: string
   }
 }
 
-async function createFixture(tx: Prisma.TransactionClient, opts: { competitionId: string; home: { id: string; name: string }; away: { id: string; name: string }; cupRound?: number }) {
+async function createFixture(tx: Prisma.TransactionClient, opts: { competitionId: string; home: { id: string; name: string }; away: { id: string; name: string }; cupRound?: number; countdownSeconds?: number }) {
   const code = await createMatchCode(tx);
   const match = await tx.match.create({
     data: {
@@ -185,7 +214,7 @@ async function createFixture(tx: Prisma.TransactionClient, opts: { competitionId
       cupRound: opts.cupRound ?? null,
       refereeId: null,
       status: "DRAFT",
-      countdownSeconds: 15,
+      countdownSeconds: opts.countdownSeconds ?? 15,
     },
   });
   await syncRosterFromTeams(tx, match.id, opts.home.id, opts.away.id);
@@ -200,7 +229,7 @@ export async function generateLeagueFixtures(actor: Actor, input: { competitionI
     include: { teams: { include: { team: true }, orderBy: { seed: "asc" } }, matches: { select: { id: true } } },
   });
   if (!comp) return err("Competition not found.");
-  if (comp.type !== "LEAGUE") return err("Only leagues get a round-robin schedule.");
+  if (comp.type !== "LEAGUE" && comp.type !== "LEAGUE_CUP") return err("Only leagues get a round-robin schedule.");
   if (comp.matches.length > 0) return err("Fixtures already exist for this league.");
 
   const teams = comp.teams.map((t) => t.team);
@@ -222,15 +251,26 @@ export async function generateLeagueFixtures(actor: Actor, input: { competitionI
     list.splice(1, 0, list.pop()!);
   }
 
+  // Respect roundsCount: limit pairings to roundsCount full round-robins
+  const roundsCount = comp.roundsCount ?? null;
+  let selectedPairings = pairings;
+  if (roundsCount && roundsCount > 0) {
+    const pairingsPerRound = pairings.length / (n - (isEven ? 1 : 0));
+    const totalPairs = Math.floor(pairingsPerRound) * roundsCount;
+    selectedPairings = pairings.slice(0, totalPairs);
+  }
+
+  const cd = comp.countdownSecs ?? 15;
+
   await prisma.competition.update({ where: { id: comp.id }, data: { status: "ACTIVE" } });
-  for (const p of pairings) {
+  for (const p of selectedPairings) {
     const home = teams[p.home];
     const away = teams[p.away];
     await prisma.$transaction(async (tx) => {
-      await createFixture(tx, { competitionId: comp.id, home: { id: home.id, name: home.name }, away: { id: away.id, name: away.name } });
+      await createFixture(tx, { competitionId: comp.id, home: { id: home.id, name: home.name }, away: { id: away.id, name: away.name }, countdownSeconds: cd });
     });
   }
-  return ok({ count: pairings.length });
+  return ok({ count: selectedPairings.length });
 }
 
 export async function generateCupRound(actor: Actor, input: { competitionId: string }) {
@@ -240,11 +280,13 @@ export async function generateCupRound(actor: Actor, input: { competitionId: str
     where: { id: input.competitionId },
     include: {
       teams: { include: { team: true }, orderBy: { seed: "asc" } },
-      matches: { orderBy: { createdAt: "asc" } },
+      matches: { orderBy: { createdAt: "asc" }, include: { penaltyShootout: true } },
     },
   });
   if (!comp) return err("Competition not found.");
-  if (comp.type !== "CUP") return err("Only knockout cups get rounds.");
+  if (comp.type !== "CUP" && comp.type !== "LEAGUE_CUP") return err("Only knockout cups get rounds.");
+
+  const cd = comp.countdownSecs ?? 15;
 
   if (comp.matches.length === 0) {
     // Round 1 from seeds
@@ -256,7 +298,7 @@ export async function generateCupRound(actor: Actor, input: { competitionId: str
     await prisma.competition.update({ where: { id: comp.id }, data: { status: "ACTIVE" } });
     for (const [a, b] of pairs) {
       await prisma.$transaction(async (tx) => {
-        await createFixture(tx, { competitionId: comp.id, home: { id: a.id, name: a.name }, away: { id: b.id, name: b.name }, cupRound: 1 });
+        await createFixture(tx, { competitionId: comp.id, home: { id: a.id, name: a.name }, away: { id: b.id, name: b.name }, cupRound: 1, countdownSeconds: cd });
       });
     }
     return ok({ count: pairs.length });
@@ -271,8 +313,16 @@ export async function generateCupRound(actor: Actor, input: { competitionId: str
 
   const winners: { id: string; name: string }[] = [];
   for (const m of roundMatches) {
-    if (m.homeScore === m.awayScore) return err(`Round ${maxRound} has a drawn match (${m.homeName} v ${m.awayName}). Knockout matches must have a winner.`);
-    winners.push(m.homeScore > m.awayScore ? { id: m.homeTeamId!, name: m.homeName } : { id: m.awayTeamId!, name: m.awayName });
+    if (m.homeScore === m.awayScore) {
+      if (!m.penaltyShootout || m.penaltyShootout.status !== "COMPLETE" || !m.penaltyShootout.winner)
+        return err(`Round ${maxRound} has a drawn match (${m.homeName} v ${m.awayName}). Use penalties to decide the winner.`);
+      const penWinner = m.penaltyShootout.winner === "HOME"
+        ? { id: m.homeTeamId!, name: m.homeName }
+        : { id: m.awayTeamId!, name: m.awayName };
+      winners.push(penWinner);
+    } else {
+      winners.push(m.homeScore > m.awayScore ? { id: m.homeTeamId!, name: m.homeName } : { id: m.awayTeamId!, name: m.awayName });
+    }
   }
   if (winners.length < 2) return err("The cup is over — a champion has been decided.");
 
@@ -285,10 +335,100 @@ export async function generateCupRound(actor: Actor, input: { competitionId: str
         home: winners[i * 2],
         away: winners[i * 2 + 1],
         cupRound: nextRound,
+        countdownSeconds: cd,
       });
     });
   }
   return ok({ count });
+}
+
+/* ------------------------------ group + cup ------------------------------ */
+
+export async function generateGroupFixtures(
+  actor: Actor,
+  input: { competitionId: string },
+) {
+  const blocked = await requireAdmin(actor);
+  if (blocked) return blocked;
+
+  const comp = await prisma.competition.findUnique({
+    where: { id: input.competitionId },
+    include: {
+      teams: { include: { team: true }, orderBy: { seed: "asc" } },
+      matches: { select: { id: true } },
+    },
+  });
+  if (!comp) return err("Competition not found.");
+  if (comp.type !== "LEAGUE_CUP") return err("This competition is not a League + Cup format.");
+  if (comp.matches.length > 0) return err("Fixtures already exist.");
+  if (!comp.groupsCount || !comp.teamsPerGroup || !comp.topAdvancing)
+    return err("Group configuration is missing.");
+
+  const groupsCount = comp.groupsCount;
+  const teamsPerGroup = comp.teamsPerGroup;
+  const topAdvancing = comp.topAdvancing;
+  const cd = comp.countdownSecs ?? 15;
+  const allTeams = comp.teams.map((ct) => ct.team);
+
+  if (groupsCount * teamsPerGroup > allTeams.length)
+    return err("Not enough teams for the configured groups.");
+
+  // Split teams into groups (round-robin within each group)
+  const shuffled = [...allTeams];
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+
+  const groups: (typeof allTeams)[] = [];
+  for (let g = 0; g < groupsCount; g++) {
+    groups.push(shuffled.slice(g * teamsPerGroup, (g + 1) * teamsPerGroup));
+  }
+
+  await prisma.competition.update({ where: { id: comp.id }, data: { status: "ACTIVE" } });
+
+  // Generate round-robin fixtures within each group
+  for (const groupTeams of groups) {
+    const n = groupTeams.length;
+    const isEven = n % 2 === 0;
+    const list = isEven ? [...groupTeams] : [...groupTeams, null as unknown as typeof groupTeams[0]];
+
+    const pairings: { home: number; away: number }[] = [];
+    for (let r = 0; r < list.length - 1; r++) {
+      for (let i = 0; i < list.length / 2; i++) {
+        const a = list[i];
+        const b = list[list.length - 1 - i];
+        if (!a || !b) continue;
+        const home = r % 2 === 0 ? a : b;
+        const away = r % 2 === 0 ? b : a;
+        pairings.push({ home: groupTeams.indexOf(home), away: groupTeams.indexOf(away) });
+      }
+      list.splice(1, 0, list.pop()!);
+    }
+
+    for (const p of pairings) {
+      const home = groupTeams[p.home];
+      const away = groupTeams[p.away];
+      await prisma.$transaction(async (tx) => {
+        await createFixture(tx, {
+          competitionId: comp.id,
+          home: { id: home.id, name: home.name },
+          away: { id: away.id, name: away.name },
+          countdownSeconds: cd,
+        });
+      });
+    }
+  }
+
+  // Calculate total knockout rounds needed
+  const totalKnockoutTeams = groupsCount * topAdvancing;
+  const knockoutRounds = Math.ceil(Math.log2(totalKnockoutTeams));
+
+  return ok({
+    count: groupsCount * Math.floor((teamsPerGroup * (teamsPerGroup - 1)) / 2),
+    groups: groupsCount,
+    knockoutRounds,
+  });
 }
 
 export async function assignReferee(actor: Actor, input: { matchId: string; refereeId: string }) {

@@ -9,6 +9,7 @@ import {
   createCompetitionAction,
   createTeamAction,
   generateCupRoundAction,
+  generateGroupFixturesAction,
   generateLeagueFixturesAction,
   removeTeamMemberAction,
 } from "@/app/actions/platform";
@@ -265,7 +266,7 @@ export function CompetitionActions({
   finishedLatestRound,
 }: {
   competitionId: string;
-  type: "LEAGUE" | "CUP";
+  type: "LEAGUE" | "CUP" | "LEAGUE_CUP" | "CUSTOM";
   hasFixtures: boolean;
   availableTeams: TeamOption[];
   currentTeamIds: string[];
@@ -284,14 +285,23 @@ export function CompetitionActions({
         {!hasFixtures ? (
           <>
             <div className="flex flex-wrap items-end gap-2">
-              {type === "LEAGUE" ? (
+              {type === "LEAGUE" && (
                 <Button variant="primary" onClick={() => void generateLeagueFixturesAction({ competitionId }).then((r) => { flash(r, "League fixtures generated."); router.refresh(); })}>
                   Generate round-robin fixtures
                 </Button>
-              ) : (
+              )}
+              {type === "CUP" && (
                 <Button variant="primary" onClick={() => void generateCupRoundAction({ competitionId }).then((r) => { flash(r, "Cup round generated."); router.refresh(); })}>
                   Generate round 1
                 </Button>
+              )}
+              {type === "LEAGUE_CUP" && (
+                <Button variant="primary" onClick={() => void generateGroupFixturesAction({ competitionId }).then((r) => { flash(r, "Group fixtures generated."); router.refresh(); })}>
+                  Generate group fixtures
+                </Button>
+              )}
+              {type === "CUSTOM" && (
+                <span className="text-xs text-muted italic">Custom competitions have no auto-generation. Add matches manually.</span>
               )}
             </div>
             <div className="flex flex-wrap items-end gap-2 border-t border-line pt-3">
@@ -321,7 +331,7 @@ export function CompetitionActions({
         ) : (
           <>
             <p className="text-sm text-muted">Fixtures exist. Manage referees below, then run each match.</p>
-            {type === "CUP" ? (
+            {(type === "CUP" || type === "LEAGUE_CUP") ? (
               <div className="flex flex-wrap items-end gap-2">
                 <Input value={roundLabel} onChange={(e) => setRoundLabel(e.target.value)} placeholder="Round name (cosmetic)" className="max-w-52" hidden aria-hidden />
                 <Button

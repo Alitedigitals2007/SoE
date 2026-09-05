@@ -32,6 +32,11 @@ async function loadMatchFor(code: string, tx: PrismaClient | Tx = prisma) {
       rounds: { include: { question: { select: { id: true, text: true, referenceAnswer: true } }, submissions: { include: { player: { include: { user: { select: { id: true, name: true } } } } } } } },
       timeline: true,
       questions: { orderBy: { order: "asc" } },
+      penaltyShootout: {
+        include: {
+          kicks: { orderBy: { sequence: "asc" } },
+        },
+      },
     },
   });
 }
@@ -653,6 +658,125 @@ export async function endMatch(actor: Actor, input: { code: string }): Promise<A
   });
   await publishMatchUpdate(match.code);
   return ok(undefined);
+}
+
+/* ------------------------------ penalty shootout --------------------------- */
+
+export async function startPenalties(actor: Actor, input: { code: string }): Promise<ActionResult> {
+  const match = await assertReferee(actor, input.code);
+  if (match.status !== "LIVE") return err("The match must be live to start penalties.");
+  if (match.currentRound < 10) return err("All ten questions must be played before penalties.");
+  if (match.homeScore !== match.awayScore) return err("Penalties are only available when the score is level.");
+  if (!match.competitionId) return err("Penalties are only available in cup matches.");
+  if (match.penaltyShootout) return err("A penalty shootout is already in progress.");
+
+  await prisma.$transaction(async (tx) => {
+    await tx.penaltyShootout.create({
+      data: {
+        matchId: match.id,
+        status: "IN_PROGRESS",
+        teamAScore: 0,
+        teamBScore: 0,
+      },
+    });
+    await appendTimeline(tx, match.id, "PENALTY_SHOOTOUT_START", "Penalty shootout", `${match.homeName} vs ${match.awayName}`, actor.userId);
+    await bumpVersion(tx, match.id);
+  });
+  await publishMatchUpdate(match.code);
+  return ok(undefined);
+}
+
+export async function takePenaltyKick(
+  actor: Actor,
+  input: { code: string; scored: boolean },
+): Promise<ActionResult> {
+  const match = await assertReferee(actor, input.code);
+  if (match.status !== "LIVE") return err("The match is not live.");
+  const ps = match.penaltyShootout;
+  if (!ps) return err("No penalty shootout in progress.");
+  if (ps.status === "COMPLETE") return err("The penalty shootout is already complete.");
+
+  const kicks = ps.kicks;
+  const totalKicks = kicks.length;
+  const isSuddenDeath = totalKicks > 10;
+
+  let expectedTeam: "HOME" | "AWAY";
+  if (isSuddenDeath) {
+    expectedTeam = totalKicks % 2 === 0 ? "HOME" : "AWAY";
+  } else {
+    expectedTeam = totalKicks < 5 ? "HOME" : totalKicks < 10 ? "AWAY" : totalKicks % 2 === 0 ? "HOME" : "AWAY";
+  }
+
+  const nextSequence = totalKicks + 1;
+
+  // Check if the shootout can be decided early
+  let winner: "HOME" | "AWAY" | null = null;
+  let newStatus = "IN_PROGRESS";
+
+  // Before sudden death: after 5 kicks each, check if one team has an insurmountable lead
+  if (!isSuddenDeath && totalKicks === 10) {
+    const aScore = ps.teamAScore;
+    const bScore = ps.teamBScore;
+    if (aScore > bScore) winner = "HOME";
+    else if (bScore > aScore) winner = "AWAY";
+    else {
+      // Enter sudden death
+    }
+  }
+
+  // During sudden death: after each pair, check if one team has more
+  if (isSuddenDeath && totalKicks % 2 === 1) {
+    // Odd number = just completed a pair (A then B)
+    const aScore = ps.teamAScore + (expectedTeam === "HOME" && input.scored ? 1 : 0);
+    const bScore = ps.teamBScore + (expectedTeam === "AWAY" && input.scored ? 1 : 0);
+    if (aScore > bScore) winner = "HOME";
+    else if (bScore > aScore) winner = "AWAY";
+  }
+
+  if (winner) newStatus = "COMPLETE";
+
+  const teamSide = expectedTeam;
+
+  await prisma.$transaction(async (tx) => {
+    await tx.penaltyKick.create({
+      data: {
+        shootoutId: ps.id,
+        team: teamSide,
+        score: input.scored,
+        sequence: nextSequence,
+      },
+    });
+
+    await tx.penaltyShootout.update({
+      where: { id: ps.id },
+      data: {
+        teamAScore: teamSide === "HOME" && input.scored ? { increment: 1 } : undefined,
+        teamBScore: teamSide === "AWAY" && input.scored ? { increment: 1 } : undefined,
+        status: newStatus,
+        winner,
+      },
+    });
+
+    const teamName = teamSide === "HOME" ? match.homeName : match.awayName;
+    const label = input.scored ? "Penalty scored" : "Penalty missed";
+    const detail = `${teamName} — ${input.scored ? "Scored" : "Missed"}`;
+    await appendTimeline(tx, match.id, input.scored ? "PENALTY_SCORED" : "PENALTY_MISS", label, detail, actor.userId);
+
+    if (newStatus === "COMPLETE") {
+      const winnerTeam = winner === "HOME" ? match.homeName : match.awayName;
+      await appendTimeline(tx, match.id, "PENALTY_SHOOTOUT_END", "Penalty shootout complete", `${winnerTeam} wins`, actor.userId);
+    }
+
+    await bumpVersion(tx, match.id);
+  });
+  await publishMatchUpdate(match.code);
+  return ok(undefined);
+}
+
+export async function getPenaltyState(code: string) {
+  const match = await loadMatchFor(code);
+  if (!match) return null;
+  return match.penaltyShootout ?? null;
 }
 
 /* ------------------------------ auth helper --------------------------------- */

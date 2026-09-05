@@ -70,3 +70,36 @@ export async function publishMatchUpdate(code: string): Promise<void> {
     }
   }
 }
+
+/* --------------------------------- chat ---------------------------------- */
+
+export function chatChannel(code: string): string {
+  return `match-${code.toUpperCase()}:chat`;
+}
+
+export async function publishChatMessage(
+  code: string,
+  message: { id: string; userId: string; userName: string; content: string; createdAt: string },
+): Promise<void> {
+  const channel = chatChannel(code);
+  const event = "chat-message";
+  const data = { code: code.toUpperCase(), message };
+
+  const pusher = getPusher();
+  if (pusher) {
+    try {
+      await pusher.trigger(channel, event, data);
+    } catch (e) {
+      console.warn("[realtime] Pusher chat publish failed:", e);
+    }
+  }
+
+  const ably = getAbly();
+  if (ably) {
+    try {
+      await ably.channels.get(channel).publish(event, data);
+    } catch (e) {
+      console.warn("[realtime] Ably chat publish failed:", e);
+    }
+  }
+}

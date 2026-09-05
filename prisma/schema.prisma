@@ -7,7 +7,9 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-/* ---------------------------------- Users ---------------------------------- */
+/**
+ * ---------------------------------- Users ----------------------------------
+ */
 
 enum Role {
   ADMIN
@@ -17,23 +19,28 @@ enum Role {
 }
 
 model User {
-  id           String       @id @default(cuid())
-  email        String       @unique
+  id           String   @id @default(cuid())
+  email        String   @unique
   name         String
   passwordHash String
   role         Role
-  createdAt    DateTime     @default(now())
-  updatedAt    DateTime     @updatedAt
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
-  matchesRefereed Match[]         @relation("MatchReferee")
-  rosterSlots     MatchPlayer[]
-  requestedSubs   SubstitutionRequest[]
-  timelineAuthored TimelineEvent[] @relation("TimelineAuthor")
-  teams           TeamPlayer[]
-  fantasyEntries  FantasyEntry[]
+  matchesRefereed  Match[]               @relation("MatchReferee")
+  rosterSlots      MatchPlayer[]
+  requestedSubs    SubstitutionRequest[]
+  timelineAuthored TimelineEvent[]       @relation("TimelineAuthor")
+  teams            TeamPlayer[]
+  fantasyEntries   FantasyEntry[]
+  potmVotes        PotmVote[]
+  playerVotes      PotmVote[]            @relation("PlayerVotes")
+  chatMessages     ChatMessage[]
 }
 
-/* --------------------------------- Matches --------------------------------- */
+/**
+ * --------------------------------- Matches ---------------------------------
+ */
 
 enum MatchStatus {
   DRAFT // admin built the shell, referee may still be preparing questions
@@ -47,14 +54,14 @@ enum TeamSide {
 }
 
 model Match {
-  id               String        @id @default(cuid())
-  code             String        @unique
+  id               String      @id @default(cuid())
+  code             String      @unique
   homeName         String
   awayName         String
-  status           MatchStatus   @default(DRAFT)
+  status           MatchStatus @default(DRAFT)
   refereeId        String?
-  referee          User?         @relation("MatchReferee", fields: [refereeId], references: [id], onDelete: SetNull)
-  countdownSeconds Int           @default(15)
+  referee          User?       @relation("MatchReferee", fields: [refereeId], references: [id], onDelete: SetNull)
+  countdownSeconds Int         @default(15)
 
   // Optional tournament context. Friendly matches carry none of these.
   competitionId String?
@@ -67,44 +74,49 @@ model Match {
 
   // "20 prepared questions, 10 played": the played set is Rounds 1..10,
   // which reference the prepared bank. A round can only be created while in DRAFT.
-  currentRound Int @default(0) // number of rounds decided so far (0..10)
-  version      Int @default(0) // bumped on every state change for realtime
+  currentRound Int       @default(0) // number of rounds decided so far (0..10)
+  version      Int       @default(0) // bumped on every state change for realtime
   startedAt    DateTime?
   finishedAt   DateTime?
 
   homeScore Int @default(0)
   awayScore Int @default(0)
 
-  roster       MatchPlayer[]
-  questions Question[]
-  rounds    Round[]
-  requests  SubstitutionRequest[]
-  substitutions Substitution[]
-  incidents ConductIncident[]
-  timeline  TimelineEvent[]
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  roster          MatchPlayer[]
+  questions       Question[]
+  rounds          Round[]
+  requests        SubstitutionRequest[]
+  substitutions   Substitution[]
+  incidents       ConductIncident[]
+  timeline        TimelineEvent[]
+  potmVotes       PotmVote[]
+  chatMessages    ChatMessage[]
+  penaltyShootout PenaltyShootout?
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
 
   @@index([refereeId])
 }
 
-/* ------------------------------ Roster / lineup ----------------------------- */
+/**
+ * ------------------------------ Roster / lineup -----------------------------
+ */
 
 enum LineupRole {
   STARTER // on the field, can answer
-  SUB     // on the bench, cannot answer until subbed in
-  OUT     // left the match (red card or otherwise removed)
+  SUB // on the bench, cannot answer until subbed in
+  OUT // left the match (red card or otherwise removed)
 }
 
 model MatchPlayer {
-  id        String    @id @default(cuid())
+  id        String     @id @default(cuid())
   matchId   String
-  match     Match     @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  match     Match      @relation(fields: [matchId], references: [id], onDelete: Cascade)
   userId    String
-  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   team      TeamSide
   number    Int // shirt number, 1..8
-  isCaptain Boolean   @default(false)
+  isCaptain Boolean    @default(false)
   role      LineupRole @default(STARTER)
 
   submissions Submission[]
@@ -116,12 +128,14 @@ model MatchPlayer {
   @@unique([matchId, team, number])
 }
 
-/* ------------------------------- Question bank ------------------------------ */
+/**
+ * ------------------------------- Question bank ------------------------------
+ */
 
 model Question {
-  id              String  @id @default(cuid())
+  id              String @id @default(cuid())
   matchId         String
-  match           Match   @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  match           Match  @relation(fields: [matchId], references: [id], onDelete: Cascade)
   order           Int // 1-based position inside the bank as prepared by the referee
   text            String
   referenceAnswer String
@@ -133,7 +147,9 @@ model Question {
   @@unique([matchId, roundNumber])
 }
 
-/* --------------------------------- Rounds ---------------------------------- */
+/**
+ * --------------------------------- Rounds ----------------------------------
+ */
 
 enum RoundStatus {
   PENDING // set up in the played list, not yet shown
@@ -148,38 +164,40 @@ enum RoundDecision {
 }
 
 model Round {
-  id        String      @id @default(cuid())
-  matchId   String
-  match     Match       @relation(fields: [matchId], references: [id], onDelete: Cascade)
-  number    Int // 1..10, the order the ten questions are played
-  questionId String
-  question  Question    @relation(fields: [questionId], references: [id])
-  status    RoundStatus @default(PENDING)
-  openedAt  DateTime?
-  closesAt  DateTime?
-  lockedAt  DateTime?
-  decidedAt DateTime?
-  decision  RoundDecision?
-  goalSubmissionId String?       @unique
+  id               String         @id @default(cuid())
+  matchId          String
+  match            Match          @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  number           Int // 1..10, the order the ten questions are played
+  questionId       String
+  question         Question       @relation(fields: [questionId], references: [id])
+  status           RoundStatus    @default(PENDING)
+  openedAt         DateTime?
+  closesAt         DateTime?
+  lockedAt         DateTime?
+  decidedAt        DateTime?
+  decision         RoundDecision?
+  goalSubmissionId String?        @unique
 
-  submissions  Submission[]
-  goalSubmission Submission? @relation("RoundWinner", fields: [goalSubmissionId], references: [id])
+  submissions    Submission[]
+  goalSubmission Submission?  @relation("RoundWinner", fields: [goalSubmissionId], references: [id])
 
   @@unique([matchId, number])
   @@unique([matchId, questionId])
 }
 
-/* ------------------------------- Submissions -------------------------------- */
+/**
+ * ------------------------------- Submissions --------------------------------
+ */
 
 model Submission {
-  id          String   @id @default(cuid())
+  id          String      @id @default(cuid())
   roundId     String
-  round       Round    @relation(fields: [roundId], references: [id], onDelete: Cascade)
+  round       Round       @relation(fields: [roundId], references: [id], onDelete: Cascade)
   playerId    String
   player      MatchPlayer @relation(fields: [playerId], references: [id], onDelete: Cascade)
   answer      String
   seq         Int // 1-based submission order inside the round
-  submittedAt DateTime @default(now())
+  submittedAt DateTime    @default(now())
 
   winningRound Round? @relation("RoundWinner")
 
@@ -187,7 +205,9 @@ model Submission {
   @@index([roundId, seq])
 }
 
-/* ----------------------------- Substitutions ------------------------------- */
+/**
+ * ----------------------------- Substitutions -------------------------------
+ */
 
 enum SubRequestStatus {
   PENDING
@@ -196,32 +216,34 @@ enum SubRequestStatus {
 }
 
 model SubstitutionRequest {
-  id           String           @id @default(cuid())
-  matchId      String
-  match        Match            @relation(fields: [matchId], references: [id], onDelete: Cascade)
-  team         TeamSide
-  playerInId   String
-  playerOutId  String
+  id            String           @id @default(cuid())
+  matchId       String
+  match         Match            @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  team          TeamSide
+  playerInId    String
+  playerOutId   String
   requestedById String
-  requestedBy  User             @relation(fields: [requestedById], references: [id], onDelete: Cascade)
-  status       SubRequestStatus @default(PENDING)
-  createdAt    DateTime         @default(now())
-  decidedAt    DateTime?
+  requestedBy   User             @relation(fields: [requestedById], references: [id], onDelete: Cascade)
+  status        SubRequestStatus @default(PENDING)
+  createdAt     DateTime         @default(now())
+  decidedAt     DateTime?
 }
 
 model Substitution {
-  id        String     @id @default(cuid())
-  matchId   String
-  match     Match      @relation(fields: [matchId], references: [id], onDelete: Cascade)
-  team      TeamSide
-  playerIn  MatchPlayer @relation("SubPlayerIn", fields: [playerInId], references: [id])
-  playerInId String
-  playerOut MatchPlayer @relation("SubPlayerOut", fields: [playerOutId], references: [id])
+  id          String      @id @default(cuid())
+  matchId     String
+  match       Match       @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  team        TeamSide
+  playerIn    MatchPlayer @relation("SubPlayerIn", fields: [playerInId], references: [id])
+  playerInId  String
+  playerOut   MatchPlayer @relation("SubPlayerOut", fields: [playerOutId], references: [id])
   playerOutId String
-  at        DateTime   @default(now())
+  at          DateTime    @default(now())
 }
 
-/* ------------------------------ Conduct cards ------------------------------ */
+/**
+ * ------------------------------ Conduct cards ------------------------------
+ */
 
 enum IncidentType {
   OUTSIDE_TIME
@@ -242,18 +264,20 @@ enum IncidentAction {
 }
 
 model ConductIncident {
-  id        String         @id @default(cuid())
-  matchId   String
-  match     Match          @relation(fields: [matchId], references: [id], onDelete: Cascade)
-  playerId  String
-  player    MatchPlayer    @relation(fields: [playerId], references: [id], onDelete: Cascade)
-  type      IncidentType
-  action    IncidentAction
-  note      String?
-  at        DateTime       @default(now())
+  id       String         @id @default(cuid())
+  matchId  String
+  match    Match          @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  playerId String
+  player   MatchPlayer    @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  type     IncidentType
+  action   IncidentAction
+  note     String?
+  at       DateTime       @default(now())
 }
 
-/* -------------------------------- Timeline --------------------------------- */
+/**
+ * -------------------------------- Timeline ---------------------------------
+ */
 
 enum TimelineType {
   KICKOFF
@@ -264,47 +288,54 @@ enum TimelineType {
   SUBSTITUTION
   CARD
   FULL_TIME
+  PENALTY_SAVED
+  PENALTY_SCORED
+  PENALTY_MISS
+  PENALTY_SHOOTOUT_START
+  PENALTY_SHOOTOUT_END
 }
 
 model TimelineEvent {
-  id        String       @id @default(cuid())
-  matchId   String
-  match     Match        @relation(fields: [matchId], references: [id], onDelete: Cascade)
-  type      TimelineType
-  roundNumber Int?
-  label     String // human readable one-liner, e.g. "GOAL — David (Newton) 1–0"
-  detail    String? // optional second line
+  id           String       @id @default(cuid())
+  matchId      String
+  match        Match        @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  type         TimelineType
+  roundNumber  Int?
+  label        String // human readable one-liner, e.g. "GOAL — David (Newton) 1–0"
+  detail       String? // optional second line
   authoredById String?
-  authoredBy User?      @relation("TimelineAuthor", fields: [authoredById], references: [id])
-  seq       Int
-  createdAt DateTime     @default(now())
+  authoredBy   User?        @relation("TimelineAuthor", fields: [authoredById], references: [id])
+  seq          Int
+  createdAt    DateTime     @default(now())
 
   @@index([matchId, seq])
 }
 
-/* --------------------------------- Teams ----------------------------------- */
+/**
+ * --------------------------------- Teams -----------------------------------
+ */
 
 model Team {
-  id        String @id @default(cuid())
+  id        String   @id @default(cuid())
   name      String
-  slug      String @unique
+  slug      String   @unique
   code      String // short tag, e.g. "LAG"
   createdAt DateTime @default(now())
 
-  members         TeamPlayer[]
+  members            TeamPlayer[]
   competitionEntries CompetitionTeam[]
-  homeMatches     Match[] @relation("TeamHomeMatches")
-  awayMatches     Match[] @relation("TeamAwayMatches")
+  homeMatches        Match[]           @relation("TeamHomeMatches")
+  awayMatches        Match[]           @relation("TeamAwayMatches")
 
   @@index([slug])
 }
 
 model TeamPlayer {
-  id        String @id @default(cuid())
+  id        String   @id @default(cuid())
   teamId    String
-  team      Team   @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  team      Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
   userId    String
-  user      User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   number    Int // squad number 1..8
   createdAt DateTime @default(now())
 
@@ -313,11 +344,15 @@ model TeamPlayer {
   @@index([userId])
 }
 
-/* ------------------------------- Competitions ------------------------------ */
+/**
+ * ------------------------------- Competitions ------------------------------
+ */
 
 enum CompetitionType {
   LEAGUE // round-robin, standings table
   CUP // single-elimination knockout bracket
+  LEAGUE_CUP // group stage then knockout
+  CUSTOM // manual fixture placement
 }
 
 enum CompetitionStatus {
@@ -327,13 +362,20 @@ enum CompetitionStatus {
 }
 
 model Competition {
-  id        String            @id @default(cuid())
-  slug      String            @unique
-  name      String
-  type      CompetitionType   @default(LEAGUE)
-  status    CompetitionStatus @default(DRAFT)
-  season    String // e.g. "2026/27"
-  createdAt DateTime          @default(now())
+  id     String            @id @default(cuid())
+  slug   String            @unique
+  name   String
+  type   CompetitionType   @default(LEAGUE)
+  status CompetitionStatus @default(DRAFT)
+  season String // e.g. "2026/27"
+
+  // Wizard settings (optional)
+  groupsCount   Int? // LEAGUE_CUP: number of groups
+  teamsPerGroup Int? // LEAGUE_CUP: teams per group
+  topAdvancing  Int? // LEAGUE_CUP: top N from each group advance
+  roundsCount   Int? // LEAGUE: number of rounds
+  countdownSecs Int? // match countdown seconds override
+  createdAt     DateTime @default(now())
 
   teams          CompetitionTeam[]
   matches        Match[]
@@ -341,29 +383,61 @@ model Competition {
 }
 
 model CompetitionTeam {
-  id            String @id @default(cuid())
+  id            String      @id @default(cuid())
   competitionId String
   competition   Competition @relation(fields: [competitionId], references: [id], onDelete: Cascade)
   teamId        String
-  team          Team   @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  team          Team        @relation(fields: [teamId], references: [id], onDelete: Cascade)
   seed          Int? // knockout seeding / league order
-  createdAt     DateTime @default(now())
+  createdAt     DateTime    @default(now())
 
   @@unique([competitionId, teamId])
 }
 
-/* ------------------------------- Fantasy ----------------------------------- */
+/**
+ * ----------------------------- Penalty shootout ----------------------------
+ */
+
+model PenaltyShootout {
+  id         String   @id @default(cuid())
+  matchId    String   @unique
+  match      Match    @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  status     String   @default("IN_PROGRESS") // IN_PROGRESS | COMPLETE
+  teamAScore Int      @default(0)
+  teamBScore Int      @default(0)
+  winner     String? // "HOME" | "AWAY"
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  kicks PenaltyKick[]
+}
+
+model PenaltyKick {
+  id         String          @id @default(cuid())
+  shootoutId String
+  shootout   PenaltyShootout @relation(fields: [shootoutId], references: [id], onDelete: Cascade)
+  team       String // "HOME" | "AWAY"
+  score      Boolean
+  sequence   Int // 1-based kick order
+  createdAt  DateTime        @default(now())
+
+  @@unique([shootoutId, sequence])
+}
+
+/**
+ * ------------------------------- Fantasy -----------------------------------
+ */
 
 model FantasyEntry {
-  id            String @id @default(cuid())
+  id            String      @id @default(cuid())
   competitionId String
   competition   Competition @relation(fields: [competitionId], references: [id], onDelete: Cascade)
   userId        String
-  user          User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
   name          String
-  points        Int    @default(0)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  points        Int         @default(0)
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
 
   picks FantasyPick[]
 
@@ -372,14 +446,47 @@ model FantasyEntry {
 }
 
 model FantasyPick {
-  id            String @id @default(cuid())
+  id            String       @id @default(cuid())
   entryId       String
   entry         FantasyEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
   competitionId String
   playerUserId  String
-  createdAt     DateTime @default(now())
+  createdAt     DateTime     @default(now())
 
   @@unique([entryId, playerUserId])
   @@unique([competitionId, entryId, playerUserId])
   @@index([competitionId, playerUserId])
+}
+
+/**
+ * ---------------------------- Player of the Match --------------------------
+ */
+
+model PotmVote {
+  id        String   @id @default(cuid())
+  matchId   String
+  match     Match    @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  playerId  String
+  player    User     @relation("PlayerVotes", fields: [playerId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([matchId, userId])
+}
+
+/**
+ * ----------------------------------- Chat ----------------------------------
+ */
+
+model ChatMessage {
+  id        String   @id @default(cuid())
+  matchId   String
+  match     Match    @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  content   String   @db.VarChar(500)
+  createdAt DateTime @default(now())
+
+  @@index([matchId, createdAt])
 }

@@ -1,21 +1,39 @@
 import Link from "next/link";
+import { Suspense } from "react";
 import { requireRole } from "@/lib/authz";
 import { prisma } from "@/lib/prisma";
 import { TopBar } from "@/components/app";
 import { Badge, Card, CardHeader } from "@/components/ui";
 import { StatusBadge } from "@/app/admin/page";
+import { UrlPagination } from "@/components/UrlPagination";
 
 export const dynamic = "force-dynamic";
 
-export default async function PlayerHome() {
+const PAGE_SIZE = 12;
+
+export default async function PlayerHome({
+  searchParams,
+}: {
+  searchParams: Promise<{ page?: string }>;
+}) {
   const user = await requireRole(["PLAYER"]);
-  const slots = await prisma.matchPlayer.findMany({
-    where: { userId: user.id },
-    orderBy: { match: { createdAt: "desc" } },
-    include: {
-      match: { include: { referee: { select: { name: true } } } },
-    },
-  });
+  const sp = await searchParams;
+  const page = Math.max(1, Number(sp.page) || 1);
+
+  const [slots, total] = await Promise.all([
+    prisma.matchPlayer.findMany({
+      where: { userId: user.id },
+      orderBy: { match: { createdAt: "desc" } },
+      skip: (page - 1) * PAGE_SIZE,
+      take: PAGE_SIZE,
+      include: {
+        match: { include: { referee: { select: { name: true } } } },
+      },
+    }),
+    prisma.matchPlayer.count({ where: { userId: user.id } }),
+  ]);
+
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   return (
     <>
@@ -62,6 +80,9 @@ export default async function PlayerHome() {
             })}
           </div>
         )}
+        <Suspense>
+          <UrlPagination page={page} totalPages={totalPages} basePath="/player" />
+        </Suspense>
       </main>
     </>
   );

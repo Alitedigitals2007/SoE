@@ -4,6 +4,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { hashPassword } from "@/lib/password";
 import { currentActor } from "@/lib/session";
+import { createCompetition } from "@/lib/platform/engine";
 import type { ActionResult, Role } from "@/lib/domain";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -73,5 +74,30 @@ export async function updateUserAction(input: {
   } catch (e) {
     console.error("updateUserAction failed", e);
     return { ok: false, error: "Could not update the account." };
+  }
+}
+
+/* ------------------------------- competitions ------------------------------ */
+
+export async function createWizardCompetitionAction(input: {
+  name: string;
+  type: "LEAGUE" | "CUP" | "LEAGUE_CUP" | "CUSTOM";
+  season: string;
+  teamIds: string[];
+  groupsCount?: number;
+  teamsPerGroup?: number;
+  topAdvancing?: number;
+  roundsCount?: number;
+  countdownSecs?: number;
+}): Promise<ActionResult<{ competitionId: string; slug: string }>> {
+  const actor = await currentActor();
+  if (!actor) return { ok: false, error: "Sign in to continue." };
+  if (actor.role !== "ADMIN") return { ok: false, error: "Only admins can create competitions." };
+
+  try {
+    return await createCompetition(actor, input);
+  } catch (e) {
+    console.error("createWizardCompetitionAction failed", e);
+    return { ok: false, error: "Could not create competition." };
   }
 }

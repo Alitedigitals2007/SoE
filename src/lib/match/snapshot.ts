@@ -4,6 +4,8 @@ import type {
   AnswerView,
   IncidentAction,
   MatchSnapshot,
+  PenaltyKickView,
+  PenaltyShootoutView,
   RosterSlotView,
   RoundView,
   TeamSide,
@@ -53,6 +55,17 @@ export const matchInclude = {
   requests: {
     include: {
       requestedBy: { select: { id: true, name: true } },
+    },
+  },
+  penaltyShootout: {
+    include: {
+      kicks: { orderBy: { sequence: "asc" as const } },
+    },
+  },
+  competition: { select: { type: true } },
+  potmVotes: {
+    include: {
+      player: { select: { id: true, name: true } },
     },
   },
 } satisfies Prisma.MatchInclude;
@@ -199,6 +212,33 @@ export function buildSnapshot(
     (r) => r.status === "LOCKED",
   );
 
+  const ps = match.penaltyShootout;
+  let penaltyShootout: PenaltyShootoutView | null = null;
+  if (ps) {
+    const kicks: PenaltyKickView[] = ps.kicks.map((k) => ({
+      team: k.team as TeamSide,
+      scored: k.score,
+      sequence: k.sequence,
+    }));
+    const totalKicks = kicks.length;
+    const isSuddenDeath = totalKicks > 10;
+    let currentKickTeam: TeamSide | null = null;
+    if (ps.status === "IN_PROGRESS") {
+      currentKickTeam = isSuddenDeath
+        ? totalKicks % 2 === 0 ? "HOME" : "AWAY"
+        : totalKicks < 5 ? "HOME" : totalKicks < 10 ? "AWAY" : totalKicks % 2 === 0 ? "HOME" : "AWAY";
+    }
+    penaltyShootout = {
+      status: ps.status as "IN_PROGRESS" | "COMPLETE",
+      teamAScore: ps.teamAScore,
+      teamBScore: ps.teamBScore,
+      winner: ps.winner as TeamSide | null,
+      kicks,
+      currentKickTeam,
+      nextSequence: totalKicks + 1,
+    };
+  }
+
   return {
     matchId: match.id,
     code: match.code,
@@ -248,6 +288,10 @@ export function buildSnapshot(
             };
           })
         : [],
+    potm: buildPotm(match, viewer.userId),
+    competitionType: (match.competition?.type === "LEAGUE" || match.competition?.type === "CUP") ? match.competition.type : null,
+    cupRound: match.cupRound ?? null,
+    penaltyShootout,
   };
 }
 
@@ -317,4 +361,31 @@ function buildSummary(
     timeline,
     topAnswers: scorers,
   };
+}
+
+function buildPotm(
+  match: MatchFull,
+  viewerUserId: string | null,
+): MatchSnapshot["potm"] {
+  const votes = match.potmVotes ?? [];
+  const votedFor = viewerUserId
+    ? votes.find((v) => v.userId === viewerUserId)?.playerId ?? null
+    : null;
+
+  const countMap = new Map<string, { playerId: string; playerName: string; votes: number }>();
+  for (const v of votes) {
+    const existing = countMap.get(v.playerId);
+    if (existing) {
+      existing.votes++;
+    } else {
+      countMap.set(v.playerId, {
+        playerId: v.playerId,
+        playerName: v.player.name,
+        votes: 1,
+      });
+    }
+  }
+
+  const results = [...countMap.values()].sort((a, b) => b.votes - a.votes);
+  return { votedFor, results };
 }

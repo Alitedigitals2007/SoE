@@ -10,6 +10,7 @@ import {
   eligiblePlayersForCompetition,
   fantasyBoard,
   generateCupRound,
+  generateGroupFixtures,
   generateLeagueFixtures,
   getOrCreateEntry,
   leagueStandings,
@@ -56,9 +57,14 @@ export async function removeTeamMemberAction(input: { teamId: string; userId: st
 
 export async function createCompetitionAction(input: {
   name: string;
-  type: "LEAGUE" | "CUP";
+  type: "LEAGUE" | "CUP" | "LEAGUE_CUP" | "CUSTOM";
   season: string;
   teamIds: string[];
+  groupsCount?: number;
+  teamsPerGroup?: number;
+  topAdvancing?: number;
+  roundsCount?: number;
+  countdownSecs?: number;
 }) {
   return runEngine((a) => createCompetition(a, input));
 }
@@ -73,6 +79,10 @@ export async function generateLeagueFixturesAction(input: { competitionId: strin
 
 export async function generateCupRoundAction(input: { competitionId: string }) {
   return runEngine((a) => generateCupRound(a, input));
+}
+
+export async function generateGroupFixturesAction(input: { competitionId: string }) {
+  return runEngine((a) => generateGroupFixtures(a, input));
 }
 
 export async function assignRefereeAction(input: { matchId: string; refereeId: string }) {

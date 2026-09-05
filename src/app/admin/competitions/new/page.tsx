@@ -1,7 +1,8 @@
 import { requireRole } from "@/lib/authz";
 import { prisma } from "@/lib/prisma";
 import { TopBar } from "@/components/app";
-import { CreateCompetitionForm, type TeamOption } from "@/components/platformAdmin";
+import { CompetitionWizard } from "@/components/admin/CompetitionWizard";
+import type { TeamOption } from "@/components/platformAdmin";
 
 export const dynamic = "force-dynamic";
 
@@ -15,7 +16,7 @@ export default async function AdminNewCompetition() {
       <main className="mx-auto w-full max-w-6xl px-4 py-6">
         <h1 className="text-2xl font-bold text-fg">New competition</h1>
         <p className="mb-5 text-sm text-muted">Create clubs first so you can seed the competition with teams.</p>
-        <CreateCompetitionForm teams={teams} />
+        <CompetitionWizard teams={teams} />
       </main>
     </>
   );

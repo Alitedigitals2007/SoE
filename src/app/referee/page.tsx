@@ -1,19 +1,37 @@
 import Link from "next/link";
+import { Suspense } from "react";
 import { requireRole } from "@/lib/authz";
 import { prisma } from "@/lib/prisma";
 import { TopBar } from "@/components/app";
 import { Card, CardHeader } from "@/components/ui";
 import { StatusBadge } from "@/app/admin/page";
+import { UrlPagination } from "@/components/UrlPagination";
 
 export const dynamic = "force-dynamic";
 
-export default async function RefereeHome() {
+const PAGE_SIZE = 12;
+
+export default async function RefereeHome({
+  searchParams,
+}: {
+  searchParams: Promise<{ page?: string }>;
+}) {
   const user = await requireRole(["REFEREE"]);
-  const matches = await prisma.match.findMany({
-    where: { refereeId: user.id },
-    orderBy: { createdAt: "desc" },
-    include: { _count: { select: { roster: true } } },
-  });
+  const sp = await searchParams;
+  const page = Math.max(1, Number(sp.page) || 1);
+
+  const [matches, total] = await Promise.all([
+    prisma.match.findMany({
+      where: { refereeId: user.id },
+      orderBy: { createdAt: "desc" },
+      skip: (page - 1) * PAGE_SIZE,
+      take: PAGE_SIZE,
+      include: { _count: { select: { roster: true } } },
+    }),
+    prisma.match.count({ where: { refereeId: user.id } }),
+  ]);
+
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   return (
     <>
@@ -52,6 +70,9 @@ export default async function RefereeHome() {
             })}
           </div>
         )}
+        <Suspense>
+          <UrlPagination page={page} totalPages={totalPages} basePath="/referee" />
+        </Suspense>
       </main>
     </>
   );

@@ -10,21 +10,26 @@ import {
   openNextQuestionAction,
   recordIncidentAction,
   requestSubstitutionAction,
+  startPenaltiesAction,
   submitAnswerAction,
+  takePenaltyKickAction,
 } from "@/app/actions/match";
 import { useMatchState, type LiveMode } from "@/components/match/useMatchState";
 import { Badge, Button, Card, CardHeader, EmptyState, Select, Spinner, cn } from "@/components/ui";
 import { normalizeAnswer } from "@/lib/normalize";
+import { PotmVote } from "@/components/match/PotmVote";
 import {
   INCIDENT_ACTIONS,
   INCIDENT_LABELS,
   type IncidentAction,
   type IncidentType,
   type MatchSnapshot,
+  type PenaltyShootoutView,
   type RoundView,
   type TeamSide,
   type TimelineItemView,
 } from "@/lib/domain";
+import { ChatBox } from "@/components/match/ChatBox";
 
 export function Arena({ code, initial }: { code: string; initial: MatchSnapshot }) {
   const { snapshot, mode } = useMatchState(code, initial);
@@ -64,8 +69,10 @@ function ArenaInner({
             </div>
           ) : null}
 
-          {snapshot.status === "FINISHED" && snapshot.summary ? (
-            <FullTime summary={snapshot.summary} />
+          {snapshot.status === "FINISHED" && snapshot.penaltyShootout ? (
+            <PenaltyShootoutCard snapshot={snapshot} onError={onError} />
+          ) : snapshot.status === "FINISHED" && snapshot.summary ? (
+            <FullTime summary={snapshot.summary} snapshot={snapshot} />
           ) : snapshot.status === "DRAFT" ? (
             <PreMatch snapshot={snapshot} />
           ) : (
@@ -82,6 +89,9 @@ function ArenaInner({
           ) : null}
           <LineupCard snapshot={snapshot} />
           <TimelineCard snapshot={snapshot} />
+          {snapshot.status !== "DRAFT" && (
+            <ChatBox matchId={snapshot.matchId} matchCode={snapshot.code} />
+          )}
         </aside>
       </div>
     </div>
@@ -111,8 +121,9 @@ function MatchHeader({ snapshot, mode }: { snapshot: MatchSnapshot; mode: LiveMo
             className="text-xs font-medium text-gold underline-offset-2 hover:underline"
             title="Share this link so anyone can watch without an account"
           >
-            Share watch link ↗
+            Watch link ↗
           </Link>
+          <ShareButton code={snapshot.code} />
         </div>
       </div>
 
@@ -161,6 +172,48 @@ function roundLabel(s: MatchSnapshot): string {
   return `Question ${Math.min(s.currentRound + 1, 10)} / 10`;
 }
 
+function ShareButton({ code }: { code: string }) {
+  const [copied, setCopied] = React.useState(false);
+  const url = typeof window !== "undefined" ? `${window.location.origin}/watch/${code}` : `/watch/${code}`;
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      const input = document.createElement("input");
+      input.value = url;
+      document.body.appendChild(input);
+      input.select();
+      document.execCommand("copy");
+      document.body.removeChild(input);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  };
+
+  return (
+    <button
+      type="button"
+      onClick={handleCopy}
+      className="inline-flex items-center gap-1.5 rounded-lg border border-gold/40 bg-gold/10 px-3 py-1.5 text-xs font-medium text-gold transition-colors hover:bg-gold/20"
+    >
+      {copied ? (
+        <>
+          <span aria-hidden>✓</span>
+          Copied!
+        </>
+      ) : (
+        <>
+          <span aria-hidden>🔗</span>
+          Share
+        </>
+      )}
+    </button>
+  );
+}
+
 /* ------------------------------ pre-match / prep ---------------------------- */
 
 function PreMatch({ snapshot }: { snapshot: MatchSnapshot }) {
@@ -195,6 +248,8 @@ function PreMatch({ snapshot }: { snapshot: MatchSnapshot }) {
 function Stage({ snapshot, onError }: { snapshot: MatchSnapshot; onError: (e: string | null) => void }) {
   const round = snapshot.round;
   const isReferee = snapshot.viewer.isReferee;
+  const isCup = snapshot.competitionType === "CUP";
+  const isDraw = snapshot.homeScore === snapshot.awayScore;
 
   if (!round) {
     // Between kick-off and the first question, or right after a reveal before the next open
@@ -203,7 +258,24 @@ function Stage({ snapshot, onError }: { snapshot: MatchSnapshot; onError: (e: st
         <Card>
           <CardHeader title="All ten questions played" description="Time to blow the final whistle." />
           <div className="p-4">
-            {isReferee ? <EndMatchButton code={snapshot.code} onError={onError} /> : <p className="text-sm text-muted">Waiting for the referee to end the match.</p>}
+            {isReferee ? (
+              <div className="flex flex-wrap items-center gap-3">
+                {isCup && isDraw && !snapshot.penaltyShootout ? (
+                  <>
+                    <Button variant="pitch" onClick={() => submit(startPenaltiesAction(snapshot.code), onError)}>
+                      Penalties
+                    </Button>
+                    <EndMatchButton code={snapshot.code} onError={onError} />
+                  </>
+                ) : (
+                  <EndMatchButton code={snapshot.code} onError={onError} />
+                )}
+              </div>
+            ) : (
+              <p className="text-sm text-muted">
+                {isCup && isDraw ? "Waiting for the referee to choose penalties or end the match." : "Waiting for the referee to end the match."}
+              </p>
+            )}
           </div>
         </Card>
       );
@@ -835,7 +907,7 @@ function TimelineCard({ snapshot }: { snapshot: MatchSnapshot }) {
 function TimelineRow({ t }: { t: TimelineItemView }) {
   const clock = t.elapsedSec == null ? "--:--" : fmtClock(t.elapsedSec);
   const icon =
-    t.type === "GOAL" ? "⚽" : t.type === "NO_GOAL" ? "❌" : t.type === "KICKOFF" ? "🏟️" : t.type === "FULL_TIME" ? "🏁" : t.type === "CARD" ? "🟨" : t.type === "SUBSTITUTION" ? "🔄" : t.type === "QUESTION_OPEN" ? "❓" : "🔒";
+    t.type === "GOAL" ? "⚽" : t.type === "NO_GOAL" ? "❌" : t.type === "KICKOFF" ? "🏟️" : t.type === "FULL_TIME" ? "🏁" : t.type === "CARD" ? "🟨" : t.type === "SUBSTITUTION" ? "🔄" : t.type === "QUESTION_OPEN" ? "❓" : t.type === "PENALTY_SCORED" ? "⚽" : t.type === "PENALTY_MISS" ? "❌" : t.type === "PENALTY_SAVED" ? "🧤" : t.type === "PENALTY_SHOOTOUT_START" ? "🎯" : t.type === "PENALTY_SHOOTOUT_END" ? "🏆" : "🔒";
   return (
     <li className="flex items-start gap-3 py-1.5 text-sm">
       <span className="w-14 shrink-0 pt-0.5 text-xs font-semibold tabular-nums text-subtle">{clock}</span>
@@ -850,8 +922,141 @@ function TimelineRow({ t }: { t: TimelineItemView }) {
 
 /* -------------------------------- full time -------------------------------- */
 
-function FullTime({ summary }: { summary: NonNullable<MatchSnapshot["summary"]> }) {
+function PenaltyShootoutCard({ snapshot, onError }: { snapshot: MatchSnapshot; onError: (e: string | null) => void }) {
+  const ps = snapshot.penaltyShootout;
+  if (!ps) return null;
+  const isReferee = snapshot.viewer.isReferee;
+  const isComplete = ps.status === "COMPLETE";
+
   return (
+    <Card>
+      <div className="pitch-bg p-6 text-center">
+        <p className="text-2xl font-black uppercase tracking-widest text-white">Penalty Shootout</p>
+        <div className="mt-3 flex items-center justify-center gap-8">
+          <div className="text-center">
+            <p className="text-xs font-bold uppercase tracking-wider text-white/70">{snapshot.homeName}</p>
+            <p className="text-5xl font-black tabular-nums text-white">{ps.teamAScore}</p>
+          </div>
+          <span className="text-3xl font-bold text-white/50">–</span>
+          <div className="text-center">
+            <p className="text-xs font-bold uppercase tracking-wider text-white/70">{snapshot.awayName}</p>
+            <p className="text-5xl font-black tabular-nums text-white">{ps.teamBScore}</p>
+          </div>
+        </div>
+        {isComplete && ps.winner ? (
+          <p className="mt-3 text-lg font-bold text-gold">
+            {ps.winner === "HOME" ? snapshot.homeName : snapshot.awayName} wins!
+          </p>
+        ) : (
+          <p className="mt-2 text-xs text-white/70">
+            {isComplete ? "Shootout complete" : "Shootout in progress"}
+          </p>
+        )}
+      </div>
+
+      <div className="p-5">
+        <PenaltyKicksList kicks={ps.kicks} homeName={snapshot.homeName} awayName={snapshot.awayName} />
+
+        {!isComplete && isReferee && (
+          <div className="mt-5 flex flex-wrap items-center gap-3 border-t border-line pt-4">
+            <p className="text-xs text-subtle mr-2">
+              Next kick: {ps.currentKickTeam === "HOME" ? snapshot.homeName : snapshot.awayName}
+            </p>
+            <Button
+              variant="pitch"
+              onClick={() => submit(takePenaltyKickAction(snapshot.code, true), onError)}
+            >
+              Scored
+            </Button>
+            <Button
+              variant="danger"
+              onClick={() => submit(takePenaltyKickAction(snapshot.code, false), onError)}
+            >
+              Missed
+            </Button>
+          </div>
+        )}
+
+        {isComplete && (
+          <div className="mt-5 border-t border-line pt-4">
+            <EndMatchButton code={snapshot.code} onError={onError} />
+          </div>
+        )}
+      </div>
+    </Card>
+  );
+}
+
+function PenaltyKicksList({
+  kicks,
+  homeName,
+  awayName,
+}: {
+  kicks: PenaltyShootoutView["kicks"];
+  homeName: string;
+  awayName: string;
+}) {
+  // Group kicks into pairs (A, B)
+  const pairs: { home: (typeof kicks)[number] | null; away: (typeof kicks)[number] | null }[] = [];
+  for (let i = 0; i < kicks.length; i += 2) {
+    pairs.push({
+      home: kicks[i]?.team === "HOME" ? kicks[i] : null,
+      away: kicks[i + 1]?.team === "AWAY" ? kicks[i + 1] : null,
+    });
+  }
+
+  const maxRounds = Math.max(5, pairs.length);
+
+  return (
+    <div className="space-y-1">
+      <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted mb-2">
+        <span className="w-20 text-right">{homeName}</span>
+        <span className="flex-1 text-center">Kicks</span>
+        <span className="w-20 text-left">{awayName}</span>
+      </div>
+      {Array.from({ length: maxRounds }, (_, i) => {
+        const pair = pairs[i];
+        const homeKick = pair?.home ?? null;
+        const awayKick = pair?.away ?? null;
+        const kickNum = i + 1;
+        const isActive = !pair || (!homeKick && !awayKick);
+        const isCurrentPair = isActive && i === pairs.length;
+
+        return (
+          <div
+            key={kickNum}
+            className={cn(
+              "flex items-center gap-2 rounded px-2 py-1.5 text-sm",
+              isCurrentPair && "bg-gold/10 border border-gold/30",
+            )}
+          >
+            <div className="w-20 flex justify-end">
+              {homeKick ? (
+                <span className={cn("font-semibold", homeKick.scored ? "text-success" : "text-danger")}>
+                  {homeKick.scored ? "✓" : "✗"}
+                </span>
+              ) : null}
+            </div>
+            <span className={cn("w-8 text-center text-xs font-bold", isCurrentPair ? "text-gold" : "text-subtle")}>
+              {kickNum}
+            </span>
+            <div className="w-20 text-left">
+              {awayKick ? (
+                <span className={cn("font-semibold", awayKick.scored ? "text-success" : "text-danger")}>
+                  {awayKick.scored ? "✓" : "✗"}
+                </span>
+              ) : null}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function FullTime({ summary, snapshot }: { summary: NonNullable<MatchSnapshot["summary"]>; snapshot: MatchSnapshot }) {
+  return (
+    <>
     <Card>
       <div className="pitch-bg p-6 text-center">
         <p className="text-2xl font-black uppercase tracking-widest text-white">Full-time</p>
@@ -928,6 +1133,8 @@ function FullTime({ summary }: { summary: NonNullable<MatchSnapshot["summary"]> 
         </ol>
       </div>
     </Card>
+    <PotmVote matchId={snapshot.matchId} snapshot={snapshot} />
+    </>
   );
 }
 

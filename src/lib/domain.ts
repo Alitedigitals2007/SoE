@@ -61,7 +61,12 @@ export interface TimelineItemView {
     | "NO_GOAL"
     | "SUBSTITUTION"
     | "CARD"
-    | "FULL_TIME";
+    | "FULL_TIME"
+    | "PENALTY_SAVED"
+    | "PENALTY_SCORED"
+    | "PENALTY_MISS"
+    | "PENALTY_SHOOTOUT_START"
+    | "PENALTY_SHOOTOUT_END";
   label: string;
   detail?: string | null;
   at: string; // ISO
@@ -116,6 +121,22 @@ export interface SubRequestView {
   createdAt: string;
 }
 
+export interface PenaltyKickView {
+  team: TeamSide;
+  scored: boolean;
+  sequence: number;
+}
+
+export interface PenaltyShootoutView {
+  status: "IN_PROGRESS" | "COMPLETE";
+  teamAScore: number;
+  teamBScore: number;
+  winner: TeamSide | null;
+  kicks: PenaltyKickView[];
+  currentKickTeam: TeamSide | null;
+  nextSequence: number;
+}
+
 export interface MatchSummary {
   finalHome: string;
   finalAway: string;
@@ -163,6 +184,13 @@ export interface MatchSnapshot {
   /** visible to referee/admin; empty for others */
   pendingRequests: SubRequestView[];
   summary: MatchSummary | null;
+  potm: {
+    votedFor: string | null;
+    results: { playerId: string; playerName: string; votes: number }[];
+  };
+  competitionType: "LEAGUE" | "CUP" | null;
+  cupRound: number | null;
+  penaltyShootout: PenaltyShootoutView | null;
 }
 
 /** Result shape for server actions — never throw across the boundary. */

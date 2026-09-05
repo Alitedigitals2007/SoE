@@ -1,21 +1,39 @@
 import Link from "next/link";
+import { Suspense } from "react";
 import { requireRole } from "@/lib/authz";
 import { prisma } from "@/lib/prisma";
 import { TopBar } from "@/components/app";
 import { Badge, Card, CardHeader } from "@/components/ui";
 import { StatusBadge } from "../page";
+import { UrlPagination } from "@/components/UrlPagination";
 
 export const dynamic = "force-dynamic";
 
-export default async function AdminMatchesPage() {
+const PAGE_SIZE = 12;
+
+export default async function AdminMatchesPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ page?: string }>;
+}) {
   const user = await requireRole(["ADMIN"]);
-  const matches = await prisma.match.findMany({
-    orderBy: { createdAt: "desc" },
-    include: {
-      referee: { select: { name: true } },
-      _count: { select: { roster: true } },
-    },
-  });
+  const sp = await searchParams;
+  const page = Math.max(1, Number(sp.page) || 1);
+
+  const [matches, total] = await Promise.all([
+    prisma.match.findMany({
+      orderBy: { createdAt: "desc" },
+      skip: (page - 1) * PAGE_SIZE,
+      take: PAGE_SIZE,
+      include: {
+        referee: { select: { name: true } },
+        _count: { select: { roster: true } },
+      },
+    }),
+    prisma.match.count(),
+  ]);
+
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   return (
     <>
@@ -32,7 +50,7 @@ export default async function AdminMatchesPage() {
         </div>
 
         <Card className="mt-5">
-          <CardHeader title={`All matches (${matches.length})`} />
+          <CardHeader title={`All matches (${total})`} />
           {matches.length === 0 ? (
             <p className="p-6 text-sm text-muted">No matches yet.</p>
           ) : (
@@ -58,6 +76,9 @@ export default async function AdminMatchesPage() {
             </ul>
           )}
         </Card>
+        <Suspense>
+          <UrlPagination page={page} totalPages={totalPages} basePath="/admin/matches" />
+        </Suspense>
       </main>
     </>
   );

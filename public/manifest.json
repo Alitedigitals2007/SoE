@@ -1,0 +1,19 @@
+{
+  "name": "Stadium of Elite",
+  "short_name": "SoE",
+  "description": "Live Quiz Football Match System",
+  "start_url": "/",
+  "display": "standalone",
+  "theme_color": "#087a55",
+  "background_color": "#f4f1e9",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ],
+  "categories": ["sports", "games", "entertainment"]
+}

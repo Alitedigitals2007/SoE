@@ -4,6 +4,8 @@ import { prisma } from "@/lib/prisma";
 import { teamStats } from "@/lib/platform/engine";
 import { PublicShell } from "@/components/site";
 import { Badge } from "@/components/ui";
+import { CsvDownloadButton } from "@/components/CsvDownloadButton";
+import { exportTeamCsvAction } from "@/app/actions/exports";
 
 export const dynamic = "force-dynamic";
 
@@ -34,9 +36,16 @@ export default async function TeamDetail({ params }: { params: Promise<{ slug: s
                 </p>
               </div>
             </div>
-            <Link href="/compare" className="inline-flex h-10 items-center rounded-lg bg-surface px-4 text-sm font-semibold text-fg hover:bg-line">
-              ⚖ Compare
-            </Link>
+            <div className="flex items-center gap-3">
+              <CsvDownloadButton
+                label="Export CSV"
+                filename={`${stats.slug}-stats.csv`}
+                onExport={() => exportTeamCsvAction(team.id)}
+              />
+              <Link href="/compare" className="inline-flex h-10 items-center rounded-lg bg-surface px-4 text-sm font-semibold text-fg hover:bg-line">
+                ⚖ Compare
+              </Link>
+            </div>
           </div>
 
           {/* Stat strips */}
