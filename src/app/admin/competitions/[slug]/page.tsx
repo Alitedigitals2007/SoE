@@ -64,6 +64,7 @@ export default async function AdminCompetitionDetail({ params }: { params: Promi
           <div className="space-y-4 lg:col-span-1">
             <CompetitionActions
               competitionId={comp.id}
+              status={comp.status}
               type={comp.type}
               hasFixtures={comp.matches.length > 0}
               availableTeams={availableTeams}

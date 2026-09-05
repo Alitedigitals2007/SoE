@@ -48,7 +48,7 @@ export default async function FantasyCompetition({ params }: { params: Promise<{
         <div className="flex flex-wrap items-center gap-2">
           <h1 className="text-3xl font-black tracking-tight text-fg">{comp.name} · Fantasy</h1>
           <Badge tone="gold">Season {comp.season}</Badge>
-          {comp.status === "FINISHED" ? <Badge tone="neutral">Finished</Badge> : <Badge tone="success">Open</Badge>}
+          {comp.status === "FINISHED" ? <Badge tone="neutral">Closed</Badge> : <Badge tone="success">Live</Badge>}
         </div>
         <p className="mt-1 text-muted">Pick up to {MAX_FANTASY_PICKS} players from the competition. Each goal they score = 10 fantasy points.</p>
 

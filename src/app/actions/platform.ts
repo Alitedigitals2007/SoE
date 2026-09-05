@@ -18,6 +18,7 @@ import {
   PlatformError,
   playerStats,
   removeTeamMember,
+  setCompetitionStatus,
   setFantasyPicks,
   setTeamCaptain,
   setTeamImage,
@@ -61,6 +62,13 @@ export async function setTeamImageAction(input: { teamId: string; imageUrl: stri
 
 export async function setTeamCaptainAction(input: { teamId: string; userId: string | null }) {
   return runEngine((a) => setTeamCaptain(a, input));
+}
+
+export async function setCompetitionStatusAction(input: {
+  competitionId: string;
+  status: "ACTIVE" | "FINISHED";
+}) {
+  return runEngine((a) => setCompetitionStatus(a, input));
 }
 
 /* ------------------------------- competitions ------------------------------ */

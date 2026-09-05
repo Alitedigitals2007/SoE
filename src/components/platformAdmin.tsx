@@ -12,6 +12,7 @@ import {
   generateGroupFixturesAction,
   generateLeagueFixturesAction,
   removeTeamMemberAction,
+  setCompetitionStatusAction,
   setTeamCaptainAction,
   setTeamImageAction,
 } from "@/app/actions/platform";
@@ -319,6 +320,7 @@ function TypeOption({ active, label, hint, onClick }: { active: boolean; label: 
 
 export function CompetitionActions({
   competitionId,
+  status,
   type,
   hasFixtures,
   availableTeams,
@@ -326,6 +328,7 @@ export function CompetitionActions({
   finishedLatestRound,
 }: {
   competitionId: string;
+  status: "DRAFT" | "ACTIVE" | "FINISHED";
   type: "LEAGUE" | "CUP" | "LEAGUE_CUP" | "CUSTOM";
   hasFixtures: boolean;
   availableTeams: TeamOption[];
@@ -341,6 +344,35 @@ export function CompetitionActions({
       <CardHeader title="Competition control" description="Admin actions for this competition." />
       <div className="space-y-4 p-4">
         {notice ? <NoticeLine notice={notice} /> : null}
+
+        {status !== "FINISHED" ? (
+          <Button
+            variant="danger"
+            className="w-full"
+            onClick={() => {
+              if (confirm("Close this competition? It stays public but shows as Closed."))
+                void setCompetitionStatusAction({ competitionId, status: "FINISHED" }).then((r) => {
+                  flash(r, "Competition closed.");
+                  router.refresh();
+                });
+            }}
+          >
+            Close competition
+          </Button>
+        ) : (
+          <Button
+            variant="secondary"
+            className="w-full"
+            onClick={() =>
+              void setCompetitionStatusAction({ competitionId, status: "ACTIVE" }).then((r) => {
+                flash(r, "Competition reopened.");
+                router.refresh();
+              })
+            }
+          >
+            Reopen competition
+          </Button>
+        )}
 
         {!hasFixtures ? (
           <>

@@ -47,7 +47,7 @@ export default async function CompetitionDetail({ params }: { params: Promise<{ 
           <h1 className="text-3xl font-black tracking-tight text-fg">{comp.name}</h1>
           <Badge tone={cup ? "info" : "pitch"}>{cup ? "Knockout cup" : "League"}</Badge>
           <Badge tone={comp.status === "FINISHED" ? "neutral" : comp.status === "ACTIVE" ? "success" : "warning"}>
-            {comp.status === "FINISHED" ? "Finished" : comp.status === "ACTIVE" ? "Active" : "Setup"}
+            {comp.status === "FINISHED" ? "Closed" : comp.status === "ACTIVE" ? "Live" : "Setup"}
           </Badge>
         </div>
         <p className="mt-1 text-sm text-muted">Season {comp.season} · {comp.teams.length} teams</p>

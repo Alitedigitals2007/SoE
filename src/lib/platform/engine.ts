@@ -114,6 +114,16 @@ export async function setTeamCaptain(actor: Actor, input: { teamId: string; user
 
 export type CompetitionType = "LEAGUE" | "CUP" | "LEAGUE_CUP" | "CUSTOM";
 
+export async function setCompetitionStatus(
+  actor: Actor,
+  input: { competitionId: string; status: "ACTIVE" | "FINISHED" },
+) {
+  const blocked = await requireAdmin(actor);
+  if (blocked) return blocked;
+  await prisma.competition.update({ where: { id: input.competitionId }, data: { status: input.status } });
+  return ok(undefined);
+}
+
 export async function createCompetition(
   actor: Actor,
   input: {

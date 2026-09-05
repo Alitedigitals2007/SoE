@@ -31,8 +31,8 @@ describe("homePath", () => {
     expect(homePath("PLAYER")).toBe("/player");
   });
 
-  it("returns /fantasy for USER", () => {
-    expect(homePath("USER")).toBe("/fantasy");
+  it("returns /dashboard for USER", () => {
+    expect(homePath("USER")).toBe("/dashboard");
   });
 });
 
