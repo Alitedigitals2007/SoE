@@ -41,7 +41,7 @@ const ALIASES: Record<string, string> = {
 
 function canonicalHeader(header: string): string {
   const normalized = normalizeHeader(header);
-  return ALIASES[normalized] ?? header.trim();
+  return ALIASES[normalized] ?? normalized;
 }
 
 /** Small RFC-4180-compatible parser. It handles quoted commas, quotes and newlines. */

@@ -379,7 +379,7 @@ export async function submitAnswer(
   if (!mySlot) return err("You are not part of this match.");
   if (actor.role !== "PLAYER") return err("Only players can submit answers.");
   if (mySlot.role !== "STARTER") return err("Only players on the field can answer.");
-  if (match.rounds.some((r) => r.submissions.some((s) => s.playerId === mySlot.id)))
+  if (round.submissions.some((s) => s.playerId === mySlot.id))
     return err("You have already answered this question.");
 
   const now = new Date();

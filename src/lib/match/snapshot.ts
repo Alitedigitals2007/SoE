@@ -258,6 +258,7 @@ function buildSummary(
     r.goalSubmission
       ? [
           {
+            id: r.goalSubmission.player.user.id,
             name: r.goalSubmission.player.user.name,
             team: r.goalSubmission.player.team as TeamSide,
             goals: 1,
@@ -266,9 +267,9 @@ function buildSummary(
       : [],
   );
 
-  const scorerMap = new Map<string, { name: string; team: TeamSide; goals: number }>();
+  const scorerMap = new Map<string, { id: string; name: string; team: TeamSide; goals: number }>();
   for (const g of goalSubs) {
-    const key = g.name;
+    const key = g.id;
     const existing = scorerMap.get(key);
     if (existing) existing.goals += 1;
     else scorerMap.set(key, { ...g });

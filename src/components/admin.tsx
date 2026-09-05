@@ -58,7 +58,7 @@ export function UsersManager({ users }: { users: UserRow[] }) {
             <Input id="uemail" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="player@example.com" />
           </Field>
           <Field label="Password" htmlFor="upw">
-            <Input id="upw" type="text" required minLength={8} value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Min 8 characters" />
+            <Input id="upw" type="password" required minLength={8} value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Min 8 characters" />
           </Field>
           <Field label="Role" htmlFor="urole">
             <Select id="urole" value={role} onChange={(e) => setRole(e.target.value as Role)}>
@@ -130,7 +130,7 @@ function UserRowItem({ user, flash }: { user: UserRow; flash: (r: { ok: boolean;
             });
           }}
         >
-          <Input aria-label="New password" type="text" placeholder="New password" className="h-8 max-w-36 py-1 text-xs" value={password} onChange={(e) => setPassword(e.target.value)} />
+          <Input aria-label="New password" type="password" placeholder="New password" className="h-8 max-w-36 py-1 text-xs" value={password} onChange={(e) => setPassword(e.target.value)} />
           <Button size="sm" type="submit" variant="secondary" disabled={password.length < 8}>
             Set
           </Button>

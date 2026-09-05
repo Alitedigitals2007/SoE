@@ -17,7 +17,7 @@ export default async function Home() {
       take: 6,
     }),
     prisma.match.findMany({
-      where: { status: { not: "FINISHED" } },
+      where: { status: "DRAFT" },
       orderBy: { createdAt: "asc" },
       take: 8,
     }),

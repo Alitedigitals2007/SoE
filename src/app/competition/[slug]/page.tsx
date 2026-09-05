@@ -191,9 +191,9 @@ function MatchRow({
       </div>
       <div className="flex shrink-0 items-center gap-2">
         <Badge tone={finished ? "neutral" : live ? "success" : "warning"}>{finished ? "FT" : live ? "Live" : "Scheduled"}</Badge>
-        <a href={`/match/${code}`} className="rounded-lg bg-surface px-3 py-1.5 text-xs font-semibold text-fg hover:bg-line">
+        <Link href={`/match/${code}`} className="rounded-lg bg-surface px-3 py-1.5 text-xs font-semibold text-fg hover:bg-line">
           Open
-        </a>
+        </Link>
       </div>
     </div>
   );

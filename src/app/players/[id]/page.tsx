@@ -88,18 +88,6 @@ export default async function PlayerDetail({ params }: { params: Promise<{ id: s
   );
 }
 
-function StatCell({ label, value, accent, icon }: { label: string; value: number | string; accent?: string; icon?: string }) {
-  return (
-    <div>
-      <p className={`text-2xl font-black tabular-nums ${accent ?? "text-fg"}`}>
-        {icon ? `${icon} ` : ""}
-        {value}
-      </p>
-      <p className="text-[10px] font-bold uppercase tracking-wider text-subtle">{label}</p>
-    </div>
-  );
-}
-
 function ResultPill({ r }: { r: "W" | "D" | "L" }) {
   const cls = r === "W" ? "text-success" : r === "L" ? "text-danger" : "text-muted";
   return <span className={`rounded-md bg-surface px-1.5 py-0.5 text-xs font-black ${cls}`}>{r}</span>;
