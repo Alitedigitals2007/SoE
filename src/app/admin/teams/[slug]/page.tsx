@@ -10,6 +10,7 @@ import {
   type AvailablePlayer,
   type TeamMemberRow,
 } from "@/components/platformAdmin";
+import { TeamImport } from "@/components/TeamImport";
 
 export const dynamic = "force-dynamic";
 
@@ -58,6 +59,8 @@ export default async function AdminTeamDetail({ params }: { params: Promise<{ sl
           <TeamCrestEditor teamId={team.id} imageUrl={team.imageUrl} />
           <TeamMembers teamId={team.id} members={memberRows} available={available} />
         </div>
+
+        <TeamImport teamId={team.id} />
       </main>
     </>
   );
