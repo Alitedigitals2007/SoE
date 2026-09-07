@@ -27,8 +27,9 @@ export default async function CompetitionDetail({ params }: { params: Promise<{ 
   });
   if (!comp) notFound();
 
+  const showTable = comp.type === "LEAGUE";
   const cup = comp.type === "CUP";
-  const rows = cup ? null : await leagueStandings(comp.id);
+  const rows = showTable ? await leagueStandings(comp.id) : null;
 
   const groupByRound = new Map<number, typeof comp.matches>();
   if (cup) {
@@ -45,7 +46,9 @@ export default async function CompetitionDetail({ params }: { params: Promise<{ 
       <div className="mx-auto max-w-6xl px-4 py-10">
         <div className="flex flex-wrap items-center gap-2">
           <h1 className="text-3xl font-black tracking-tight text-fg">{comp.name}</h1>
-          <Badge tone={cup ? "info" : "pitch"}>{cup ? "Knockout cup" : "League"}</Badge>
+          <Badge tone={comp.type === "LEAGUE_CUP" ? "info" : cup ? "info" : "pitch"}>
+            {comp.type === "LEAGUE_CUP" ? "League + Cup" : comp.type === "CUSTOM" ? "Custom" : cup ? "Knockout cup" : "League"}
+          </Badge>
           <Badge tone={comp.status === "FINISHED" ? "neutral" : comp.status === "ACTIVE" ? "success" : "warning"}>
             {comp.status === "FINISHED" ? "Closed" : comp.status === "ACTIVE" ? "Live" : "Setup"}
           </Badge>
@@ -58,7 +61,7 @@ export default async function CompetitionDetail({ params }: { params: Promise<{ 
               ⭐ Pick your fantasy XI
             </Link>
           ) : null}
-          {!cup && (
+          {showTable && (
             <CsvDownloadButton
               label="Export Standings"
               filename={`${comp.slug}-standings.csv`}
@@ -72,9 +75,8 @@ export default async function CompetitionDetail({ params }: { params: Promise<{ 
 
         {cup ? (
           <CupSection comp={comp} rounds={rounds} />
-        ) : (
-          rows && (
-            <div className="mt-8 overflow-hidden rounded-2xl border border-line bg-white shadow-sm">
+        ) : showTable && rows ? (
+          <div className="mt-8 overflow-hidden rounded-2xl border border-line bg-white shadow-sm">
               <div className="px-5 py-4">
                 <h2 className="text-lg font-bold text-fg">Standings</h2>
               </div>
@@ -94,7 +96,7 @@ export default async function CompetitionDetail({ params }: { params: Promise<{ 
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-line/70">
-                  {rows.length === 0 ? (
+                  {rows.every((r) => r.p === 0) ? (
                     <tr>
                       <td colSpan={10} className="px-4 py-10 text-center text-muted">
                         No finished matches yet — results fill the table as matches end.
@@ -123,7 +125,14 @@ export default async function CompetitionDetail({ params }: { params: Promise<{ 
                 </tbody>
               </table>
             </div>
-          )
+        ) : (
+          <div className="mt-8 rounded-2xl border-2 border-dashed border-fg/15 bg-bg-elevated p-8 text-center">
+            <p className="text-sm text-muted">
+              {comp.type === "LEAGUE_CUP"
+                ? "Group fixtures are shown below — per-group tables and the knockout bracket appear as matches are played."
+                : "This competition uses a custom schedule — the fixtures below are the match list."}
+            </p>
+          </div>
         )}
 
         {/* Fixtures */}
@@ -221,7 +230,7 @@ function CupSection({
       <h2 className="text-lg font-bold text-fg">Bracket</h2>
       <div className="mt-4 grid gap-6 md:grid-cols-3 lg:grid-cols-4">
         {rounds.map(([round, matches], idx) => {
-          const isFinal = idx === finalIdx;
+          const isFinal = matches.length === 1 && idx === finalIdx;
           return (
             <div key={round} className="min-w-0">
               <p className="mb-2 text-xs font-black uppercase tracking-widest text-brand">

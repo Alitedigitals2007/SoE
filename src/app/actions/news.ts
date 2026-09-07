@@ -1,6 +1,5 @@
 "use server";
 
-import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { currentActor } from "@/lib/session";
 import type { ActionResult } from "@/lib/domain";
@@ -36,26 +35,17 @@ export async function createNewsAction(input: NewsInput): Promise<ActionResult<{
   if (imageUrl && !/^https?:\/\/.+\..+/.test(imageUrl)) return { ok: false, error: "Enter a full image URL (https://…)." };
 
   try {
+    const base = slugify(title);
+    let slug = base;
+    let i = 1;
+    while (await prisma.newsPost.findUnique({ where: { slug }, select: { id: true } })) {
+      slug = `${base}-${Date.now().toString(36)}-${i++}`;
+    }
     const post = await prisma.newsPost.create({
-      data: { title, excerpt, body, imageUrl, slug: slugify(title), authorId: (await currentActor())!.userId },
+      data: { title, excerpt, body, imageUrl, slug, authorId: (await currentActor())!.userId },
     });
     return { ok: true, data: { id: post.id } };
   } catch (e) {
-    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
-      const existing = await prisma.newsPost.findUnique({ where: { slug: slugify(title) } });
-      const post = await prisma.newsPost.create({
-        data: {
-          title,
-          excerpt,
-          body,
-          imageUrl,
-          slug: `${slugify(title)}-${Date.now().toString(36)}`,
-          authorId: (await currentActor())!.userId,
-        },
-      });
-      void existing;
-      return { ok: true, data: { id: post.id } };
-    }
     console.error("createNewsAction failed", e);
     return { ok: false, error: "Could not publish the post." };
   }

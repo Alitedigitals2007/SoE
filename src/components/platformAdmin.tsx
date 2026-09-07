@@ -476,7 +476,7 @@ export function FixtureRefereeRow({
             value={value}
             onChange={(e) => setValue(e.target.value)}
             onBlur={() => {
-              if (value !== (match.refereeId ?? "")) void assignRefereeAction({ matchId: match.id, refereeId: value }).then((r) => flash(r, "Referee assigned."));
+              if (value !== (match.refereeId ?? "")) void assignRefereeAction({ matchId: match.id, refereeId: value || null }).then((r) => flash(r, "Referee updated."));
             }}
           >
             <option value="">Unassigned</option>

@@ -28,6 +28,7 @@ async function loadMatchFor(code: string, tx: PrismaClient | Tx = prisma) {
     where: { code: code.trim().toUpperCase() },
     include: {
       referee: { select: { id: true, name: true } },
+      competition: { select: { type: true } },
       roster: { include: { user: { select: { id: true, name: true } } }, orderBy: [{ team: "asc" }, { number: "asc" }] },
       rounds: { include: { question: { select: { id: true, text: true, referenceAnswer: true } }, submissions: { include: { player: { include: { user: { select: { id: true, name: true } } } } } } } },
       timeline: true,
@@ -290,9 +291,27 @@ export async function setLineup(
         },
       });
     }
+    // Keep the club captain in sync when this match is tied to a team.
+    await syncClubCaptain(tx, match, input.team, input.captainUserId);
   });
   await publishMatchUpdate(match.code);
   return ok(undefined);
+}
+
+/**
+ * Mirrors a match-side captaincy to the club's public captain
+ * (TeamPlayer.isCaptain) when the side is backed by a real team.
+ */
+async function syncClubCaptain(
+  tx: Tx,
+  match: { homeTeamId: string | null; awayTeamId: string | null },
+  side: TeamSide,
+  userId: string,
+) {
+  const teamId = side === "HOME" ? match.homeTeamId : match.awayTeamId;
+  if (!teamId) return;
+  await tx.teamPlayer.updateMany({ where: { teamId }, data: { isCaptain: false } });
+  await tx.teamPlayer.updateMany({ where: { teamId, userId }, data: { isCaptain: true } });
 }
 
 /* -------------------------------- kick-off --------------------------------- */
@@ -551,6 +570,33 @@ export async function requestSubstitution(
   return ok(undefined);
 }
 
+export async function transferCaptaincy(
+  actor: Actor,
+  input: { code: string; toUserId: string },
+): Promise<ActionResult> {
+  const match = await assertReferee(actor, input.code);
+  if (match.status !== "LIVE") return err("Captaincy can only be passed during a live match.");
+  const target = match.roster.find((r) => r.userId === input.toUserId);
+  if (!target) return err("That player is not on this match's roster.");
+  if (target.role !== "STARTER") return err("Only an active starter can take the captain's armband.");
+
+  const mySlot = match.roster.find((r) => r.userId === actor.userId);
+  const isCurrentCaptain = !!mySlot?.isCaptain && mySlot.team === target.team;
+  const isMatchOfficial = actor.role === "ADMIN" || actor.role === "REFEREE";
+  if (!isCurrentCaptain && !isMatchOfficial)
+    return err("Only a team's captain or the referee can transfer captaincy.");
+  if (target.isCaptain) return err("That player is already the captain.");
+
+  await prisma.$transaction(async (tx) => {
+    await tx.matchPlayer.updateMany({ where: { matchId: match.id, team: target.team }, data: { isCaptain: false } });
+    await tx.matchPlayer.update({ where: { id: target.id }, data: { isCaptain: true } });
+    await syncClubCaptain(tx, match, target.team, target.userId);
+    await bumpVersion(tx, match.id);
+  });
+  await publishMatchUpdate(match.code);
+  return ok(undefined);
+}
+
 export async function decideSubstitution(
   actor: Actor,
   input: { code: string; requestId: string; approve: boolean },
@@ -664,10 +710,11 @@ export async function endMatch(actor: Actor, input: { code: string }): Promise<A
 
 export async function startPenalties(actor: Actor, input: { code: string }): Promise<ActionResult> {
   const match = await assertReferee(actor, input.code);
-  if (match.status !== "LIVE") return err("The match must be live to start penalties.");
+  if (match.status !== "LIVE" && match.status !== "FINISHED")
+    return err("Start the match first — penalties come after the ten questions.");
   if (match.currentRound < 10) return err("All ten questions must be played before penalties.");
   if (match.homeScore !== match.awayScore) return err("Penalties are only available when the score is level.");
-  if (!match.competitionId) return err("Penalties are only available in cup matches.");
+  if (match.competition?.type !== "CUP") return err("Penalties are only available in knockout cup matches.");
   if (match.penaltyShootout) return err("A penalty shootout is already in progress.");
 
   await prisma.$transaction(async (tx) => {
@@ -691,51 +738,30 @@ export async function takePenaltyKick(
   input: { code: string; scored: boolean },
 ): Promise<ActionResult> {
   const match = await assertReferee(actor, input.code);
-  if (match.status !== "LIVE") return err("The match is not live.");
+  if (match.status !== "LIVE" && match.status !== "FINISHED")
+    return err("Penalties can only be taken after the questions have been decided.");
   const ps = match.penaltyShootout;
   if (!ps) return err("No penalty shootout in progress.");
   if (ps.status === "COMPLETE") return err("The penalty shootout is already complete.");
 
   const kicks = ps.kicks;
-  const totalKicks = kicks.length;
-  const isSuddenDeath = totalKicks > 10;
+  const total = kicks.length + 1; // sequence of THIS kick (1-based)
+  const teamSide: "HOME" | "AWAY" = total % 2 === 1 ? "HOME" : "AWAY"; // HOME kicks first, then strictly alternate
 
-  let expectedTeam: "HOME" | "AWAY";
-  if (isSuddenDeath) {
-    expectedTeam = totalKicks % 2 === 0 ? "HOME" : "AWAY";
-  } else {
-    expectedTeam = totalKicks < 5 ? "HOME" : totalKicks < 10 ? "AWAY" : totalKicks % 2 === 0 ? "HOME" : "AWAY";
-  }
+  // Prospective scores including this kick.
+  const aScore = ps.teamAScore + (teamSide === "HOME" && input.scored ? 1 : 0);
+  const bScore = ps.teamBScore + (teamSide === "AWAY" && input.scored ? 1 : 0);
 
-  const nextSequence = totalKicks + 1;
+  // Kicks taken by each team after this one (HOME kicks on odd sequences).
+  const aTaken = Math.ceil(total / 2);
+  const bTaken = Math.floor(total / 2);
 
-  // Check if the shootout can be decided early
   let winner: "HOME" | "AWAY" | null = null;
-  let newStatus = "IN_PROGRESS";
+  if (aScore > bScore + (5 - bTaken)) winner = "HOME"; // away cannot catch up in regulation
+  else if (bScore > aScore + (5 - aTaken)) winner = "AWAY"; // home cannot catch up in regulation
+  else if (total >= 10 && aScore !== bScore) winner = aScore > bScore ? "HOME" : "AWAY";
 
-  // Before sudden death: after 5 kicks each, check if one team has an insurmountable lead
-  if (!isSuddenDeath && totalKicks === 10) {
-    const aScore = ps.teamAScore;
-    const bScore = ps.teamBScore;
-    if (aScore > bScore) winner = "HOME";
-    else if (bScore > aScore) winner = "AWAY";
-    else {
-      // Enter sudden death
-    }
-  }
-
-  // During sudden death: after each pair, check if one team has more
-  if (isSuddenDeath && totalKicks % 2 === 1) {
-    // Odd number = just completed a pair (A then B)
-    const aScore = ps.teamAScore + (expectedTeam === "HOME" && input.scored ? 1 : 0);
-    const bScore = ps.teamBScore + (expectedTeam === "AWAY" && input.scored ? 1 : 0);
-    if (aScore > bScore) winner = "HOME";
-    else if (bScore > aScore) winner = "AWAY";
-  }
-
-  if (winner) newStatus = "COMPLETE";
-
-  const teamSide = expectedTeam;
+  const newStatus = winner ? "COMPLETE" : "IN_PROGRESS";
 
   await prisma.$transaction(async (tx) => {
     await tx.penaltyKick.create({
@@ -743,7 +769,7 @@ export async function takePenaltyKick(
         shootoutId: ps.id,
         team: teamSide,
         score: input.scored,
-        sequence: nextSequence,
+        sequence: total,
       },
     });
 

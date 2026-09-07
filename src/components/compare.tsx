@@ -91,12 +91,58 @@ export function CompareApp({ players, teams }: { players: Opt[]; teams: Opt[] })
 
       {stats ? (
         <Card>
-          <div className="grid md:grid-cols-2">
-            <CompareCol stats={stats.a} highlight />
-            <CompareCol stats={stats.b} />
-          </div>
+          <CompareTable a={stats.a} b={stats.b} />
         </Card>
       ) : null}
+    </div>
+  );
+}
+
+function numberFrom(v: string): number | null {
+  const m = v.replace(/%/g, "").match(/-?\d+(\.\d+)?/);
+  return m ? Number(m[0]) : null;
+}
+
+function CompareTable({ a, b }: { a: Stats; b: Stats }) {
+  return (
+    <div className="overflow-x-auto">
+      <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3 px-5 pt-5">
+        <p className="truncate text-right text-base font-extrabold text-fg">{a.name}</p>
+        <p className="w-20 text-center text-[10px] font-black uppercase tracking-widest text-subtle">Stat</p>
+        <p className="truncate text-base font-extrabold text-fg">{b.name}</p>
+      </div>
+      <div className="mt-2 divide-y divide-line/60 border-t-2 border-fg/10">
+        {a.fields.map((fa, i) => {
+          const fb = b.fields[i];
+          if (!fb) return null;
+          const na = numberFrom(fa.value);
+          const nb = numberFrom(fb.value);
+          const aWin = na !== null && nb !== null && na > nb;
+          const bWin = na !== null && nb !== null && nb > na;
+          const aNeutralAccent = fa.accent === "brand" ? "text-brand" : "";
+          const bNeutralAccent = fb.accent === "brand" ? "text-brand" : "";
+          return (
+            <div key={fa.label} className="grid grid-cols-[1fr_auto_1fr] items-center gap-3 px-5 py-2.5">
+              <p className={`truncate text-right font-black tabular-nums ${aWin ? "text-success" : bWin ? "text-subtle opacity-60" : aNeutralAccent || "text-fg"}`}>
+                {fa.value}
+              </p>
+              <p className="w-20 text-center text-[10px] font-bold uppercase tracking-wider text-muted">{fa.label}</p>
+              <p className={`truncate font-black tabular-nums ${bWin ? "text-success" : aWin ? "text-subtle opacity-60" : bNeutralAccent || "text-fg"}`}>
+                {fb.value}
+              </p>
+            </div>
+          );
+        })}
+      </div>
+      <div className="flex items-center justify-between gap-3 border-t border-line px-5 py-4">
+        <a href={a.link} className="text-sm font-semibold text-brand underline-offset-2 hover:underline">
+          {a.kind === "players" ? "Player" : "Team"} profile →
+        </a>
+        <span className="text-xs text-subtle">Lower values show dimmed when the other side leads.</span>
+        <a href={b.link} className="text-sm font-semibold text-brand underline-offset-2 hover:underline">
+          {b.kind === "players" ? "Player" : "Team"} profile →
+        </a>
+      </div>
     </div>
   );
 }
@@ -113,27 +159,6 @@ function ModeBtn({ active, onClick, label }: { active: boolean; onClick: () => v
     >
       {label}
     </button>
-  );
-}
-
-function CompareCol({ stats, highlight }: { stats: Stats; highlight?: boolean }) {
-  return (
-    <div className={`p-6 ${highlight ? "md:border-r md:border-line" : ""}`}>
-      <p className="text-lg font-extrabold text-fg">{stats.name}</p>
-      <dl className="mt-4 space-y-2 text-sm">
-        {stats.fields.map((f) => (
-          <div key={f.label} className="flex items-center justify-between border-b border-line/60 pb-1.5">
-            <dt className="text-muted">{f.label}</dt>
-            <dd className={`font-black tabular-nums ${f.accent === "brand" ? "text-brand" : f.accent === "win" ? "text-success" : f.accent === "loss" ? "text-danger" : "text-fg"}`}>
-              {f.value}
-            </dd>
-          </div>
-        ))}
-      </dl>
-      <a href={stats.link} className="mt-4 inline-block text-sm font-semibold text-brand underline-offset-2 hover:underline">
-        View full profile →
-      </a>
-    </div>
   );
 }
 

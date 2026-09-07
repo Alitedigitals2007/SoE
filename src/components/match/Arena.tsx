@@ -13,6 +13,7 @@ import {
   startPenaltiesAction,
   submitAnswerAction,
   takePenaltyKickAction,
+  transferCaptaincyAction,
 } from "@/app/actions/match";
 import { useMatchState, type LiveMode } from "@/components/match/useMatchState";
 import { Badge, Button, Card, CardHeader, EmptyState, Select, Spinner, cn } from "@/components/ui";
@@ -664,6 +665,7 @@ function RefereeTools({ snapshot, onError }: { snapshot: MatchSnapshot; onError:
   const requests = snapshot.pendingRequests.filter((r) => r.status === "PENDING");
   return (
     <>
+      <CaptainHandoffCard snapshot={snapshot} onError={onError} />
       <SubRequestsCard snapshot={snapshot} requests={requests} onError={onError} />
       <ConductCard snapshot={snapshot} onError={onError} />
     </>
@@ -785,6 +787,78 @@ function ConductCard({ snapshot, onError }: { snapshot: MatchSnapshot; onError: 
   );
 }
 
+function CaptainHandoffCard({
+  snapshot,
+  onError,
+  ownSideOnly = false,
+}: {
+  snapshot: MatchSnapshot;
+  onError: (e: string | null) => void;
+  ownSideOnly?: boolean;
+}) {
+  const my = snapshot.viewer.player;
+  const isOfficial = snapshot.viewer.isReferee || snapshot.viewer.role === "ADMIN";
+  if (!ownSideOnly && !isOfficial) return null;
+  if (ownSideOnly && !my?.isCaptain) return null;
+
+  const [teamSel, setTeamSel] = React.useState<"HOME" | "AWAY">(my?.team ?? "HOME");
+  const [toId, setToId] = React.useState("");
+
+  const teamStarters = snapshot.roster.filter((r) => r.team === teamSel && r.role === "STARTER");
+  const captain = teamStarters.find((r) => r.isCaptain);
+  const targets = teamStarters.filter((r) => !r.isCaptain);
+  const openRound = snapshot.round?.status === "OPEN" || snapshot.round?.status === "LOCKED";
+
+  return (
+    <Card>
+      <CardHeader
+        title="Pass the captain's armband"
+        description={
+          captain
+            ? `${captain.name} is captain — choose an active player to take over.`
+            : "No captain is set for this side yet."
+        }
+      />
+      <div className="space-y-3 p-3">
+        {isOfficial ? (
+          <label className="flex flex-col gap-1 text-xs font-semibold uppercase tracking-wider text-muted">
+            Team
+            <Select
+              value={teamSel}
+              onChange={(e) => {
+                setTeamSel(e.target.value as "HOME" | "AWAY");
+                setToId("");
+              }}
+            >
+              <option value="HOME">{snapshot.homeName}</option>
+              <option value="AWAY">{snapshot.awayName}</option>
+            </Select>
+          </label>
+        ) : null}
+        <label className="flex flex-col gap-1 text-xs font-semibold uppercase tracking-wider text-muted">
+          New captain (active starters)
+          <Select value={toId} onChange={(e) => setToId(e.target.value)}>
+            <option value="">Choose a starter…</option>
+            {targets.map((p) => (
+              <option key={p.userId} value={p.userId}>
+                {p.name}
+              </option>
+            ))}
+          </Select>
+        </label>
+        <Button
+          variant="secondary"
+          disabled={!toId || targets.length === 0 || openRound}
+          title={openRound ? "Wait for the current question to finish." : "Pass the armband"}
+          onClick={() => void submit(transferCaptaincyAction({ code: snapshot.code, toUserId: toId }), onError)}
+        >
+          Transfer captaincy
+        </Button>
+      </div>
+    </Card>
+  );
+}
+
 function CaptainTools({ snapshot, onError }: { snapshot: MatchSnapshot; onError: (e: string | null) => void }) {
   const my = snapshot.viewer.player;
   const [outId, setOutId] = React.useState("");
@@ -798,7 +872,9 @@ function CaptainTools({ snapshot, onError }: { snapshot: MatchSnapshot; onError:
   const bench = teamRoster.filter((r) => r.role === "SUB");
 
   return (
-    <Card>
+    <>
+      <CaptainHandoffCard snapshot={snapshot} onError={onError} ownSideOnly />
+      <Card>
       <CardHeader title="Substitution request" description="Bring a bench player on for an active player — the referee approves." />
       <form
         className="space-y-3 p-3"
@@ -837,6 +913,7 @@ function CaptainTools({ snapshot, onError }: { snapshot: MatchSnapshot; onError:
         </Button>
       </form>
     </Card>
+    </>
   );
 }
 

@@ -103,7 +103,7 @@ export async function generateGroupFixturesAction(input: { competitionId: string
   return runEngine((a) => generateGroupFixtures(a, input));
 }
 
-export async function assignRefereeAction(input: { matchId: string; refereeId: string }) {
+export async function assignRefereeAction(input: { matchId: string; refereeId: string | null }) {
   return runEngine((a) => assignReferee(a, input));
 }
 

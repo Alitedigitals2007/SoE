@@ -183,6 +183,7 @@ function validateRoster(rows: ImportRow[], context: Context): ImportIssue[] {
     const email = lower(value(row, "playerEmail"));
     const number = parseInteger(value(row, "number"), 1, 8);
     const user = context.users.find((candidate) => lower(candidate.email) === email);
+    if (!/^\S+@\S+\.\S+$/.test(email)) issues.push(issue(row.row, "Enter a valid email address.", "playerEmail"));
     if (!team) issues.push(issue(row.row, "Team was not found.", "team"));
     if (user && user.role !== "PLAYER")
       issues.push(issue(row.row, "That email belongs to a non-player account. Convert it to PLAYER in Admin > Users, or use a different email.", "playerEmail"));
@@ -190,13 +191,15 @@ function validateRoster(rows: ImportRow[], context: Context): ImportIssue[] {
       issues.push({ row: row.row, field: "playerEmail", message: "No player account exists yet — it will be created automatically on import.", severity: "warning" });
     if (!number) issues.push(issue(row.row, "Squad number must be an integer from 1 to 8.", "number"));
     const resolvedUserId = user?.role === "PLAYER" ? user.id : null;
-    if (team && resolvedUserId && number) {
-      const userKey = `${team.id}:${resolvedUserId}`;
+    if (team && number) {
+      const emailKey = `${team.id}:${email}`;
+      if (seenUsers.has(emailKey)) issues.push(issue(row.row, "That email appears more than once for this team.", "playerEmail"));
+      seenUsers.add(emailKey);
       const numberKey = `${team.id}:${number}`;
-      if (seenUsers.has(userKey) || team.members.some((member) => member.userId === resolvedUserId)) issues.push(issue(row.row, "Player is already in this team or repeated in the file.", "playerEmail"));
       if (seenNumbers.has(numberKey) || team.members.some((member) => member.number === number)) issues.push(issue(row.row, "Squad number is already occupied in this team.", "number"));
-      seenUsers.add(userKey);
       seenNumbers.add(numberKey);
+      if (resolvedUserId && team.members.some((member) => member.userId === resolvedUserId))
+        issues.push(issue(row.row, "Player is already in this team.", "playerEmail"));
     }
   }
   return issues;

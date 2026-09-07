@@ -21,11 +21,11 @@ function useFlash() {
       setNotice({ kind: "err", text: r.error ?? "Something went wrong." });
     }
   }
-  return { notice, flash, router };
+  return { notice, flash, router, clearNotice: () => setNotice(null) };
 }
 
 export function NewsManager({ posts }: { posts: NewsRow[] }) {
-  const { notice, flash, router } = useFlash();
+  const { notice, flash, router, clearNotice } = useFlash();
   const [title, setTitle] = React.useState("");
   const [excerpt, setExcerpt] = React.useState("");
   const [body, setBody] = React.useState("");
@@ -42,6 +42,7 @@ export function NewsManager({ posts }: { posts: NewsRow[] }) {
             e.preventDefault();
             if (busy) return;
             setBusy(true);
+            clearNotice();
             void createNewsAction({ title, excerpt, body, imageUrl: imageUrl || null }).then((r) => {
               setBusy(false);
               if (r.ok) {

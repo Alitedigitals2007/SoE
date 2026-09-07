@@ -221,12 +221,10 @@ export function buildSnapshot(
       sequence: k.sequence,
     }));
     const totalKicks = kicks.length;
-    const isSuddenDeath = totalKicks > 10;
     let currentKickTeam: TeamSide | null = null;
     if (ps.status === "IN_PROGRESS") {
-      currentKickTeam = isSuddenDeath
-        ? totalKicks % 2 === 0 ? "HOME" : "AWAY"
-        : totalKicks < 5 ? "HOME" : totalKicks < 10 ? "AWAY" : totalKicks % 2 === 0 ? "HOME" : "AWAY";
+      // HOME kicks first, then strictly alternating on each subsequent kick.
+      currentKickTeam = totalKicks % 2 === 0 ? "HOME" : "AWAY";
     }
     penaltyShootout = {
       status: ps.status as "IN_PROGRESS" | "COMPLETE",

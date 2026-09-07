@@ -164,8 +164,8 @@ export function CompetitionWizard({ teams }: { teams: TeamOption[] }) {
     if (format === "LEAGUE_CUP") {
       if (settings.teamsPerGroup < 2) return false;
       if (settings.groupsCount < 1) return false;
-      if (settings.topAdvancing < 1) return false;
-      if (settings.groupsCount * settings.teamsPerGroup > settings.teamIds.length) return false;
+      if (settings.topAdvancing < 1 || settings.topAdvancing >= settings.teamsPerGroup) return false;
+      if (settings.groupsCount * settings.teamsPerGroup !== settings.teamIds.length) return false;
     }
     return true;
   }
@@ -399,12 +399,16 @@ export function CompetitionWizard({ teams }: { teams: TeamOption[] }) {
                     min={1}
                     max={settings.teamsPerGroup - 1}
                     value={settings.topAdvancing}
-                    onChange={(e) => update("topAdvancing", Math.max(1, Number(e.target.value)))}
+                    onChange={(e) => {
+                      const raw = Math.max(1, Number(e.target.value));
+                      const max = Math.max(1, settings.teamsPerGroup - 1);
+                      update("topAdvancing", Math.min(raw, max));
+                    }}
                   />
                 </Field>
-                {settings.groupsCount * settings.teamsPerGroup > teamCount && (
+                {settings.groupsCount * settings.teamsPerGroup !== teamCount && (
                   <p className="sm:col-span-3 text-xs text-danger">
-                    Not enough teams: need {settings.groupsCount * settings.teamsPerGroup} but only {teamCount} selected.
+                    Team count must match your groups exactly: need {settings.groupsCount * settings.teamsPerGroup} but {teamCount} selected.
                   </p>
                 )}
               </div>

@@ -66,6 +66,12 @@ export async function SiteHeader() {
               >
                 Dashboard
               </Link>
+              <Link
+                href="/account"
+                className="inline-flex h-10 items-center rounded-lg px-3 text-xs font-black uppercase tracking-wider text-muted transition-colors hover:bg-surface hover:text-fg"
+              >
+                Account
+              </Link>
               <form action={signOutAction}>
                 <button
                   type="submit"

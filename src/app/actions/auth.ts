@@ -2,6 +2,7 @@
 
 import { AuthError } from "next-auth";
 import { Prisma } from "@prisma/client";
+import bcrypt from "bcryptjs";
 import { signIn, signOut } from "@/auth";
 import { currentActor } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
@@ -68,4 +69,24 @@ export async function registerAction(input: {
 
 export async function whoAmI() {
   return currentActor();
+}
+
+export async function changePasswordAction(input: {
+  currentPassword: string;
+  newPassword: string;
+}): Promise<{ ok: true } | { ok: false; error: string }> {
+  const actor = await currentActor();
+  if (!actor) return { ok: false, error: "Sign in to continue." };
+  const user = await prisma.user.findUnique({ where: { id: actor.userId }, select: { passwordHash: true } });
+  if (!user) return { ok: false, error: "Account not found." };
+
+  const currentOk = await bcrypt.compare(input.currentPassword, user.passwordHash);
+  if (!currentOk) return { ok: false, error: "Your current password is incorrect." };
+
+  const next = input.newPassword;
+  if (next.length < 8) return { ok: false, error: "New password must be at least 8 characters." };
+  if (next === input.currentPassword) return { ok: false, error: "New password must be different from the current one." };
+
+  await prisma.user.update({ where: { id: actor.userId }, data: { passwordHash: await hashPassword(next) } });
+  return { ok: true };
 }

@@ -50,15 +50,17 @@ export async function getChatMessages(
   const rows = await prisma.chatMessage.findMany({
     where: { matchId },
     include: { user: { select: { name: true } } },
-    orderBy: { createdAt: "asc" },
+    orderBy: { createdAt: "desc" },
     take: limit,
   });
 
-  return rows.map((r) => ({
-    id: r.id,
-    userId: r.userId,
-    userName: r.user.name,
-    content: r.content,
-    createdAt: r.createdAt.toISOString(),
-  }));
+  return rows
+    .reverse()
+    .map((r) => ({
+      id: r.id,
+      userId: r.userId,
+      userName: r.user.name,
+      content: r.content,
+      createdAt: r.createdAt.toISOString(),
+    }));
 }

@@ -22,6 +22,7 @@ import {
   submitAnswer,
   syncMatchState,
   takePenaltyKick,
+  transferCaptaincy,
   updateQuestion,
 } from "@/lib/match/engine";
 import type { Actor } from "@/lib/match/engine";
@@ -165,6 +166,13 @@ export async function requestSubstitutionAction(input: {
   playerInUserId: string;
 }): Promise<ActionResult> {
   return runEngine((actor) => requestSubstitution(actor, input));
+}
+
+export async function transferCaptaincyAction(input: {
+  code: string;
+  toUserId: string;
+}): Promise<ActionResult> {
+  return runEngine((actor) => transferCaptaincy(actor, input));
 }
 
 export async function decideSubstitutionAction(input: {
