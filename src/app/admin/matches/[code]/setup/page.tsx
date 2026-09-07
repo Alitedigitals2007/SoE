@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { TopBar } from "@/components/app";
 import { Badge } from "@/components/ui";
 import { StatusBadge } from "../../../page";
-import { RosterManager, type AvailablePlayer, type RosterPlayer } from "@/components/admin";
+import { RosterManager, ScheduleEditor, type AvailablePlayer, type RosterPlayer } from "@/components/admin";
 import { LineupManager, QuestionsManager, type LineupPlayer, type QRow } from "@/components/referee";
 import type { TeamSide } from "@/lib/domain";
 
@@ -89,6 +89,11 @@ export default async function AdminMatchSetupPage({ params }: { params: Promise<
           </div>
           <div className="flex items-center gap-2">
             <StatusBadge status={match.status} />
+            {match.scheduledAt ? (
+              <Badge tone="warning">
+                ⏱ {new Date(match.scheduledAt.getTime() + 3600_000).toLocaleString("en-GB", { timeZone: "UTC", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })} WAT
+              </Badge>
+            ) : null}
             <Link
               href={`/admin/matches/${match.code}`}
               className="inline-flex h-10 items-center rounded-lg bg-surface px-4 text-sm font-medium text-fg hover:bg-bg-raised"
@@ -103,6 +108,12 @@ export default async function AdminMatchSetupPage({ params }: { params: Promise<
             </Link>
           </div>
         </div>
+
+        {match.status === "DRAFT" ? (
+          <div className="mt-4">
+            <ScheduleEditor code={match.code} scheduledAt={match.scheduledAt ? match.scheduledAt.toISOString() : null} />
+          </div>
+        ) : null}
 
         {/* Stepper summary */}
         <ol className="mt-6 flex flex-wrap items-center gap-x-6 gap-y-2 text-xs font-bold uppercase tracking-wider text-muted">

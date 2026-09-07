@@ -17,6 +17,7 @@ import {
   removeQuestion,
   requestSubstitution,
   setLineup,
+  setMatchSchedule,
   setQuestionSlot,
   startPenalties,
   submitAnswer,
@@ -49,12 +50,26 @@ async function runEngine<T>(
 /* ------------------------- admin: match + roster --------------------------- */
 
 export async function createMatchAction(input: {
-  homeName: string;
-  awayName: string;
+  homeName?: string;
+  awayName?: string;
+  homeTeamId?: string;
+  awayTeamId?: string;
   refereeId: string;
   countdownSeconds: number;
+  scheduledAt?: string | null;
 }): Promise<ActionResult<{ code: string }>> {
-  return runEngine((actor) => adminCreateMatch(actor, input));
+  return runEngine((actor) =>
+    adminCreateMatch(actor, { ...input, scheduledAt: input.scheduledAt ? new Date(input.scheduledAt) : null }),
+  );
+}
+
+export async function setMatchScheduleAction(input: {
+  code: string;
+  scheduledAt: string | null;
+}): Promise<ActionResult> {
+  return runEngine((actor) =>
+    setMatchSchedule(actor, { code: input.code, scheduledAt: input.scheduledAt ? new Date(input.scheduledAt) : null }),
+  );
 }
 
 export async function addPlayerAction(input: {

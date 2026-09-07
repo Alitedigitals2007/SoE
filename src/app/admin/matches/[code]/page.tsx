@@ -4,7 +4,7 @@ import { requireRole } from "@/lib/authz";
 import { prisma } from "@/lib/prisma";
 import { TopBar } from "@/components/app";
 import { Badge } from "@/components/ui";
-import { RosterManager, type AvailablePlayer, type RosterPlayer } from "@/components/admin";
+import { RosterManager, ScheduleEditor, type AvailablePlayer, type RosterPlayer } from "@/components/admin";
 import { StatusBadge } from "../../page";
 
 export const dynamic = "force-dynamic";
@@ -35,6 +35,7 @@ export default async function AdminMatchPage({ params }: { params: Promise<{ cod
     role: r.role,
   }));
   const available: AvailablePlayer[] = availableRows.map((a) => ({ ...a }));
+  const scheduledAt = match.scheduledAt ? match.scheduledAt.toISOString() : null;
 
   return (
     <>
@@ -64,6 +65,8 @@ export default async function AdminMatchPage({ params }: { params: Promise<{ cod
         <p className="mb-5 mt-1 text-sm text-muted">
           Use the full <Link href={`/admin/matches/${match.code}/setup`} className="font-semibold text-brand hover:underline">match setup page</Link> to assign the sixteen players, mark starters/subs, pick captains and add the ten questions in one place.
         </p>
+
+        {match.status === "DRAFT" ? <ScheduleEditor code={match.code} scheduledAt={scheduledAt} /> : null}
 
         <RosterManager
           code={match.code}

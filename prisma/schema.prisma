@@ -98,6 +98,7 @@ model Match {
   // which reference the prepared bank. A round can only be created while in DRAFT.
   currentRound Int       @default(0) // number of rounds decided so far (0..10)
   version      Int       @default(0) // bumped on every state change for realtime
+  scheduledAt  DateTime? // planned kick-off (Nigeria time is used when picking)
   startedAt    DateTime?
   finishedAt   DateTime?
 

@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { addPlayerAction, createMatchAction, removePlayerAction } from "@/app/actions/match";
+import { addPlayerAction, createMatchAction, removePlayerAction, setMatchScheduleAction } from "@/app/actions/match";
 import { createUserAction, updateUserAction } from "@/app/actions/admin";
 import { Badge, Button, Card, CardHeader, cn, Field, Input, Select } from "@/components/ui";
 import type { Role, TeamSide } from "@/lib/domain";
@@ -143,66 +143,212 @@ function UserRowItem({ user, flash }: { user: UserRow; flash: (r: { ok: boolean;
 /* ------------------------------ new match form ----------------------------- */
 
 export type RefereeOption = { id: string; name: string; email: string };
+export type TeamOptionRow = { id: string; name: string; _count: { members: number } };
 
-export function CreateMatchForm({ referees }: { referees: RefereeOption[] }) {
+/** Wall-clock time chosen in Nigeria (Africa/Lagos, UTC+1, no DST) → UTC ISO. */
+function nigeriaLocalToUtcIso(local: string): string | null {
+  if (!local) return null;
+  const m = local.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/);
+  if (!m) return null;
+  const [, y, mo, d, h, mi] = m;
+  const utc = new Date(Date.UTC(Number(y), Number(mo) - 1, Number(d), Number(h) - 1, Number(mi)));
+  if (Number.isNaN(utc.getTime())) return null;
+  return utc.toISOString();
+}
+
+export function CreateMatchForm({ referees, teams }: { referees: RefereeOption[]; teams: TeamOptionRow[] }) {
   const router = useRouter();
+  const [mode, setMode] = React.useState<"teams" | "custom">("teams");
+  const [homeTeamId, setHomeTeamId] = React.useState("");
+  const [awayTeamId, setAwayTeamId] = React.useState("");
   const [homeName, setHomeName] = React.useState("");
   const [awayName, setAwayName] = React.useState("");
   const [refereeId, setRefereeId] = React.useState("");
   const [countdownSeconds, setCountdownSeconds] = React.useState(15);
+  const [kickoff, setKickoff] = React.useState("");
   const [notice, setNotice] = React.useState<Notice>(null);
   const [busy, setBusy] = React.useState(false);
 
+  const teamsWithPlayers = teams.filter((t) => t._count.members > 0);
+
   return (
-    <Card className="max-w-xl">
-      <CardHeader title="New match" description="Set the two teams and assign the referee who runs it." />
+    <Card className="max-w-2xl">
+      <CardHeader
+        title="Set up a friendly"
+        description="Choose two clubs (players auto-load) or type custom team names, pick the referee and schedule kick-off in Nigerian time."
+      />
       <form
         className="space-y-4 p-5"
         onSubmit={(e) => {
           e.preventDefault();
           if (busy) return;
+          if (mode === "teams" && (!homeTeamId || !awayTeamId)) return;
           setBusy(true);
-          void createMatchAction({ homeName, awayName, refereeId, countdownSeconds }).then((r) => {
+          setNotice(null);
+          const scheduledAt = kickoff ? nigeriaLocalToUtcIso(kickoff) : null;
+          const payload =
+            mode === "teams"
+              ? { homeTeamId, awayTeamId, refereeId, countdownSeconds, scheduledAt }
+              : { homeName, awayName, refereeId, countdownSeconds, scheduledAt };
+          void createMatchAction(payload).then((r) => {
             if (r.ok) {
-              router.replace(`/admin/matches/${r.data.code}`);
+              router.replace(`/admin/matches/${r.data.code}/setup`);
             } else {
-              setNotice({ kind: "err", text: r.error });
+              setNotice({ kind: "err", text: r.error ?? "Could not create the match." });
               setBusy(false);
             }
           });
         }}
       >
-        <div className="grid gap-3 sm:grid-cols-2">
-          <Field label="Team A name" htmlFor="home">
-            <Input id="home" required value={homeName} onChange={(e) => setHomeName(e.target.value)} placeholder="e.g. Lagos United" />
+        <div className="flex flex-wrap gap-2">
+          <ModePill active={mode === "teams"} onClick={() => setMode("teams")} label="🏟️ From existing teams" />
+          <ModePill active={mode === "custom"} onClick={() => setMode("custom")} label="✏️ Custom team names" />
+        </div>
+
+        {mode === "teams" ? (
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field label="Home team" htmlFor="homeTeam">
+              <Select
+                id="homeTeam"
+                value={homeTeamId}
+                onChange={(e) => {
+                  setHomeTeamId(e.target.value);
+                  if (e.target.value === awayTeamId) setAwayTeamId("");
+                }}
+              >
+                <option value="">Choose home team…</option>
+                {teamsWithPlayers.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name} ({t._count.members} players)
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            <Field label="Away team" htmlFor="awayTeam">
+              <Select
+                id="awayTeam"
+                value={awayTeamId}
+                onChange={(e) => {
+                  setAwayTeamId(e.target.value);
+                  if (e.target.value === homeTeamId) setHomeTeamId("");
+                }}
+              >
+                <option value="">Choose away team…</option>
+                {teamsWithPlayers
+                  .filter((t) => t.id !== homeTeamId)
+                  .map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name} ({t._count.members} players)
+                    </option>
+                  ))}
+              </Select>
+            </Field>
+          </div>
+        ) : (
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field label="Team A name" htmlFor="home">
+              <Input id="home" required value={homeName} onChange={(e) => setHomeName(e.target.value)} placeholder="e.g. Lagos United" />
+            </Field>
+            <Field label="Team B name" htmlFor="away">
+              <Input id="away" required value={awayName} onChange={(e) => setAwayName(e.target.value)} placeholder="e.g. Abuja Stars" />
+            </Field>
+          </div>
+        )}
+
+        <div className="grid gap-3 sm:grid-cols-3">
+          <Field label="Referee" htmlFor="ref">
+            <Select id="ref" value={refereeId} onChange={(e) => setRefereeId(e.target.value)}>
+              <option value="">Choose referee…</option>
+              {referees.map((r) => (
+                <option key={r.id} value={r.id}>
+                  {r.name}
+                </option>
+              ))}
+            </Select>
           </Field>
-          <Field label="Team B name" htmlFor="away">
-            <Input id="away" required value={awayName} onChange={(e) => setAwayName(e.target.value)} placeholder="e.g. Abuja Stars" />
+          <Field label="Seconds per question" htmlFor="cd">
+            <Select id="cd" value={countdownSeconds} onChange={(e) => setCountdownSeconds(Number(e.target.value))}>
+              <option value={10}>10 seconds</option>
+              <option value={15}>15 seconds</option>
+              <option value={20}>20 seconds</option>
+              <option value={30}>30 seconds</option>
+            </Select>
+          </Field>
+          <Field label="Kick-off (Nigeria time)" htmlFor="kickoff" hint="Optional — leave blank to start whenever you're ready.">
+            <Input id="kickoff" type="datetime-local" value={kickoff} onChange={(e) => setKickoff(e.target.value)} />
           </Field>
         </div>
-        <Field label="Referee for this match" htmlFor="ref">
-          <Select id="ref" required value={refereeId} onChange={(e) => setRefereeId(e.target.value)}>
-            <option value="">Choose a referee…</option>
-            {referees.map((r) => (
-              <option key={r.id} value={r.id}>
-                {r.name} ({r.email})
-              </option>
-            ))}
-          </Select>
-        </Field>
-        <Field label="Countdown per question" htmlFor="cd">
-          <Select id="cd" value={countdownSeconds} onChange={(e) => setCountdownSeconds(Number(e.target.value))}>
-            <option value={10}>10 seconds</option>
-            <option value={15}>15 seconds</option>
-            <option value={20}>20 seconds</option>
-            <option value={30}>30 seconds</option>
-          </Select>
-        </Field>
+
         {notice ? <NoticeLine notice={notice} /> : null}
         <Button type="submit" className="w-full" loading={busy} disabled={referees.length === 0}>
-          {referees.length === 0 ? "Create a referee account first" : "Create match"}
+          {referees.length === 0
+            ? "Create a referee account first"
+            : mode === "teams" && teamsWithPlayers.length < 2
+              ? "Add players to at least two teams first"
+              : "Create & open match setup"}
         </Button>
       </form>
+    </Card>
+  );
+}
+
+function ModePill({ active, onClick, label }: { active: boolean; onClick: () => void; label: string }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      className={
+        active
+          ? "rounded-lg border-2 border-brand bg-brand/10 px-3 py-1.5 text-sm font-semibold text-brand-deep"
+          : "rounded-lg border-2 border-line bg-surface px-3 py-1.5 text-sm font-semibold text-muted hover:text-fg"
+      }
+    >
+      {label}
+    </button>
+  );
+}
+
+function utcIsoToNigeriaLocal(iso: string): string {
+  const shifted = new Date(new Date(iso).getTime() + 3600_000); // UTC+1 (Africa/Lagos)
+  return shifted.toISOString().slice(0, 16);
+}
+
+export function ScheduleEditor({ code, scheduledAt }: { code: string; scheduledAt: string | null }) {
+  const [value, setValue] = React.useState(scheduledAt ? utcIsoToNigeriaLocal(scheduledAt) : "");
+  const [notice, setNotice] = React.useState<Notice>(null);
+  const router = useRouter();
+  const busy = false;
+
+  function save(next: string) {
+    const payload = next ? nigeriaLocalToUtcIso(next) : null;
+    void setMatchScheduleAction({ code, scheduledAt: payload }).then((r) => {
+      if (r.ok) {
+        setNotice({ kind: "ok", text: next ? "Kick-off scheduled." : "Schedule cleared." });
+        router.refresh();
+      } else {
+        setNotice({ kind: "err", text: r.error ?? "Could not save the schedule." });
+      }
+    });
+  }
+
+  return (
+    <Card className="max-w-xl">
+      <CardHeader title="Kick-off schedule" description="Times are Nigeria time (Africa/Lagos)." />
+      <div className="flex flex-wrap items-end gap-3 p-4">
+        <Field label="Kick-off date & time" hint={busy ? "Saving…" : "Leave blank for 'start whenever ready'."}>
+          <Input type="datetime-local" value={value} onChange={(e) => setValue(e.target.value)} />
+        </Field>
+        <Button variant="secondary" onClick={() => save(value)}>
+          Save schedule
+        </Button>
+        {value ? (
+          <Button variant="ghost" onClick={() => { setValue(""); save(""); }}>
+            Clear
+          </Button>
+        ) : null}
+        {notice ? <div className="basis-full"><NoticeLine notice={notice} /></div> : null}
+      </div>
     </Card>
   );
 }

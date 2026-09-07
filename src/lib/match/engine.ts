@@ -77,21 +77,72 @@ function rosterNameOf(match: NonNullable<Awaited<ReturnType<typeof loadMatchFor>
 
 export async function adminCreateMatch(
   actor: Actor,
-  input: { homeName: string; awayName: string; refereeId: string; countdownSeconds: number },
+  input: {
+    homeName?: string;
+    awayName?: string;
+    homeTeamId?: string;
+    awayTeamId?: string;
+    refereeId: string;
+    countdownSeconds: number;
+    scheduledAt?: Date | null;
+  },
 ): Promise<ActionResult<{ code: string }>> {
   if (actor.role !== "ADMIN") return err("Only an admin can create matches.");
-  const homeName = input.homeName.trim();
-  const awayName = input.awayName.trim();
-  if (!homeName || !awayName) return err("Both team names are required.");
   const referee = await prisma.user.findUnique({ where: { id: input.refereeId } });
   if (!referee || referee.role !== "REFEREE") return err("The assigned referee must be a referee account.");
   const seconds = Math.max(5, Math.min(120, Math.round(input.countdownSeconds || 15)));
+  const scheduledAt = input.scheduledAt ?? null;
 
+  // Build from two existing clubs: names + rosters come from the teams.
+  if (input.homeTeamId && input.awayTeamId) {
+    if (input.homeTeamId === input.awayTeamId) return err("Pick two different teams.");
+    const [home, away] = await Promise.all([
+      prisma.team.findUnique({ where: { id: input.homeTeamId }, include: { members: { orderBy: { number: "asc" } } } }),
+      prisma.team.findUnique({ where: { id: input.awayTeamId }, include: { members: { orderBy: { number: "asc" } } } }),
+    ]);
+    if (!home || !away) return err("One of the chosen teams does not exist.");
+    if (home.members.length === 0 || away.members.length === 0)
+      return err("Both teams need players in their squads before a match is created.");
+
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const code = generateMatchCode();
+      try {
+        await prisma.$transaction(async (tx) => {
+          const match = await tx.match.create({
+            data: {
+              code,
+              homeName: home.name,
+              awayName: away.name,
+              homeTeamId: home.id,
+              awayTeamId: away.id,
+              refereeId: referee.id,
+              countdownSeconds: seconds,
+              scheduledAt,
+            },
+          });
+          const rows: { userId: string; team: "HOME" | "AWAY"; number: number }[] = [];
+          for (const member of home.members) rows.push({ userId: member.userId, team: "HOME", number: member.number });
+          for (const member of away.members) rows.push({ userId: member.userId, team: "AWAY", number: member.number });
+          for (const row of rows) {
+            await tx.matchPlayer.create({ data: { matchId: match.id, userId: row.userId, team: row.team, number: row.number } });
+          }
+        });
+        return ok({ code });
+      } catch (e) {
+        if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") continue;
+        throw e;
+      }
+    }
+    return err("Could not allocate a match code, please retry.");
+  }
+  const homeName = input.homeName?.trim();
+  const awayName = input.awayName?.trim();
+  if (!homeName || !awayName) return err("Pick two existing teams or provide both team names.");
   for (let attempt = 0; attempt < 5; attempt++) {
     const code = generateMatchCode();
     try {
       await prisma.match.create({
-        data: { code, homeName, awayName, refereeId: referee.id, countdownSeconds: seconds },
+        data: { code, homeName, awayName, refereeId: referee.id, countdownSeconds: seconds, scheduledAt },
       });
       return ok({ code });
     } catch (e) {
@@ -100,6 +151,19 @@ export async function adminCreateMatch(
     }
   }
   return err("Could not allocate a match code, please retry.");
+}
+
+export async function setMatchSchedule(
+  actor: Actor,
+  input: { code: string; scheduledAt: Date | null },
+): Promise<ActionResult> {
+  if (actor.role !== "ADMIN") return err("Only an admin can change a match schedule.");
+  const match = await loadMatchFor(input.code);
+  if (!match) return err("Match not found.");
+  if (match.status !== "DRAFT") return err("The schedule locks once the match starts.");
+  await prisma.match.update({ where: { id: match.id }, data: { scheduledAt: input.scheduledAt, version: { increment: 1 } } });
+  await publishMatchUpdate(match.code);
+  return ok(undefined);
 }
 
 export async function adminAddPlayer(
