@@ -61,6 +61,7 @@ export interface TimelineItemView {
     | "NO_GOAL"
     | "SUBSTITUTION"
     | "CARD"
+    | "HALF_TIME"
     | "FULL_TIME"
     | "PENALTY_SAVED"
     | "PENALTY_SCORED"
@@ -166,8 +167,11 @@ export interface MatchSnapshot {
   version: number;
   countdownSeconds: number;
   currentRound: number; // decided rounds so far
+  scheduledAt: string | null;
   startedAt: string | null;
   finishedAt: string | null;
+  paused: boolean;
+  pauseNote: string | null;
   roster: RosterSlotView[];
   timeline: TimelineItemView[];
   round: RoundView | null; // the round in flight (OPEN/LOCKED) or null

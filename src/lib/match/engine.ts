@@ -166,6 +166,79 @@ export async function setMatchSchedule(
   return ok(undefined);
 }
 
+export async function postponeMatch(
+  actor: Actor,
+  input: { code: string; scheduledAt: Date | null; reason?: string },
+): Promise<ActionResult> {
+  if (actor.role !== "ADMIN") return err("Only an admin can postpone a match.");
+  const match = await loadMatchFor(input.code);
+  if (!match) return err("Match not found.");
+  if (match.status !== "DRAFT") return err("Only a not-yet-started match can be postponed.");
+  const reason = input.reason?.trim();
+  await prisma.match.update({
+    where: { id: match.id },
+    data: {
+      scheduledAt: input.scheduledAt,
+      statusNote: reason ? `Postponed: ${reason}` : input.scheduledAt ? "Postponed" : null,
+      version: { increment: 1 },
+    },
+  });
+  await publishMatchUpdate(match.code);
+  return ok(undefined);
+}
+
+export async function pauseMatch(
+  actor: Actor,
+  input: { code: string; reason?: string },
+): Promise<ActionResult> {
+  const match = await assertReferee(actor, input.code);
+  if (match.status !== "LIVE") return err("Only a live match can be paused.");
+  if (match.pausedAt) return err("The match is already paused.");
+  if (match.rounds.some((r) => r.status === "OPEN" || r.status === "LOCKED"))
+    return err("Wait for the current question to finish before pausing.");
+  const reason = input.reason?.trim();
+  await prisma.match.update({
+    where: { id: match.id },
+    data: { pausedAt: new Date(), statusNote: reason || "Paused", version: { increment: 1 } },
+  });
+  await publishMatchUpdate(match.code);
+  return ok(undefined);
+}
+
+export async function resumeMatch(actor: Actor, input: { code: string }): Promise<ActionResult> {
+  const match = await assertReferee(actor, input.code);
+  if (match.status !== "LIVE") return err("Only a live match can be resumed.");
+  if (!match.pausedAt) return err("The match is not paused.");
+  await prisma.match.update({
+    where: { id: match.id },
+    data: { pausedAt: null, statusNote: null, version: { increment: 1 } },
+  });
+  await publishMatchUpdate(match.code);
+  return ok(undefined);
+}
+
+export async function startHalftime(actor: Actor, input: { code: string }): Promise<ActionResult> {
+  const match = await assertReferee(actor, input.code);
+  if (match.status !== "LIVE") return err("Halftime only happens during a live match.");
+  if (match.pausedAt) return err("The match is already paused.");
+  const decided = match.rounds.filter((r) => r.status === "DECIDED").length;
+  if (decided !== 5) return err("Halftime comes after the fifth question is decided.");
+  if (match.rounds.some((r) => r.status === "OPEN" || r.status === "LOCKED"))
+    return err("Wait for the current question to finish first.");
+  await prisma.match.update({
+    where: { id: match.id },
+    data: { pausedAt: new Date(), statusNote: "Half-time", version: { increment: 1 } },
+  });
+  await prisma.$transaction(async (tx) => {
+    const count = await tx.timelineEvent.count({ where: { matchId: match.id } });
+    await tx.timelineEvent.create({
+      data: { matchId: match.id, type: "HALF_TIME", label: "Half-time", detail: "Five questions played — second half next.", authoredById: actor.userId, seq: count + 1 },
+    });
+  });
+  await publishMatchUpdate(match.code);
+  return ok(undefined);
+}
+
 export async function adminAddPlayer(
   actor: Actor,
   input: { code: string; userId: string; team: TeamSideView; number: number },
@@ -432,6 +505,7 @@ export async function kickOff(
 export async function openNextQuestion(actor: Actor, input: { code: string }): Promise<ActionResult> {
   const match = await assertReferee(actor, input.code);
   if (match.status !== "LIVE") return err("The match must be live.");
+  if (match.pausedAt) return err("Resume the match before opening the next question.");
   if (match.rounds.some((r) => r.status === "OPEN" || r.status === "LOCKED"))
     return err("Finish the current round before opening the next question.");
   const next = match.currentRound + 1;
@@ -460,6 +534,7 @@ export async function submitAnswer(
   const match = await loadMatchFor(input.code);
   if (!match) return err("Match not found.");
   if (match.status !== "LIVE") return err("The match is not live.");
+  if (match.pausedAt) return err("The match is paused right now.");
   const round = match.rounds.find((r) => r.status === "OPEN");
   if (!round) return err("There is no open question right now.");
 
@@ -609,6 +684,7 @@ export async function requestSubstitution(
   const match = await loadMatchFor(input.code);
   if (!match) return err("Match not found.");
   if (match.status !== "LIVE") return err("Substitutions only happen during a live match.");
+  if (match.pausedAt) return err("The match is paused — no substitutions right now.");
   const captain = match.roster.find((r) => r.userId === actor.userId);
   if (!captain || !captain.isCaptain) return err("Only a captain can request a substitution.");
 

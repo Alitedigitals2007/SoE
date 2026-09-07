@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { addPlayerAction, createMatchAction, removePlayerAction, setMatchScheduleAction } from "@/app/actions/match";
+import { addPlayerAction, createMatchAction, postponeMatchAction, removePlayerAction, setMatchScheduleAction } from "@/app/actions/match";
 import { createUserAction, updateUserAction } from "@/app/actions/admin";
 import { Badge, Button, Card, CardHeader, cn, Field, Input, Select } from "@/components/ui";
 import type { Role, TeamSide } from "@/lib/domain";
@@ -288,6 +288,50 @@ export function CreateMatchForm({ referees, teams }: { referees: RefereeOption[]
               : "Create & open match setup"}
         </Button>
       </form>
+    </Card>
+  );
+}
+
+export function PostponeEditor({ code, scheduledAt }: { code: string; scheduledAt: string | null }) {
+  const [when, setWhen] = React.useState(scheduledAt ? utcIsoToNigeriaLocal(scheduledAt) : "");
+  const [reason, setReason] = React.useState("");
+  const [notice, setNotice] = React.useState<Notice>(null);
+  const router = useRouter();
+  const [busy, setBusy] = React.useState(false);
+
+  return (
+    <Card className="max-w-xl">
+      <CardHeader title="Postpone this match" description="Move the kick-off and tell everyone why (Nigeria time)." />
+      <div className="flex flex-wrap items-end gap-3 p-4">
+        <Field label="New kick-off (Nigeria time)" hint="Required to postpone.">
+          <Input type="datetime-local" value={when} onChange={(e) => setWhen(e.target.value)} />
+        </Field>
+        <Field label="Reason (optional)">
+          <Input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="e.g. Heavy rain" className="min-w-48" />
+        </Field>
+        <Button
+          disabled={!when || busy}
+          loading={busy}
+          variant="secondary"
+          onClick={() => {
+            if (!when) return;
+            setBusy(true);
+            setNotice(null);
+            void postponeMatchAction({ code, scheduledAt: nigeriaLocalToUtcIso(when), reason: reason || undefined }).then((r) => {
+              setBusy(false);
+              if (r.ok) {
+                setNotice({ kind: "ok", text: "Match postponed." });
+                router.refresh();
+              } else {
+                setNotice({ kind: "err", text: r.error ?? "Could not postpone." });
+              }
+            });
+          }}
+        >
+          Postpone match
+        </Button>
+        {notice ? <div className="basis-full"><NoticeLine notice={notice} /></div> : null}
+      </div>
     </Card>
   );
 }

@@ -13,12 +13,16 @@ import {
   lockAndReveal,
   MatchGuardError,
   openNextQuestion,
+  pauseMatch,
+  postponeMatch,
   recordIncident,
   removeQuestion,
   requestSubstitution,
+  resumeMatch,
   setLineup,
   setMatchSchedule,
   setQuestionSlot,
+  startHalftime,
   startPenalties,
   submitAnswer,
   syncMatchState,
@@ -70,6 +74,28 @@ export async function setMatchScheduleAction(input: {
   return runEngine((actor) =>
     setMatchSchedule(actor, { code: input.code, scheduledAt: input.scheduledAt ? new Date(input.scheduledAt) : null }),
   );
+}
+
+export async function postponeMatchAction(input: {
+  code: string;
+  scheduledAt: string | null;
+  reason?: string;
+}): Promise<ActionResult> {
+  return runEngine((actor) =>
+    postponeMatch(actor, { code: input.code, scheduledAt: input.scheduledAt ? new Date(input.scheduledAt) : null, reason: input.reason }),
+  );
+}
+
+export async function pauseMatchAction(code: string, reason?: string): Promise<ActionResult> {
+  return runEngine((actor) => pauseMatch(actor, { code, reason }));
+}
+
+export async function resumeMatchAction(code: string): Promise<ActionResult> {
+  return runEngine((actor) => resumeMatch(actor, { code }));
+}
+
+export async function startHalftimeAction(code: string): Promise<ActionResult> {
+  return runEngine((actor) => startHalftime(actor, { code }));
 }
 
 export async function addPlayerAction(input: {

@@ -8,8 +8,11 @@ import {
   endMatchAction,
   lockRevealAction,
   openNextQuestionAction,
+  pauseMatchAction,
   recordIncidentAction,
   requestSubstitutionAction,
+  resumeMatchAction,
+  startHalftimeAction,
   startPenaltiesAction,
   submitAnswerAction,
   takePenaltyKickAction,
@@ -58,6 +61,12 @@ function ArenaInner({
   return (
     <div className="mx-auto w-full max-w-7xl px-4 py-6">
       <MatchHeader snapshot={snapshot} mode={mode} />
+
+      {snapshot.paused && snapshot.status === "LIVE" ? (
+        <div className="mt-4 rounded-xl border-2 border-warning/50 bg-warning/10 px-4 py-3 text-center text-sm font-semibold text-warning">
+          ⏸ Match paused{snapshot.pauseNote ? ` — ${snapshot.pauseNote}` : ""}
+        </div>
+      ) : null}
 
       <div className="mt-4 grid gap-4 lg:grid-cols-3">
         <div className="lg:col-span-2 space-y-4">
@@ -631,19 +640,45 @@ function EndMatchButton({ code, onError }: { code: string; onError: (e: string |
 function RefereeQuickActions({ snapshot, onError }: { snapshot: MatchSnapshot; onError: (e: string | null) => void }) {
   const roundOpen = snapshot.round?.status === "OPEN";
   const roundLocked = snapshot.round?.status === "LOCKED";
-  const ready = snapshot.status === "LIVE" && !roundOpen && !roundLocked && snapshot.currentRound < 10;
+  const ready = snapshot.status === "LIVE" && !snapshot.paused && !roundOpen && !roundLocked && snapshot.currentRound < 10;
+  const decidedRounds = snapshot.currentRound;
   return (
     <Card>
       <CardHeader title="Referee control" description="Run the match from here." />
       <div className="flex flex-col gap-2 p-3">
-        {ready ? (
-          <Button variant="pitch" onClick={() => submit(openNextQuestionAction(snapshot.code), onError)}>
-            ▶ Open next question
+        {snapshot.status === "LIVE" && snapshot.paused ? (
+          <Button variant="pitch" onClick={() => submit(resumeMatchAction(snapshot.code), onError)}>
+            ▶ Resume match
           </Button>
-        ) : roundOpen ? (
-          <Button variant="secondary" onClick={() => submit(lockRevealAction(snapshot.code, true), onError)}>
-            Lock & reveal now
-          </Button>
+        ) : snapshot.status === "LIVE" && !snapshot.paused ? (
+          <>
+            {ready ? (
+              <Button variant="pitch" onClick={() => submit(openNextQuestionAction(snapshot.code), onError)}>
+                ▶ Open next question
+              </Button>
+            ) : roundOpen ? (
+              <Button variant="secondary" onClick={() => submit(lockRevealAction(snapshot.code, true), onError)}>
+                Lock & reveal now
+              </Button>
+            ) : null}
+            {decidedRounds === 5 ? (
+              <Button variant="secondary" onClick={() => submit(startHalftimeAction(snapshot.code), onError)}>
+                ⏸ Start half-time
+              </Button>
+            ) : null}
+            {!roundOpen && !roundLocked ? (
+              <Button
+                variant="ghost"
+                onClick={() => {
+                  const reason = window.prompt("Reason for pausing (optional):");
+                  if (reason === null) return;
+                  void submit(pauseMatchAction(snapshot.code, reason || undefined), onError);
+                }}
+              >
+                Pause match
+              </Button>
+            ) : null}
+          </>
         ) : null}
         {roundLocked ? (
           <p className="text-xs text-subtle">Decide on the current question in the main panel.</p>
