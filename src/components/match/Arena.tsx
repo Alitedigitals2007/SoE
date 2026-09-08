@@ -145,7 +145,10 @@ function ArenaInner({
           ) : null}
 
           {snapshot.status === "FINISHED" && snapshot.penaltyShootout ? (
-            <PenaltyShootoutCard snapshot={snapshot} onError={onError} />
+            <>
+              <PenaltyShootoutCard snapshot={snapshot} onError={onError} />
+              <PotmVote matchId={snapshot.matchId} snapshot={snapshot} />
+            </>
           ) : snapshot.status === "FINISHED" && snapshot.summary ? (
             <FullTime summary={snapshot.summary} snapshot={snapshot} />
           ) : snapshot.status === "DRAFT" ? (

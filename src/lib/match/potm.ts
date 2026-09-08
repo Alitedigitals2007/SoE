@@ -1,6 +1,8 @@
 import { prisma } from "@/lib/prisma";
 import type { ActionResult } from "@/lib/domain";
 
+export const POTM_VOTE_WINDOW_MS = 3 * 60 * 1000; // voting stays open for 3 minutes after full time
+
 export async function votePotm(
   matchId: string,
   userId: string,
@@ -10,10 +12,11 @@ export async function votePotm(
   if (!match) return { ok: false, error: "Match not found." };
   if (match.status !== "FINISHED") return { ok: false, error: "Voting is only available after the match ends." };
 
-  const voterSlot = await prisma.matchPlayer.findFirst({
-    where: { matchId, userId },
-  });
-  if (!voterSlot) return { ok: false, error: "You are not part of this match." };
+  const deadline =
+    match.potmClosedAt ??
+    (match.finishedAt ? new Date(match.finishedAt.getTime() + POTM_VOTE_WINDOW_MS) : null);
+  if (deadline && Date.now() >= deadline.getTime())
+    return { ok: false, error: "Player-of-the-Match voting has closed." };
 
   const playerSlot = await prisma.matchPlayer.findFirst({
     where: { matchId, userId: playerId, role: "STARTER" },
@@ -30,6 +33,14 @@ export async function votePotm(
   } catch {
     return { ok: false, error: "Could not record your vote." };
   }
+}
+
+export async function closePotmVoting(matchId: string): Promise<ActionResult> {
+  const match = await prisma.match.findUnique({ where: { id: matchId }, select: { id: true, status: true } });
+  if (!match) return { ok: false, error: "Match not found." };
+  if (match.status !== "FINISHED") return { ok: false, error: "Voting opens at full time." };
+  await prisma.match.update({ where: { id: match.id }, data: { potmClosedAt: new Date() } });
+  return { ok: true, data: undefined };
 }
 
 export interface PotmResult {

@@ -135,6 +135,7 @@ model Match {
   scheduledAt  DateTime? // planned kick-off (Nigeria time is used when picking)
   pausedAt     DateTime? // set while the match is paused / in half-time
   statusNote   String?   // e.g. "Postponed: rain" or "Half-time"
+  potmClosedAt DateTime? // when Player-of-the-Match voting closed
   startedAt    DateTime?
   finishedAt   DateTime?
 

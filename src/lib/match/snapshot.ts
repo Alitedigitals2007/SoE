@@ -388,5 +388,5 @@ function buildPotm(
   }
 
   const results = [...countMap.values()].sort((a, b) => b.votes - a.votes);
-  return { votedFor, results };
+  return { votedFor, closedAt: match.potmClosedAt ? match.potmClosedAt.toISOString() : null, results };
 }

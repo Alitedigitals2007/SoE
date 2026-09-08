@@ -190,6 +190,7 @@ export interface MatchSnapshot {
   summary: MatchSummary | null;
   potm: {
     votedFor: string | null;
+    closedAt: string | null;
     results: { playerId: string; playerName: string; votes: number }[];
   };
   competitionType: "LEAGUE" | "CUP" | null;
