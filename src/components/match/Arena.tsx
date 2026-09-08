@@ -35,6 +35,71 @@ import {
 } from "@/lib/domain";
 import { ChatBox } from "@/components/match/ChatBox";
 
+function CommentaryCard({ snapshot }: { snapshot: MatchSnapshot }) {
+  const [on, setOn] = React.useState(false);
+  const baselineRef = React.useRef<number | null>(null);
+  const scoreRef = React.useRef("");
+  const supported = typeof window !== "undefined" && "speechSynthesis" in window;
+
+  React.useEffect(() => {
+    if (!on) return;
+    const synth = window.speechSynthesis;
+    const say = (text: string) => {
+      try {
+        const u = new SpeechSynthesisUtterance(text);
+        u.rate = 1.05;
+        synth.speak(u);
+      } catch { /* ignore */ }
+    };
+
+    // Announce a new score whenever it changes.
+    const scoreKey = `${snapshot.homeScore}–${snapshot.awayScore}`;
+    if (scoreRef.current && scoreRef.current !== scoreKey) {
+      say(`Score update: ${snapshot.homeName} ${snapshot.homeScore}, ${snapshot.awayName} ${snapshot.awayScore}`);
+    }
+    scoreRef.current = scoreKey;
+
+    const tl = snapshot.timeline;
+    if (baselineRef.current === null) {
+      baselineRef.current = tl.length; // don't read old events on enable
+      return;
+    }
+    for (let i = baselineRef.current; i < tl.length; i++) {
+      const ev = tl[i];
+      const text = ev.detail && ev.detail !== ev.label ? `${ev.label}. ${ev.detail}` : ev.label;
+      say(text);
+    }
+    baselineRef.current = tl.length;
+  }, [on, snapshot.timeline, snapshot.homeScore, snapshot.awayScore, snapshot.homeName, snapshot.awayName]);
+
+  if (!supported) return null;
+  return (
+    <div className="rounded-xl border-2 border-fg/15 bg-bg-elevated px-4 py-3">
+      <button
+        type="button"
+        onClick={() => {
+          if (on) window.speechSynthesis.cancel();
+          else {
+            baselineRef.current = null;
+            scoreRef.current = `${snapshot.homeScore}–${snapshot.awayScore}`;
+          }
+          setOn((v) => !v);
+        }}
+        className={cn(
+          "flex w-full items-center justify-between text-sm font-bold",
+          on ? "text-success" : "text-muted hover:text-fg",
+        )}
+      >
+        <span>🔊 {on ? "Commentary on" : "Voice commentary"}</span>
+        <span className="text-xs">{on ? "Tap to mute" : "Tap to start"}</span>
+      </button>
+      {on ? (
+        <p className="mt-1 text-[11px] text-subtle">Automatically reads out the action as it happens.</p>
+      ) : null}
+    </div>
+  );
+}
+
 export function Arena({ code, initial }: { code: string; initial: MatchSnapshot }) {
   const { snapshot, mode } = useMatchState(code, initial);
   const [error, setError] = React.useState<string | null>(null);
@@ -97,6 +162,7 @@ function ArenaInner({
           {snapshot.viewer.isReferee && snapshot.status !== "FINISHED" ? (
             <RefereeQuickActions snapshot={snapshot} onError={onError} />
           ) : null}
+          {matchLive ? <CommentaryCard snapshot={snapshot} /> : null}
           <LineupCard snapshot={snapshot} />
           <TimelineCard snapshot={snapshot} />
           {snapshot.status !== "DRAFT" && (

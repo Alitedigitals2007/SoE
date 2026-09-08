@@ -15,6 +15,7 @@ import {
   setCompetitionStatusAction,
   setTeamCaptainAction,
   setTeamImageAction,
+  transferTeamMemberAction,
 } from "@/app/actions/platform";
 import { Button, Card, CardHeader, cn, Field, Input, Select } from "@/components/ui";
 
@@ -128,7 +129,17 @@ export function TeamCrestEditor({ teamId, imageUrl }: { teamId: string; imageUrl
   );
 }
 
-export function TeamMembers({ teamId, members, available }: { teamId: string; members: TeamMemberRow[]; available: AvailablePlayer[] }) {
+export function TeamMembers({
+  teamId,
+  members,
+  available,
+  otherTeams,
+}: {
+  teamId: string;
+  members: TeamMemberRow[];
+  available: AvailablePlayer[];
+  otherTeams?: { id: string; name: string }[];
+}) {
   const { notice, flash, router } = useFlash();
   const [playerId, setPlayerId] = React.useState("");
   const [number, setNumber] = React.useState(1);
@@ -209,6 +220,25 @@ export function TeamMembers({ teamId, members, available }: { teamId: string; me
                       Remove captain
                     </button>
                   )}
+                  {otherTeams && otherTeams.length > 0 ? (
+                    <Select
+                      aria-label={`Move ${m.name} to another team`}
+                      className="w-44 py-1 text-xs"
+                      value=""
+                      onChange={(e) => {
+                        if (e.target.value) {
+                          void transferTeamMemberAction({ teamId, userId: m.userId, toTeamId: e.target.value }).then((r) => flash(r, "Player moved."));
+                        }
+                      }}
+                    >
+                      <option value="">Move team…</option>
+                      {otherTeams.map((t) => (
+                        <option key={t.id} value={t.id}>
+                          {t.name}
+                        </option>
+                      ))}
+                    </Select>
+                  ) : null}
                   <button
                     type="button"
                     className="text-xs text-subtle underline-offset-2 hover:text-danger hover:underline"

@@ -1,8 +1,10 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { PublicShell } from "@/components/site";
 import { Badge } from "@/components/ui";
+import { NewsComments, type CommentRow } from "@/components/NewsComments";
 
 export const dynamic = "force-dynamic";
 
@@ -13,6 +15,20 @@ export default async function NewsDetailPage({ params }: { params: Promise<{ slu
     include: { author: { select: { name: true } } },
   });
   if (!post || !post.published) notFound();
+
+  const session = await auth();
+  const comments = await prisma.newsComment.findMany({
+    where: { newsId: post.id },
+    include: { user: { select: { name: true } } },
+    orderBy: { createdAt: "asc" },
+    take: 100,
+  });
+  const commentRows: CommentRow[] = comments.map((c) => ({
+    id: c.id,
+    authorName: c.user?.name ?? c.guestName ?? "Anonymous",
+    content: c.content,
+    createdAt: c.createdAt.toISOString(),
+  }));
 
   const paragraphs = post.body.split(/\n\s*\n/).map((p) => p.trim()).filter(Boolean);
 
@@ -42,6 +58,15 @@ export default async function NewsDetailPage({ params }: { params: Promise<{ slu
           {paragraphs.map((p, i) => (
             <p key={i}>{p}</p>
           ))}
+        </div>
+
+        <div className="max-w-2xl">
+          <NewsComments
+            postId={post.id}
+            slug={post.slug}
+            signedIn={!!session?.user}
+            initial={commentRows}
+          />
         </div>
       </article>
     </PublicShell>

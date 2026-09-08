@@ -110,6 +110,33 @@ export async function setTeamCaptain(actor: Actor, input: { teamId: string; user
   return ok(undefined);
 }
 
+export async function transferTeamMember(
+  actor: Actor,
+  input: { teamId: string; userId: string; toTeamId: string },
+) {
+  const blocked = await requireAdmin(actor);
+  if (blocked) return blocked;
+  if (input.teamId === input.toTeamId) return err("Pick a different team to move to.");
+  const [from, to] = await Promise.all([
+    prisma.team.findUnique({ where: { id: input.teamId }, include: { members: true } }),
+    prisma.team.findUnique({ where: { id: input.toTeamId }, include: { members: true } }),
+  ]);
+  if (!from || !to) return err("Team not found.");
+  const row = from.members.find((m) => m.userId === input.userId);
+  if (!row) return err("That player is not in this team.");
+  const used = new Set(to.members.map((m) => m.number));
+  let number = 0;
+  for (let n = 1; n <= 8; n++) {
+    if (!used.has(n)) { number = n; break; }
+  }
+  if (!number) return err(`${to.name} is full (8/8 players).`);
+  await prisma.$transaction(async (tx) => {
+    await tx.teamPlayer.delete({ where: { id: row.id } });
+    await tx.teamPlayer.create({ data: { teamId: to.id, userId: input.userId, number } });
+  });
+  return ok({ number });
+}
+
 /* ------------------------------ Competitions ------------------------------- */
 
 export type CompetitionType = "LEAGUE" | "CUP" | "LEAGUE_CUP" | "CUSTOM";

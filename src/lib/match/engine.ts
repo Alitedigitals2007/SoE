@@ -8,6 +8,7 @@ import {
 import { prisma } from "@/lib/prisma";
 import { generateMatchCode } from "@/lib/matchCode";
 import { publishMatchUpdate } from "@/lib/realtime/server";
+import { notifyAllUsers } from "@/lib/notify";
 import { GOAL_POINTS } from "@/lib/platform/engine";
 import type { ActionResult, ErrResult, Role, TeamSide as TeamSideView } from "@/lib/domain";
 
@@ -163,6 +164,16 @@ export async function setMatchSchedule(
   if (match.status !== "DRAFT") return err("The schedule locks once the match starts.");
   await prisma.match.update({ where: { id: match.id }, data: { scheduledAt: input.scheduledAt, version: { increment: 1 } } });
   await publishMatchUpdate(match.code);
+  if (input.scheduledAt) {
+    try {
+      await notifyAllUsers({
+        icon: "🗓️",
+        title: `${match.homeName} v ${match.awayName} kick-off scheduled`,
+        body: `Kick-off is set for ${input.scheduledAt.toLocaleString()}.`,
+        link: `/match/${match.code}`,
+      });
+    } catch { /* best effort */ }
+  }
   return ok(undefined);
 }
 
@@ -184,6 +195,14 @@ export async function postponeMatch(
     },
   });
   await publishMatchUpdate(match.code);
+  try {
+    await notifyAllUsers({
+      icon: "🕒",
+      title: `${match.homeName} v ${match.awayName} postponed`,
+      body: reason ? reason : "A new kick-off time will be announced.",
+      link: `/match/${match.code}`,
+    });
+  } catch { /* best effort */ }
   return ok(undefined);
 }
 
@@ -497,6 +516,14 @@ export async function kickOff(
   });
 
   await publishMatchUpdate(match.code);
+  try {
+    await notifyAllUsers({
+      icon: "🔴",
+      title: `${match.homeName} v ${match.awayName} is LIVE`,
+      body: "Kick-off! Follow the ten questions live.",
+      link: `/watch/${match.code}`,
+    });
+  } catch { /* best effort */ }
   return ok(undefined);
 }
 
@@ -843,6 +870,32 @@ export async function endMatch(actor: Actor, input: { code: string }): Promise<A
     await bumpVersion(tx, match.id);
   });
   await publishMatchUpdate(match.code);
+  const decided = match.rounds.filter((r) => r.status === "DECIDED").length;
+  const scoreline = `${match.homeName} ${match.homeScore}–${match.awayScore} ${match.awayName}`;
+  try {
+    const slug = `${match.code}-match-report`;
+    const exists = await prisma.newsPost.findUnique({ where: { slug }, select: { id: true } });
+    if (!exists) {
+      await prisma.newsPost.create({
+        data: {
+          title: scoreline,
+          slug,
+          excerpt: `Full-time at ${match.code}: ${match.homeScore}–${match.awayScore}.`,
+          body: `Full-time: ${scoreline}.\n\nAll ${decided} questions were played. This report was posted automatically at full time.`,
+          published: true,
+          authorId: actor.userId,
+        },
+      });
+    }
+  } catch { /* best effort — report posting must never block full time */ }
+  try {
+    await notifyAllUsers({
+      icon: "🏁",
+      title: `Full-time: ${scoreline}`,
+      body: `The match report is live — vote for your Player of the Match.`,
+      link: `/match/${match.code}`,
+    });
+  } catch { /* best effort */ }
   return ok(undefined);
 }
 

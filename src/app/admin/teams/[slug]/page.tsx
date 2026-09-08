@@ -35,6 +35,11 @@ export default async function AdminTeamDetail({ params }: { params: Promise<{ sl
     select: { id: true, name: true },
   });
   const available: AvailablePlayer[] = availableRows.map((a) => ({ ...a }));
+  const otherTeams = await prisma.team.findMany({
+    where: { id: { not: team.id } },
+    orderBy: { name: "asc" },
+    select: { id: true, name: true },
+  });
 
   return (
     <>
@@ -57,7 +62,7 @@ export default async function AdminTeamDetail({ params }: { params: Promise<{ sl
 
         <div className="mt-5 grid gap-5 lg:grid-cols-2">
           <TeamCrestEditor teamId={team.id} imageUrl={team.imageUrl} />
-          <TeamMembers teamId={team.id} members={memberRows} available={available} />
+          <TeamMembers teamId={team.id} members={memberRows} available={available} otherTeams={otherTeams} />
         </div>
 
         <TeamImport teamId={team.id} />

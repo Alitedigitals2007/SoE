@@ -37,6 +37,25 @@ model User {
   playerVotes      PotmVote[]            @relation("PlayerVotes")
   chatMessages     ChatMessage[]
   newsPosts        NewsPost[]
+  newsComments     NewsComment[]
+  notifications    Notification[]
+}
+
+/**
+ * ------------------------------ Notifications ------------------------------
+ */
+
+model Notification {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String
+  body      String?
+  link      String?
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId, readAt])
 }
 
 /**
@@ -56,8 +75,23 @@ model NewsPost {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  comments NewsComment[]
+
   @@index([published, createdAt])
   @@index([slug])
+}
+
+model NewsComment {
+  id        String    @id @default(cuid())
+  newsId    String
+  news      NewsPost  @relation(fields: [newsId], references: [id], onDelete: Cascade)
+  userId    String? // null when posted with a temporary name
+  user      User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+  guestName String? // used when a signed-out viewer leaves a temporary name
+  content   String    @db.VarChar(500)
+  createdAt DateTime  @default(now())
+
+  @@index([newsId, createdAt])
 }
 
 /**

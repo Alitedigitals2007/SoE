@@ -3,6 +3,7 @@ import Link from "next/link";
 import { auth } from "@/auth";
 import { signOutAction } from "@/app/actions/auth";
 import { homePath } from "@/lib/authz";
+import { unreadCount } from "@/lib/notify";
 import { cn } from "@/components/ui";
 
 const NAV = [
@@ -33,6 +34,7 @@ export async function SiteHeader() {
   const session = await auth();
   const user = session?.user ?? null;
   const roleHome = user ? homePath(user.role) : "/";
+  const unread = user ? await unreadCount(user.id) : 0;
 
   return (
     <header className="sticky top-0 z-40 border-b-2 border-fg bg-bg/95 backdrop-blur-md">
@@ -60,6 +62,18 @@ export async function SiteHeader() {
         <div className="flex items-center gap-2">
           {user ? (
             <>
+              <Link
+                href="/notifications"
+                aria-label={`Notifications${unread ? ` (${unread} unread)` : ""}`}
+                className="relative inline-flex size-10 items-center justify-center rounded-lg text-lg transition-colors hover:bg-surface"
+              >
+                🔔
+                {unread > 0 ? (
+                  <span className="absolute -right-0.5 -top-0.5 grid min-w-4 place-items-center rounded-full bg-danger px-1 text-[10px] font-black text-white">
+                    {unread > 9 ? "9+" : unread}
+                  </span>
+                ) : null}
+              </Link>
               <Link
                 href={roleHome}
                 className="inline-flex h-10 items-center rounded-lg border-2 border-fg bg-bg-elevated px-3 text-xs font-black uppercase tracking-wider text-fg shadow-[2px_2px_0_rgba(11,32,48,.12)] transition-all hover:-translate-y-0.5 hover:bg-surface"
@@ -119,8 +133,7 @@ export async function SiteHeader() {
   );
 }
 
-export async function PublicShell({ children }: { children: React.ReactNode }) {
-  return (
+export async function PublicShell({ children }: { children: React.ReactNode }) {  return (
     <div className="flex min-h-screen flex-col">
       <SiteHeader />
       <main className="flex-1">{children}</main>

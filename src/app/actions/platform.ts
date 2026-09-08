@@ -23,6 +23,7 @@ import {
   setTeamCaptain,
   setTeamImage,
   teamStats,
+  transferTeamMember,
   type Actor,
 } from "@/lib/platform/engine";
 import { currentActor } from "@/lib/session";
@@ -62,6 +63,10 @@ export async function setTeamImageAction(input: { teamId: string; imageUrl: stri
 
 export async function setTeamCaptainAction(input: { teamId: string; userId: string | null }) {
   return runEngine((a) => setTeamCaptain(a, input));
+}
+
+export async function transferTeamMemberAction(input: { teamId: string; userId: string; toTeamId: string }) {
+  return runEngine((a) => transferTeamMember(a, input));
 }
 
 export async function setCompetitionStatusAction(input: {

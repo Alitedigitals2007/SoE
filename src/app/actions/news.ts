@@ -58,6 +58,58 @@ export async function deleteNewsAction(id: string): Promise<ActionResult> {
   return { ok: true, data: undefined };
 }
 
+const commentCooldown = new Map<string, number>();
+
+export type NewsCommentView = {
+  id: string;
+  authorName: string;
+  content: string;
+  createdAt: string;
+};
+
+export async function addNewsCommentAction(input: {
+  slug: string;
+  content: string;
+  guestName?: string | null;
+}): Promise<ActionResult<NewsCommentView>> {
+  const content = input.content.trim();
+  if (!content) return { ok: false, error: "Comment cannot be empty." };
+  if (content.length > 500) return { ok: false, error: "Comment must be 500 characters or fewer." };
+
+  const actor = await currentActor();
+  const guestName = input.guestName?.trim() ?? "";
+  if (!actor && !guestName) return { ok: false, error: "Sign in or leave a temporary name to comment." };
+  if (!actor && guestName.length > 50) return { ok: false, error: "Temporary name must be 50 characters or fewer." };
+
+  const post = await prisma.newsPost.findUnique({ where: { slug: input.slug }, select: { id: true } });
+  if (!post) return { ok: false, error: "Post not found." };
+
+  // Light cooldown to stop spam.
+  const key = actor ? actor.userId : `guest:${guestName.toLowerCase()}`;
+  const last = commentCooldown.get(key) ?? 0;
+  if (Date.now() - last < 8000) return { ok: false, error: "Please wait a moment before commenting again." };
+  commentCooldown.set(key, Date.now());
+
+  const comment = await prisma.newsComment.create({
+    data: {
+      newsId: post.id,
+      userId: actor?.userId ?? null,
+      guestName: actor ? null : guestName || null,
+      content,
+    },
+  });
+
+  return {
+    ok: true,
+    data: {
+      id: comment.id,
+      authorName: actor ? (await prisma.user.findUnique({ where: { id: actor.userId }, select: { name: true } }))?.name ?? "You" : guestName,
+      content: comment.content,
+      createdAt: comment.createdAt.toISOString(),
+    },
+  };
+}
+
 export async function setNewsPublishedAction(id: string, published: boolean): Promise<ActionResult> {
   const denied = await guardAdmin();
   if (denied) return { ok: false, error: denied };
