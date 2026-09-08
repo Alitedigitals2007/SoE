@@ -18,6 +18,7 @@ import {
   PlatformError,
   playerStats,
   removeTeamMember,
+  scheduleLeagueWave,
   setCompetitionStatus,
   setFantasyPicks,
   setTeamCaptain,
@@ -74,6 +75,16 @@ export async function setCompetitionStatusAction(input: {
   status: "ACTIVE" | "FINISHED";
 }) {
   return runEngine((a) => setCompetitionStatus(a, input));
+}
+
+export async function scheduleLeagueWaveAction(input: {
+  competitionId: string;
+  count: number;
+  firstKickAt?: string | null;
+}) {
+  return runEngine((a) =>
+    scheduleLeagueWave(a, { competitionId: input.competitionId, count: input.count, firstKickAt: input.firstKickAt ? new Date(input.firstKickAt) : undefined }),
+  );
 }
 
 /* ------------------------------- competitions ------------------------------ */

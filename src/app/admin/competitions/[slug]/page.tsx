@@ -40,6 +40,7 @@ export default async function AdminCompetitionDetail({ params }: { params: Promi
     status: m.status,
     cupRound: m.cupRound,
     refereeId: m.refereeId,
+    scheduledAt: m.scheduledAt ? m.scheduledAt.toISOString() : null,
   }));
 
   return (

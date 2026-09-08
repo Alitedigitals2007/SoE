@@ -137,6 +137,44 @@ export async function transferTeamMember(
   return ok({ number });
 }
 
+export async function scheduleLeagueWave(
+  actor: Actor,
+  input: { competitionId: string; count: number; firstKickAt?: Date },
+) {
+  const blocked = await requireAdmin(actor);
+  if (blocked) return blocked;
+  const count = Math.max(1, Math.min(20, Math.floor(input.count) || 5));
+  const comp = await prisma.competition.findUnique({
+    where: { id: input.competitionId },
+    include: { matches: { where: { status: "DRAFT" }, orderBy: { createdAt: "asc" }, select: { id: true, homeTeamId: true, awayTeamId: true, scheduledAt: true } } },
+  });
+  if (!comp) return err("Competition not found.");
+
+  const unscheduled = comp.matches.filter((m) => !m.scheduledAt);
+  if (unscheduled.length === 0) return err("Every fixture is already scheduled.");
+
+  // Greedy pick of fixtures where no team appears twice in this wave.
+  const selected: { id: string }[] = [];
+  const busy = new Set<string>();
+  for (const m of unscheduled) {
+    if (selected.length >= count) break;
+    if ((m.homeTeamId && busy.has(m.homeTeamId)) || (m.awayTeamId && busy.has(m.awayTeamId))) continue;
+    selected.push({ id: m.id });
+    if (m.homeTeamId) busy.add(m.homeTeamId);
+    if (m.awayTeamId) busy.add(m.awayTeamId);
+  }
+  if (selected.length === 0) return err("No fixtures could be scheduled without a team clash.");
+
+  const start = input.firstKickAt ?? new Date(Date.now() + 90 * 60 * 1000);
+  const gapMs = 2 * 60 * 60 * 1000; // two hours between kick-offs
+  await prisma.$transaction(async (tx) => {
+    for (let i = 0; i < selected.length; i++) {
+      await tx.match.update({ where: { id: selected[i].id }, data: { scheduledAt: new Date(start.getTime() + i * gapMs) } });
+    }
+  });
+  return ok({ scheduled: selected.length, remaining: unscheduled.length - selected.length });
+}
+
 /* ------------------------------ Competitions ------------------------------- */
 
 export type CompetitionType = "LEAGUE" | "CUP" | "LEAGUE_CUP" | "CUSTOM";

@@ -12,6 +12,7 @@ import {
   generateGroupFixturesAction,
   generateLeagueFixturesAction,
   removeTeamMemberAction,
+  scheduleLeagueWaveAction,
   setCompetitionStatusAction,
   setTeamCaptainAction,
   setTeamImageAction,
@@ -453,6 +454,20 @@ export function CompetitionActions({
         ) : (
           <>
             <p className="text-sm text-muted">Fixtures exist. Manage referees below, then run each match.</p>
+            <div className="flex flex-wrap items-end gap-2">
+              <Button
+                variant="secondary"
+                onClick={() =>
+                  void scheduleLeagueWaveAction({ competitionId, count: 5 }).then((r) => {
+                    if (r.ok && r.data) flash({ ok: true }, `Scheduled ${r.data.scheduled} fixture(s).`);
+                    else flash({ ok: false, error: (r as { error?: string }).error }, "");
+                    router.refresh();
+                  })
+                }
+              >
+                📅 Schedule next 5 fixtures (no clashes)
+              </Button>
+            </div>
             {(type === "CUP" || type === "LEAGUE_CUP") ? (
               <div className="flex flex-wrap items-end gap-2">
                 <Input value={roundLabel} onChange={(e) => setRoundLabel(e.target.value)} placeholder="Round name (cosmetic)" className="max-w-52" hidden aria-hidden />
@@ -482,7 +497,7 @@ export function FixtureRefereeRow({
   match,
   referees,
 }: {
-  match: { id: string; code: string; homeName: string; awayName: string; homeScore: number; awayScore: number; status: string; cupRound: number | null; refereeId: string | null };
+  match: { id: string; code: string; homeName: string; awayName: string; homeScore: number; awayScore: number; status: string; cupRound: number | null; refereeId: string | null; scheduledAt?: string | null };
   referees: { id: string; name: string }[];
 }) {
   const { flash } = useFlash();
@@ -496,31 +511,42 @@ export function FixtureRefereeRow({
         <p className="text-xs text-subtle">
           Code {match.code}
           {match.cupRound ? ` · Cup round ${match.cupRound}` : ""} · <span className={cn("font-semibold", match.status === "LIVE" ? "text-success" : match.status === "DRAFT" ? "text-warning" : "text-muted")}>{match.status}</span>
+          {match.scheduledAt ? (
+            <span className="ml-1">
+              · ⏱ {new Date(new Date(match.scheduledAt).getTime() + 3600_000).toISOString().slice(11, 16)} WAT
+            </span>
+          ) : null}
         </p>
       </div>
-      {match.status !== "FINISHED" ? (
-        <label className="flex items-center gap-1.5 text-xs font-semibold text-muted">
-          Referee
+      <div className="flex flex-wrap items-center gap-2">
+        {match.status !== "FINISHED" ? (
           <Select
-            className="w-44 py-1 text-xs"
+            aria-label="Referee"
+            title="Referee"
+            className="w-40 py-1 text-xs"
             value={value}
             onChange={(e) => setValue(e.target.value)}
             onBlur={() => {
               if (value !== (match.refereeId ?? "")) void assignRefereeAction({ matchId: match.id, refereeId: value || null }).then((r) => flash(r, "Referee updated."));
             }}
           >
-            <option value="">Unassigned</option>
+            <option value="">No referee</option>
             {referees.map((r) => (
               <option key={r.id} value={r.id}>
                 {r.name}
               </option>
             ))}
           </Select>
-        </label>
-      ) : null}
-      <a href={`/match/${match.code}`} className="rounded-lg bg-surface px-3 py-1.5 text-xs font-semibold text-fg hover:bg-line">
-        Open
-      </a>
+        ) : null}
+        {match.status === "DRAFT" ? (
+          <a href={`/admin/matches/${match.code}/setup`} className="rounded-lg bg-surface px-3 py-1.5 text-xs font-semibold text-fg hover:bg-line">
+            Setup →
+          </a>
+        ) : null}
+        <a href={`/match/${match.code}`} className="rounded-lg bg-surface px-3 py-1.5 text-xs font-semibold text-fg hover:bg-line">
+          Open
+        </a>
+      </div>
     </div>
   );
 }
