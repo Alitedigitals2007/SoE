@@ -24,6 +24,7 @@ vi.mock("@/lib/prisma", () => ({
     },
     round: {
       findUnique: vi.fn(),
+      create: vi.fn(),
       update: vi.fn(),
       updateMany: vi.fn(),
       delete: vi.fn(),
@@ -335,7 +336,9 @@ describe("addQuestion", () => {
   it("adds a question as referee", async () => {
     const match = mockMatch({ questions: [] });
     (prisma.match.findUnique as any).mockResolvedValue(match);
-    (prisma.question.create as any).mockResolvedValue({});
+    (prisma.question.create as any).mockResolvedValue({ id: "q-new" });
+    (prisma.round.create as any).mockResolvedValue({});
+    (prisma.question.update as any).mockResolvedValue({});
 
     const result = await addQuestion(REFEREE, {
       code: "AB12CD",

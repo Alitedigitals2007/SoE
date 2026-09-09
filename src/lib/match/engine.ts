@@ -121,11 +121,13 @@ export async function adminCreateMatch(
               scheduledAt,
             },
           });
-          const rows: { userId: string; team: "HOME" | "AWAY"; number: number }[] = [];
-          for (const member of home.members) rows.push({ userId: member.userId, team: "HOME", number: member.number });
-          for (const member of away.members) rows.push({ userId: member.userId, team: "AWAY", number: member.number });
+          const rows: { userId: string; team: "HOME" | "AWAY"; number: number; isCaptain: boolean }[] = [];
+          for (const member of home.members) rows.push({ userId: member.userId, team: "HOME", number: member.number, isCaptain: member.isCaptain });
+          for (const member of away.members) rows.push({ userId: member.userId, team: "AWAY", number: member.number, isCaptain: member.isCaptain });
           for (const row of rows) {
-            await tx.matchPlayer.create({ data: { matchId: match.id, userId: row.userId, team: row.team, number: row.number } });
+            await tx.matchPlayer.create({
+              data: { matchId: match.id, userId: row.userId, team: row.team, number: row.number, isCaptain: row.isCaptain },
+            });
           }
         });
         return ok({ code });
@@ -316,8 +318,22 @@ export async function addQuestion(
   if (!text || !ref) return err("Both the question and its reference answer are required.");
   if (match.questions.length >= 20) return err("Each match prepares at most 20 questions.");
 
+  // Auto-slot the first ten questions into played slots 1..10.
+  const used = new Set(match.rounds.filter((r) => r.status === "PENDING").map((r) => r.number));
+  let slot: number | null = null;
+  for (let n = 1; n <= 10; n++) {
+    if (!used.has(n)) {
+      slot = n;
+      break;
+    }
+  }
+
   const order = (match.questions.at(-1)?.order ?? 0) + 1;
-  await prisma.question.create({ data: { matchId: match.id, order, text, referenceAnswer: ref } });
+  const created = await prisma.question.create({ data: { matchId: match.id, order, text, referenceAnswer: ref } });
+  if (slot != null) {
+    await prisma.round.create({ data: { matchId: match.id, number: slot, questionId: created.id } });
+    await prisma.question.update({ where: { id: created.id }, data: { roundNumber: slot } });
+  }
   await publishMatchUpdate(match.code);
   return ok(undefined);
 }
