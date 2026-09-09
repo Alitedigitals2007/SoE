@@ -548,7 +548,12 @@ function LockedStage({
   onError: (e: string | null) => void;
 }) {
   const [selectedId, setSelectedId] = React.useState<string | null>(null);
+  const [assistId, setAssistId] = React.useState("");
   const revealRows = round.answers;
+  const selectedAnswer = revealRows.find((a) => a.id === selectedId) ?? null;
+  const assistCandidates = selectedAnswer
+    ? snapshot.roster.filter((r) => r.team === selectedAnswer.team && r.role === "STARTER")
+    : [];
 
   return (
     <Card>
@@ -588,7 +593,7 @@ function LockedStage({
                   <button
                     type="button"
                     disabled={!isReferee}
-                    onClick={() => setSelectedId(selectedId === a.id ? null : a.id)}
+                    onClick={() => { setSelectedId(selectedId === a.id ? null : a.id); setAssistId(""); }}
                     aria-pressed={selectedId === a.id}
                     className={cn(
                       "flex w-full items-center justify-between gap-3 rounded-lg border px-3.5 py-2.5 text-left text-sm transition-colors",
@@ -621,25 +626,48 @@ function LockedStage({
         )}
 
         {isReferee ? (
-          <div className="mt-5 flex flex-wrap items-center gap-3 border-t border-line pt-4">
-            <Button
-              variant="pitch"
-              disabled={!selectedId}
-              onClick={() =>
-                submit(decideRoundAction({ code: snapshot.code, decision: "GOAL", submissionId: selectedId ?? undefined }), onError)
-              }
-            >
-              ⚽ Award goal to selected
-            </Button>
-            <Button
-              variant="danger"
-              onClick={() => submit(decideRoundAction({ code: snapshot.code, decision: "NO_GOAL" }), onError)}
-            >
-              ❌ No goal
-            </Button>
-            {!selectedId && revealRows.length > 0 ? (
-              <span className="text-xs text-subtle">Select an answer above to award a goal.</span>
+          <div className="mt-5 space-y-3 border-t border-line pt-4">
+            {selectedId && assistCandidates.length > 0 ? (
+              <label className="flex flex-wrap items-center gap-2 text-xs font-semibold text-muted">
+                Award an assist to (optional)
+                <Select value={assistId} onChange={(e) => setAssistId(e.target.value)} className="w-52 py-1 text-xs">
+                  <option value="">No assist</option>
+                  {assistCandidates.map((p) => (
+                    <option key={p.userId} value={p.userId}>
+                      {p.isCaptain ? `${p.name} (C)` : p.name}
+                    </option>
+                  ))}
+                </Select>
+              </label>
             ) : null}
+            <div className="flex flex-wrap items-center gap-3">
+              <Button
+                variant="pitch"
+                disabled={!selectedId}
+                onClick={() =>
+                  submit(
+                    decideRoundAction({
+                      code: snapshot.code,
+                      decision: "GOAL",
+                      submissionId: selectedId ?? undefined,
+                      assistUserId: assistId || null,
+                    }),
+                    onError,
+                  )
+                }
+              >
+                ⚽ Award goal {assistId ? "+ assist" : ""} to selected
+              </Button>
+              <Button
+                variant="danger"
+                onClick={() => submit(decideRoundAction({ code: snapshot.code, decision: "NO_GOAL" }), onError)}
+              >
+                ❌ No goal
+              </Button>
+              {!selectedId && revealRows.length > 0 ? (
+                <span className="text-xs text-subtle">Select an answer above to award a goal.</span>
+              ) : null}
+            </div>
           </div>
         ) : null}
       </div>

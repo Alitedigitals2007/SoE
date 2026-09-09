@@ -932,3 +932,43 @@ export async function fantasyBoard(competitionId: string) {
     orderBy: [{ points: "desc" }, { updatedAt: "asc" }],
   });
 }
+
+/** Per-competition golden boot: goals scored only in this competition's matches. */
+export async function competitionTopScorers(competitionId: string, limit = 10) {
+  const rounds = await prisma.round.findMany({
+    where: {
+      decision: "GOAL",
+      goalSubmission: { isNot: null },
+      match: { competitionId, status: "FINISHED" },
+    },
+    include: { goalSubmission: { include: { player: { include: { user: { select: { id: true, name: true } } } } } } },
+    take: 500,
+  });
+  const map = new Map<string, { id: string; name: string; goals: number }>();
+  for (const r of rounds) {
+    const p = r.goalSubmission?.player.user;
+    if (!p) continue;
+    const cur = map.get(p.id) ?? { id: p.id, name: p.name, goals: 0 };
+    cur.goals += 1;
+    map.set(p.id, cur);
+  }
+  return [...map.values()].sort((a, b) => b.goals - a.goals).slice(0, limit);
+}
+
+/** Per-competition assists: credited assists in this competition's matches. */
+export async function competitionTopAssists(competitionId: string, limit = 10) {
+  const rounds = await prisma.round.findMany({
+    where: { decision: "GOAL", assistPlayer: { isNot: null }, match: { competitionId, status: "FINISHED" } },
+    include: { assistPlayer: { include: { user: { select: { id: true, name: true } } } } },
+    take: 500,
+  });
+  const map = new Map<string, { id: string; name: string; assists: number }>();
+  for (const r of rounds) {
+    const p = r.assistPlayer?.user;
+    if (!p) continue;
+    const cur = map.get(p.id) ?? { id: p.id, name: p.name, assists: 0 };
+    cur.assists += 1;
+    map.set(p.id, cur);
+  }
+  return [...map.values()].sort((a, b) => b.assists - a.assists).slice(0, limit);
+}

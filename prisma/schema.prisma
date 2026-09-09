@@ -183,6 +183,7 @@ model MatchPlayer {
   incidents   ConductIncident[]
   outInSubs   Substitution[]    @relation("SubPlayerOut")
   inInSubs    Substitution[]    @relation("SubPlayerIn")
+  assists     Round[]           @relation("RoundAssist")
 
   @@unique([matchId, userId])
   @@unique([matchId, team, number])
@@ -237,9 +238,11 @@ model Round {
   decidedAt        DateTime?
   decision         RoundDecision?
   goalSubmissionId String?        @unique
+  assistPlayerId   String? // player credited with the assist on a goal round
 
   submissions    Submission[]
   goalSubmission Submission?  @relation("RoundWinner", fields: [goalSubmissionId], references: [id])
+  assistPlayer   MatchPlayer? @relation("RoundAssist", fields: [assistPlayerId], references: [id], onDelete: SetNull)
 
   @@unique([matchId, number])
   @@unique([matchId, questionId])

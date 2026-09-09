@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
-import { leagueStandings } from "@/lib/platform/engine";
+import { leagueStandings, competitionTopScorers, competitionTopAssists } from "@/lib/platform/engine";
 import { PublicShell } from "@/components/site";
 import { Badge } from "@/components/ui";
 import { CsvDownloadButton } from "@/components/CsvDownloadButton";
@@ -30,6 +30,7 @@ export default async function CompetitionDetail({ params }: { params: Promise<{ 
   const showTable = comp.type === "LEAGUE";
   const cup = comp.type === "CUP";
   const rows = showTable ? await leagueStandings(comp.id) : null;
+  const [topScorers, topAssists] = await Promise.all([competitionTopScorers(comp.id), competitionTopAssists(comp.id)]);
 
   const groupByRound = new Map<number, typeof comp.matches>();
   if (cup) {
@@ -135,9 +136,45 @@ export default async function CompetitionDetail({ params }: { params: Promise<{ 
           </div>
         )}
 
+        {(topScorers.length > 0 || topAssists.length > 0) ? (
+          <div className="mt-10 grid gap-5 md:grid-cols-2">
+            {topScorers.length > 0 ? (
+              <div className="rounded-2xl border-2 border-fg/15 bg-bg-elevated p-5 shadow-[4px_4px_0_rgba(11,32,48,.08)]">
+                <h3 className="text-sm font-black uppercase tracking-wider text-gold">⚽ Golden boot</h3>
+                <ol className="mt-3 space-y-1.5">
+                  {topScorers.map((s, i) => (
+                    <li key={s.id} className="flex items-center gap-3 text-sm">
+                      <span className="w-5 text-right text-xs font-black text-subtle">{i + 1}</span>
+                      <Link href={`/players/${s.id}`} className="min-w-0 flex-1 truncate font-semibold text-fg hover:text-brand">
+                        {s.name}
+                      </Link>
+                      <span className="font-black tabular-nums text-brand">{s.goals}</span>
+                    </li>
+                  ))}
+                </ol>
+              </div>
+            ) : null}
+            {topAssists.length > 0 ? (
+              <div className="rounded-2xl border-2 border-fg/15 bg-bg-elevated p-5 shadow-[4px_4px_0_rgba(11,32,48,.08)]">
+                <h3 className="text-sm font-black uppercase tracking-wider text-info">🎯 Top assists</h3>
+                <ol className="mt-3 space-y-1.5">
+                  {topAssists.map((s, i) => (
+                    <li key={s.id} className="flex items-center gap-3 text-sm">
+                      <span className="w-5 text-right text-xs font-black text-subtle">{i + 1}</span>
+                      <Link href={`/players/${s.id}`} className="min-w-0 flex-1 truncate font-semibold text-fg hover:text-brand">
+                        {s.name}
+                      </Link>
+                      <span className="font-black tabular-nums text-info">{s.assists}</span>
+                    </li>
+                  ))}
+                </ol>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+
         {/* Fixtures */}
-        <div id="fixtures" className="mt-10">
-          <h2 className="text-xl font-bold text-fg">
+        <div id="fixtures" className="mt-10">          <h2 className="text-xl font-bold text-fg">
             {cup ? "Matches" : "Fixtures"} <span className="text-base font-medium text-muted">({comp.matches.length})</span>
           </h2>
           <div className="mt-3 grid gap-2">

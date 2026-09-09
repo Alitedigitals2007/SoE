@@ -181,6 +181,7 @@ export async function decideRoundAction(input: {
   code: string;
   decision: "GOAL" | "NO_GOAL";
   submissionId?: string;
+  assistUserId?: string | null;
 }): Promise<ActionResult> {
   return runEngine((actor) => decideRound(actor, input));
 }

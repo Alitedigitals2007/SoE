@@ -1,0 +1,573 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0" name="viewport"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" rel="stylesheet"/><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=Oswald:wght@500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><style>@layer base{html,body{margin:0;padding:0;}body{overscroll-behavior:none;}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config={darkMode:"class",theme:{extend:{colors:{"tertiary-container":"#fc7c78","card-yellow":"#FBBF24","error-container":"#93000a","on-tertiary-fixed-variant":"#842225","on-tertiary":"#650911","error":"#ffb4ab","on-surface-variant":"#bbcabf","tertiary":"#ffb3af","surface":"#0f131d","pitch-divider":"#1E293B","inverse-primary":"#006c49","on-primary-container":"#00422b","surface-dim":"#0f131d","on-secondary":"#472a00","on-error-container":"#ffdad6","pitch-border":"#374151","on-primary-fixed-variant":"#005236","pitch-elevated":"#1F2937","text-secondary":"#9CA3AF","on-primary":"#003824","surface-variant":"#313540","on-primary-fixed":"#002113","pitch-base":"#0B0F19","on-tertiary-container":"#711419","on-error":"#690005","primary-container":"#10b981","inverse-surface":"#dfe2f1","surface-container-low":"#171b26","primary":"#4edea3","text-muted":"#6B7280","background":"#0f131d","inverse-on-surface":"#2c303b","gold-trophy":"#F59E0B","pitch-void":"#050811","surface-tint":"#4edea3","secondary-container":"#ee9800","neon-emerald":"#10B981","neon-emerald-glow":"rgba(16, 185, 129, 0.25)","secondary-fixed":"#ffddb8","surface-container-highest":"#313540","surface-container-lowest":"#0a0e18","on-secondary-container":"#5b3800","primary-fixed":"#6ffbbe","secondary":"#ffb95f","on-secondary-fixed-variant":"#653e00","card-red-glow":"rgba(239, 68, 68, 0.25)","outline-variant":"#3c4a42","secondary-fixed-dim":"#ffb95f","card-red":"#EF4444","on-secondary-fixed":"#2a1700","on-background":"#dfe2f1","surface-container":"#1c1f2a","outline":"#86948a","pitch-surface":"#111827","tertiary-fixed-dim":"#ffb3af","primary-fixed-dim":"#4edea3","tertiary-fixed":"#ffdad7","gold-glow":"rgba(245, 158, 11, 0.2)","on-tertiary-fixed":"#410005","surface-bright":"#353944","referee-cyan":"#06B6D4","on-surface":"#dfe2f1","text-primary":"#F9FAFB","surface-container-high":"#262a35"},borderRadius:{DEFAULT:"0.125rem",lg:"0.25rem",xl:"0.5rem",full:"0.75rem"},spacing:{"space-lg":"1.5rem","space-2xs":"0.25rem","space-md":"1rem","space-sm":"0.75rem","arena-margin-desktop":"2.5rem","space-xl":"2rem","arena-margin-mobile":"1rem","scoreboard-gutter":"1rem","space-2xl":"3rem","space-3xl":"4rem","space-xs":"0.5rem","timeline-pad":"1.25rem"},fontFamily:{"headline-sm":["Oswald"],"headline-md":["Oswald"],"headline-lg-mobile":["Oswald"],"body-md":["Inter"],"display-hero":["Oswald"],"label-tech":["Inter"],"body-lg":["Inter"],"display-hero-mobile":["Oswald"],"timer-display":["Oswald"],"body-sm":["Inter"],"label-caps":["Inter"],"headline-lg":["Oswald"],"scoreboard-lg":["Oswald"],"scoreboard-lg-mobile":["Oswald"]},fontSize:{"headline-sm":["18px",{lineHeight:"24px",letterSpacing:"0.02em",fontWeight:"600"}],"headline-md":["24px",{lineHeight:"28px",letterSpacing:"0.01em",fontWeight:"600"}],"headline-lg-mobile":["26px",{lineHeight:"32px",letterSpacing:"0.02em",fontWeight:"600"}],"body-md":["15px",{lineHeight:"22px",fontWeight:"400"}],"display-hero":["72px",{lineHeight:"76px",letterSpacing:"0.02em",fontWeight:"700"}],"label-tech":["12px",{lineHeight:"16px",letterSpacing:"0.02em",fontWeight:"600"}],"body-lg":["18px",{lineHeight:"28px",fontWeight:"500"}],"display-hero-mobile":["44px",{lineHeight:"48px",letterSpacing:"0.02em",fontWeight:"700"}],"timer-display":["48px",{lineHeight:"48px",letterSpacing:"0.05em",fontWeight:"700"}],"body-sm":["13px",{lineHeight:"18px",fontWeight:"400"}],"label-caps":["11px",{lineHeight:"14px",letterSpacing:"0.08em",fontWeight:"700"}],"headline-lg":["32px",{lineHeight:"38px",letterSpacing:"0.02em",fontWeight:"600"}],"scoreboard-lg":["56px",{lineHeight:"60px",letterSpacing:"0.04em",fontWeight:"700"}],"scoreboard-lg-mobile":["36px",{lineHeight:"40px",letterSpacing:"0.03em",fontWeight:"700"}]}}}};</script></head><body class="bg-pitch-void text-on-surface font-body-md text-body-md"><header class="fixed top-0 w-full z-50 bg-pitch-base/95 backdrop-blur-xl shadow-[0_1px_8px_rgba(0,0,0,0.6)]"><div class="h-16 w-full px-arena-margin-desktop flex items-center justify-between gap-space-md"><div class="flex items-center gap-space-lg shrink-0"><div class="flex items-center gap-space-sm"><img alt="Stadium of Elite Crest" class="h-8 w-auto object-contain" src="https://lh3.googleusercontent.com/aida-public/AB6AXuATNtkjgp8hF227g3dKfca9kgM0_4JWNNMXhGWaIDLDfLHmvBw-FjxpZ11T_WnluiZenLOFus0pWjnhy0y2lj6auJqgY1w9CUEzNkXd5fhBe9RDLh7zgzYfzEdpJPL6IYCzsfqGEGuGpe_kgxHkO9Ye4fqOqiNKxNY8nGO9jusShBpRPUGTafiIRIrwiRjFi_LJYU3M4KnEuWvne5w-cRmwniU8eQXd1xi4Xc0ngbtU3SeZ7uvpe-aW"/><div class="flex flex-col"><span class="font-headline-sm text-headline-sm uppercase tracking-wider text-text-primary">Stadium of Elite</span><span class="font-label-caps text-label-caps uppercase text-neon-emerald tracking-widest">Academic Esports Championship</span></div></div><div class="hidden xl:flex items-center gap-space-xs px-space-sm py-space-2xs rounded-full bg-surface-container-high/80"><span class="w-2 h-2 rounded-full bg-card-red animate-ping"></span><span class="font-label-caps text-label-caps tracking-widest text-on-surface uppercase">MATCHDAY 4 • ARENA A • LIVE</span></div></div><nav class="hidden lg:flex items-center gap-space-sm" data-active-classes="bg-primary-container text-on-primary-container font-headline-sm text-headline-sm rounded-lg px-space-sm py-space-xs"><a aria-current="page" class="uppercase transition-colors bg-primary-container text-on-primary-container font-headline-sm text-headline-sm rounded-lg px-space-sm py-space-xs" data-path="match-arena" href="#">Match Arena</a><a class="font-headline-sm text-headline-sm uppercase px-space-sm py-space-xs text-on-surface-variant hover:text-on-surface transition-colors" data-path="referee-control-room" href="#">Referee Control Room</a><a class="font-headline-sm text-headline-sm uppercase px-space-sm py-space-xs text-on-surface-variant hover:text-on-surface transition-colors" data-path="team-dashboard" href="#">Team Dashboard</a><a class="font-headline-sm text-headline-sm uppercase px-space-sm py-space-xs text-on-surface-variant hover:text-on-surface transition-colors" data-path="leaderboard-and-timeline" href="#">Leaderboard &amp; Timeline</a><a class="font-headline-sm text-headline-sm uppercase px-space-sm py-space-xs text-on-surface-variant hover:text-on-surface transition-colors" data-path="rules-and-schedule" href="#">Rules &amp; Schedule</a></nav><div class="flex items-center gap-space-md shrink-0"><button class="relative p-space-xs text-on-surface-variant hover:text-on-surface transition-colors flex items-center justify-center"><span class="material-symbols-outlined">notifications</span><span class="absolute top-1 right-1 w-2 h-2 rounded-full bg-neon-emerald"></span></button><div class="flex items-center gap-space-sm bg-surface-container-high/60 px-space-sm py-space-2xs rounded-full"><div class="text-right hidden sm:flex flex-col"><span class="font-label-tech text-label-tech text-text-primary">David #09</span><span class="font-label-caps text-label-caps text-gold-trophy uppercase tracking-wider">Team Alpha Captain</span></div><img alt="Profile" class="w-8 h-8 rounded-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuByQuv0K6TOCjobUA2FcrC5GW8JJUkBZAgbENoQAtGE5V4wIJdEpz8CZcGkN6cekD0YQUutPRun389CGrWEKSrlfI8DjylDlIgbfkIcWyvcc-L2ucxDX4ZZgt8f0umIuDRsn3H3bmRv2EX3CJpGpG9J-Y5tFhaURLkdOFFH25pDpDUJYugM1TgFA68TGTcatW_ZLw_RI9G3m4hurgk5OSd6zNx94QjUZNHzDszZfHzTWsld4PIrNrG4"/></div></div></div></header><main class="w-full pt-16 bg-pitch-void min-h-screen"><div class="flex flex-col w-full">
+<!-- Persistent High-Voltage Sports Telemetry Header Strip -->
+<div class="w-full bg-pitch-base shadow-xl py-space-sm px-arena-margin-desktop sticky top-16 z-40">
+<div class="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-space-md">
+<!-- Home Squad (Team Alpha) -->
+<div class="flex items-center gap-space-md w-full md:w-auto justify-start">
+<div class="relative w-12 h-12 rounded-xl bg-surface-container-high flex items-center justify-center p-2 shadow-inner">
+<svg class="w-8 h-8 text-neon-emerald" fill="none" stroke="currentColor" stroke-width="2" viewbox="0 0 24 24">
+<path d="M12 2L3 7v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V7l-9-5z" stroke-linecap="round" stroke-linejoin="round"></path>
+<path d="M12 7v5l3 3" stroke-linecap="round" stroke-linejoin="round"></path>
+</svg>
+<span class="absolute -top-1 -right-1 w-3.5 h-3.5 bg-neon-emerald rounded-full"></span>
+</div>
+<div>
+<div class="flex items-center gap-space-xs">
+<span class="font-headline-sm text-headline-sm uppercase text-text-primary tracking-wider">Team Alpha</span>
+<span class="font-label-caps text-label-caps uppercase px-space-xs py-0.5 rounded bg-neon-emerald/20 text-neon-emerald">Home</span>
+</div>
+<span class="font-label-tech text-label-tech text-text-muted">Rank #1 • Division A</span>
+</div>
+</div>
+<!-- Main Scoreboard Core Telemetry -->
+<div class="flex items-center gap-space-lg bg-surface-container-low px-space-xl py-space-xs rounded-xl shadow-2xl">
+<div class="flex items-baseline gap-space-sm">
+<span class="font-scoreboard-lg text-scoreboard-lg text-neon-emerald tracking-tight transition-all duration-300" id="score-alpha">3</span>
+<span class="font-scoreboard-lg text-scoreboard-lg text-text-muted select-none">:</span>
+<span class="font-scoreboard-lg text-scoreboard-lg text-text-primary tracking-tight transition-all duration-300" id="score-titans">2</span>
+</div>
+<div class="h-10 w-px bg-pitch-divider"></div>
+<!-- Question Tracker & Game Clock -->
+<div class="flex flex-col items-center">
+<div class="flex items-center gap-space-xs">
+<span class="w-2 h-2 rounded-full bg-neon-emerald animate-ping"></span>
+<span class="font-headline-sm text-headline-sm text-gold-trophy uppercase tracking-wider">QUESTION 7 / 10</span>
+</div>
+<div class="flex items-center gap-space-xs mt-0.5">
+<span class="material-symbols-outlined text-text-muted text-[16px]">schedule</span>
+<span class="font-timer-display text-body-lg text-text-primary uppercase tracking-widest" id="round-clock">02:45</span>
+</div>
+</div>
+</div>
+<!-- Away Squad & Official Indicators -->
+<div class="flex items-center gap-space-md w-full md:w-auto justify-end">
+<div class="text-right">
+<div class="flex items-center justify-end gap-space-xs">
+<span class="font-label-caps text-label-caps uppercase px-space-xs py-0.5 rounded bg-surface-variant text-text-secondary">Away</span>
+<span class="font-headline-sm text-headline-sm uppercase text-text-primary tracking-wider">Team Titans</span>
+</div>
+<span class="font-label-tech text-label-tech text-text-muted">Rank #3 • Division A</span>
+</div>
+<div class="relative w-12 h-12 rounded-xl bg-surface-container-high flex items-center justify-center p-2 shadow-inner">
+<svg class="w-8 h-8 text-referee-cyan" fill="none" stroke="currentColor" stroke-width="2" viewbox="0 0 24 24">
+<path d="M13 10V3L4 14h7v7l9-11h-7z" stroke-linecap="round" stroke-linejoin="round"></path>
+</svg>
+</div>
+<!-- Referee Pill & Stadium Controls -->
+<div class="hidden lg:flex items-center gap-space-xs pl-space-md ml-space-xs">
+<div class="flex flex-col items-end">
+<span class="font-label-caps text-label-caps uppercase text-referee-cyan">Head Referee</span>
+<span class="font-label-tech text-label-tech text-text-secondary">Marcus Vance</span>
+</div>
+<button class="p-2 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface-variant transition-colors" id="sound-toggle" title="Toggle Arena Stadium Audio">
+<span class="material-symbols-outlined text-[20px]">volume_up</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+<!-- Stadium Main Arena Content tripartite dynamic layout -->
+<div class="w-full max-w-7xl mx-auto px-arena-margin-desktop py-space-lg">
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-space-lg">
+<!-- LEFT COLUMN: Team Rosters & Substitution Box (3 cols) -->
+<div class="lg:col-span-3 flex flex-col gap-space-md">
+<!-- Squad Card -->
+<div class="bg-pitch-surface rounded-xl p-space-md shadow-xl">
+<div class="flex items-center justify-between pb-space-sm mb-space-sm">
+<div class="flex items-center gap-space-xs">
+<span class="material-symbols-outlined text-neon-emerald text-[20px]">group</span>
+<span class="font-headline-sm text-headline-sm uppercase text-text-primary">Team Alpha Roster</span>
+</div>
+<span class="font-label-caps text-label-caps bg-neon-emerald/10 text-neon-emerald px-2 py-0.5 rounded-full">5 ACTIVE</span>
+</div>
+<!-- Active 5 Players -->
+<div class="space-y-space-xs">
+<!-- Player 1 Captain -->
+<div class="flex items-center justify-between p-space-xs rounded-lg bg-surface-container-high transition hover:bg-surface-bright">
+<div class="flex items-center gap-space-xs">
+<span class="material-symbols-outlined text-gold-trophy text-[16px]" style="font-variation-settings: 'FILL' 1;">star</span>
+<span class="font-body-md text-body-sm font-semibold text-text-primary">David #09 (C)</span>
+</div>
+<span class="font-label-tech text-label-tech text-neon-emerald flex items-center gap-1">
+<span class="w-1.5 h-1.5 rounded-full bg-neon-emerald"></span>
+                00:03.1s
+              </span>
+</div>
+<!-- Player 2 -->
+<div class="flex items-center justify-between p-space-xs rounded-lg bg-surface-container-high transition hover:bg-surface-bright">
+<div class="flex items-center gap-space-xs">
+<span class="w-2 h-2 rounded-full bg-card-yellow ml-1"></span>
+<span class="font-body-md text-body-sm text-text-primary">Samuel #04</span>
+<span class="font-label-caps text-label-caps px-1 rounded bg-card-yellow/20 text-card-yellow uppercase text-[9px]">🟨 04:10</span>
+</div>
+<span class="font-label-tech text-label-tech text-neon-emerald flex items-center gap-1">
+<span class="w-1.5 h-1.5 rounded-full bg-neon-emerald"></span>
+                00:04.2s
+              </span>
+</div>
+<!-- Player 3 -->
+<div class="flex items-center justify-between p-space-xs rounded-lg bg-surface-container-high transition hover:bg-surface-bright">
+<div class="flex items-center gap-space-xs">
+<span class="w-2 h-2 rounded-full bg-neon-emerald ml-1"></span>
+<span class="font-body-md text-body-sm text-text-primary">John #11</span>
+</div>
+<span class="font-label-tech text-label-tech text-neon-emerald flex items-center gap-1">
+<span class="w-1.5 h-1.5 rounded-full bg-neon-emerald"></span>
+                Locked
+              </span>
+</div>
+<!-- Player 4 Pending -->
+<div class="flex items-center justify-between p-space-xs rounded-lg bg-surface-container-low transition hover:bg-surface-container">
+<div class="flex items-center gap-space-xs">
+<span class="w-2 h-2 rounded-full bg-text-muted ml-1 animate-pulse"></span>
+<span class="font-body-md text-body-sm text-text-secondary">Peter #07</span>
+</div>
+<span class="font-label-tech text-label-tech text-text-muted italic">Typing...</span>
+</div>
+<!-- Player 5 Subbed In -->
+<div class="flex items-center justify-between p-space-xs rounded-lg bg-surface-container-high transition hover:bg-surface-bright">
+<div class="flex items-center gap-space-xs">
+<span class="material-symbols-outlined text-referee-cyan text-[14px]">sync_alt</span>
+<span class="font-body-md text-body-sm text-text-primary">Michael #17</span>
+<span class="font-label-caps text-label-caps px-1 rounded bg-referee-cyan/20 text-referee-cyan uppercase text-[9px]">SUBBED IN</span>
+</div>
+<span class="font-label-tech text-label-tech text-neon-emerald flex items-center gap-1">
+<span class="w-1.5 h-1.5 rounded-full bg-neon-emerald"></span>
+                00:05.8s
+              </span>
+</div>
+</div>
+<!-- Substitutes Bench Section -->
+<div class="mt-space-md pt-space-sm">
+<div class="flex items-center justify-between mb-space-xs">
+<span class="font-label-caps text-label-caps uppercase text-text-muted tracking-wider">Substitutes Bench (3)</span>
+<span class="font-label-caps text-label-caps uppercase text-card-red text-[10px]">Locked from Answering</span>
+</div>
+<div class="space-y-1.5 opacity-75">
+<div class="flex items-center justify-between py-1.5 px-space-xs rounded bg-surface-container-lowest text-text-muted">
+<span class="font-body-sm text-body-sm">James #14 (Analyst)</span>
+<span class="font-label-caps text-label-caps uppercase text-[9px] bg-pitch-surface px-1 py-0.5 rounded">Bench</span>
+</div>
+<div class="flex items-center justify-between py-1.5 px-space-xs rounded bg-surface-container-lowest text-text-muted">
+<span class="font-body-sm text-body-sm">Daniel #21 (Reserve)</span>
+<span class="font-label-caps text-label-caps uppercase text-[9px] bg-pitch-surface px-1 py-0.5 rounded">Bench</span>
+</div>
+<div class="flex items-center justify-between py-1.5 px-space-xs rounded bg-surface-container-lowest text-text-muted">
+<span class="font-body-sm text-body-sm">Alex #02</span>
+<span class="font-label-caps text-label-caps uppercase text-[9px] bg-card-red/20 text-card-red px-1 py-0.5 rounded">Off Pitch</span>
+</div>
+</div>
+<!-- Captain Sub Request -->
+<button class="w-full mt-space-md flex items-center justify-center gap-space-xs py-space-xs px-space-sm bg-surface-container-high hover:bg-surface-bright text-text-primary rounded-lg font-label-tech text-label-tech uppercase transition shadow-md" id="sub-btn">
+<span class="material-symbols-outlined text-[16px] text-gold-trophy">published_with_changes</span>
+              Tactical Sub Request
+            </button>
+</div>
+</div>
+<!-- Academic Discipline Quick Telemetry -->
+<div class="bg-pitch-surface rounded-xl p-space-md shadow-xl">
+<div class="flex items-center justify-between mb-space-xs">
+<span class="font-label-caps text-label-caps uppercase text-text-muted tracking-wider">Match Rules Enforcement</span>
+<span class="font-label-caps text-label-caps uppercase text-neon-emerald">FAIR PLAY OK</span>
+</div>
+<div class="grid grid-cols-2 gap-2 text-center">
+<div class="p-2 rounded bg-surface-container-low">
+<span class="font-label-caps text-label-caps block text-card-yellow uppercase">Yellow Cards</span>
+<span class="font-headline-sm text-headline-sm text-card-yellow">1</span>
+</div>
+<div class="p-2 rounded bg-surface-container-low">
+<span class="font-label-caps text-label-caps block text-card-red uppercase">Red Cards</span>
+<span class="font-headline-sm text-headline-sm text-text-muted">0</span>
+</div>
+</div>
+</div>
+</div>
+<!-- CENTER COLUMN: Active Arena & Submissions Stage (6 cols) -->
+<div class="lg:col-span-6 flex flex-col gap-space-md">
+<!-- Live Submissions Broadcast Banner -->
+<div class="w-full bg-gradient-to-r from-neon-emerald/20 via-surface-container-high to-neon-emerald/20 p-space-sm rounded-xl flex items-center justify-between shadow-lg">
+<div class="flex items-center gap-space-xs">
+<span class="material-symbols-outlined text-neon-emerald animate-pulse">visibility</span>
+<span class="font-label-caps text-label-caps uppercase tracking-wider text-text-primary">
+              SUBMISSIONS STAGE: 5 Active Players answering live. Bench players locked.
+            </span>
+</div>
+<span class="font-label-tech text-label-tech text-neon-emerald uppercase px-2 py-0.5 rounded bg-pitch-base">Phase 7.2</span>
+</div>
+<!-- Center Stage Question Display Card -->
+<div class="relative bg-pitch-surface rounded-xl p-space-lg shadow-2xl overflow-hidden">
+<div class="absolute top-0 left-0 right-0 h-1 bg-neon-emerald"></div>
+<div class="flex flex-col md:flex-row md:items-center justify-between gap-space-md mb-space-md">
+<!-- Category Tag -->
+<div class="flex items-center gap-space-xs">
+<span class="p-1 rounded bg-secondary-container/20 text-card-yellow">
+<span class="material-symbols-outlined text-[18px]">bolt</span>
+</span>
+<span class="font-label-caps text-label-caps tracking-widest text-card-yellow uppercase">
+                PHYSICS &amp; ELECTROMAGNETICS - TIER 1
+              </span>
+</div>
+<!-- Match Question Progress Counter -->
+<div class="flex items-center gap-space-xs">
+<span class="font-label-caps text-label-caps text-text-muted uppercase">Difficulty:</span>
+<span class="font-label-caps text-label-caps text-neon-emerald uppercase">Elite Academic</span>
+</div>
+</div>
+<!-- Question Body Text -->
+<div class="mb-space-lg">
+<span class="font-label-caps text-label-caps text-text-muted uppercase block tracking-wider mb-1">CHALLENGE STATEMENT</span>
+<h2 class="font-headline-lg text-headline-lg text-text-primary tracking-normal">
+              QUESTION 7: What is the SI unit of electric capacitance?
+            </h2>
+</div>
+<!-- Circular Countdown Radial Timer & Stats Center -->
+<div class="flex flex-col sm:flex-row items-center justify-around gap-space-md p-space-md rounded-xl bg-pitch-base">
+<!-- Circular Animated Gauge -->
+<div class="relative flex items-center justify-center w-28 h-28">
+<svg class="w-full h-full transform -rotate-90" viewbox="0 0 100 100">
+<circle class="text-surface-variant" cx="50" cy="50" fill="none" r="42" stroke="currentColor" stroke-width="8"></circle>
+<circle class="text-neon-emerald transition-all duration-1000 ease-linear" cx="50" cy="50" fill="none" id="timer-circle" r="42" stroke="currentColor" stroke-dasharray="264" stroke-dashoffset="66" stroke-linecap="round" stroke-width="8"></circle>
+</svg>
+<div class="absolute flex flex-col items-center justify-center text-center">
+<span class="font-timer-display text-timer-display text-neon-emerald leading-none" id="countdown-text">08s</span>
+<span class="font-label-caps text-label-caps text-text-muted uppercase text-[9px] mt-1 tracking-widest">REMAINING</span>
+</div>
+</div>
+<!-- Telemetry Breakdown inside Question Box -->
+<div class="flex flex-col gap-space-xs text-left w-full sm:w-auto">
+<div class="flex items-center justify-between sm:justify-start gap-space-md">
+<span class="font-label-caps text-label-caps text-text-muted uppercase">Base Split:</span>
+<span class="font-label-tech text-label-tech text-text-primary">10.00s Allocated</span>
+</div>
+<div class="flex items-center justify-between sm:justify-start gap-space-md">
+<span class="font-label-caps text-label-caps text-text-muted uppercase">Lock Precision:</span>
+<span class="font-label-tech text-label-tech text-referee-cyan">0.001s Timestamping</span>
+</div>
+<div class="flex items-center justify-between sm:justify-start gap-space-md">
+<span class="font-label-caps text-label-caps text-text-muted uppercase">Penalty Rate:</span>
+<span class="font-label-tech text-label-tech text-card-red">-0.5 Goal on False Lock</span>
+</div>
+</div>
+</div>
+<!-- Active Answer Input Box -->
+<form class="mt-space-lg space-y-space-sm" id="answer-form" onsubmit="event.preventDefault(); submitAnswer();">
+<div class="relative">
+<label class="sr-only" for="player-answer-input">Your Answer</label>
+<input autocomplete="off" class="w-full bg-pitch-base text-text-primary px-space-md py-space-md rounded-lg font-headline-sm text-headline-sm placeholder-text-muted focus:outline-none focus:bg-surface-container-high transition shadow-inner" id="player-answer-input" placeholder="Type your answer here (e.g. Farad)..." type="text"/>
+<span class="absolute right-3 top-3.5 px-2 py-1 rounded bg-surface-container text-text-muted font-label-caps text-label-caps uppercase">ENTER TO LOCK</span>
+</div>
+<!-- Action Buttons & Submissions Warning -->
+<div class="flex flex-col sm:flex-row items-center justify-between gap-space-sm pt-space-xs">
+<div class="flex items-center gap-space-xs text-card-yellow">
+<span class="material-symbols-outlined text-[18px]">warning</span>
+<span class="font-label-caps text-label-caps uppercase">Once submitted, answer cannot be edited. Active players only.</span>
+</div>
+<button class="w-full sm:w-auto px-space-lg py-space-sm bg-neon-emerald text-pitch-void rounded-lg font-headline-sm text-headline-sm uppercase tracking-wider hover:opacity-90 active:scale-95 transition flex items-center justify-center gap-space-xs shadow-lg" id="submit-goal-btn" type="submit">
+<span class="material-symbols-outlined text-[20px]">sports_soccer</span>
+                SUBMIT GOAL ATTEMPT (ENTER)
+              </button>
+</div>
+</form>
+</div>
+<!-- Anonymous Answer Board (Post-countdown / In-flight Referee Review) -->
+<div class="bg-pitch-surface rounded-xl p-space-md shadow-xl">
+<div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-space-xs pb-space-sm mb-space-sm">
+<div class="flex items-center gap-space-xs">
+<span class="material-symbols-outlined text-gold-trophy">verified</span>
+<span class="font-headline-sm text-headline-sm uppercase text-text-primary">Submitted Answers (Anonymous to Players)</span>
+</div>
+<span class="font-label-caps text-label-caps bg-surface-container-high px-space-xs py-0.5 rounded text-text-muted uppercase">5/5 Submitted</span>
+</div>
+<!-- Pending Referee Decision Banner -->
+<div class="w-full bg-card-yellow/15 p-space-sm rounded-lg flex items-center justify-center gap-space-xs mb-space-md animate-pulse">
+<span class="material-symbols-outlined text-card-yellow text-[20px]">hourglass_top</span>
+<span class="font-label-caps text-label-caps uppercase text-card-yellow tracking-wider font-bold">
+              WAITING FOR REFEREE DECISION — GOAL OR NO GOAL IN PROGRESS
+            </span>
+</div>
+<!-- Anonymous Answers Table Strip -->
+<div class="grid grid-cols-1 sm:grid-cols-5 gap-space-xs text-center font-headline-sm">
+<div class="p-space-sm rounded-lg bg-pitch-base flex flex-col items-center justify-center">
+<span class="font-label-caps text-label-caps text-text-muted uppercase mb-1">Attempt #1</span>
+<span class="text-text-primary">Farad</span>
+<span class="font-label-tech text-label-tech text-neon-emerald mt-1">Split 00:03.1s</span>
+</div>
+<div class="p-space-sm rounded-lg bg-pitch-base flex flex-col items-center justify-center">
+<span class="font-label-caps text-label-caps text-text-muted uppercase mb-1">Attempt #2</span>
+<span class="text-text-primary">farad</span>
+<span class="font-label-tech text-label-tech text-neon-emerald mt-1">Split 00:04.2s</span>
+</div>
+<div class="p-space-sm rounded-lg bg-pitch-base flex flex-col items-center justify-center">
+<span class="font-label-caps text-label-caps text-text-muted uppercase mb-1">Attempt #3</span>
+<span class="text-card-red line-through">Tesla</span>
+<span class="font-label-tech text-label-tech text-card-red mt-1">Discrepancy</span>
+</div>
+<div class="p-space-sm rounded-lg bg-pitch-base flex flex-col items-center justify-center">
+<span class="font-label-caps text-label-caps text-text-muted uppercase mb-1">Attempt #4</span>
+<span class="text-text-primary">Farad</span>
+<span class="font-label-tech text-label-tech text-neon-emerald mt-1">Split 00:05.8s</span>
+</div>
+<div class="p-space-sm rounded-lg bg-pitch-base flex flex-col items-center justify-center">
+<span class="font-label-caps text-label-caps text-text-muted uppercase mb-1">Attempt #5</span>
+<span class="text-text-muted italic">[No Answer]</span>
+<span class="font-label-tech text-label-tech text-text-muted mt-1">Timed Out</span>
+</div>
+</div>
+<!-- Quick Referee Direct Decision Simulation Bar -->
+<div class="mt-space-md pt-space-sm flex flex-col sm:flex-row items-center justify-between gap-space-sm">
+<span class="font-label-tech text-label-tech text-text-muted">Referee Simulation Hook:</span>
+<div class="flex items-center gap-space-xs w-full sm:w-auto">
+<button class="flex-1 sm:flex-none px-space-sm py-1.5 rounded bg-neon-emerald text-pitch-void font-label-caps text-label-caps uppercase hover:opacity-90 transition" onclick="simulateGoal('alpha')">
+                CONFIRM GOAL (ALPHA)
+              </button>
+<button class="flex-1 sm:flex-none px-space-sm py-1.5 rounded bg-surface-container-high text-card-red font-label-caps text-label-caps uppercase hover:bg-surface-bright transition" onclick="simulateNoGoal()">
+                DISALLOW GOAL
+              </button>
+</div>
+</div>
+</div>
+</div>
+<!-- RIGHT COLUMN: Match Timeline & Incidents Feed (3 cols) -->
+<div class="lg:col-span-3 flex flex-col gap-space-md">
+<!-- Live Match Incident Feed -->
+<div class="bg-pitch-surface rounded-xl p-space-md shadow-xl flex flex-col h-full">
+<div class="flex items-center justify-between pb-space-sm mb-space-sm">
+<div class="flex items-center gap-space-xs">
+<span class="material-symbols-outlined text-referee-cyan text-[20px]">reorder</span>
+<span class="font-headline-sm text-headline-sm uppercase text-text-primary">Match Timeline</span>
+</div>
+<div class="flex items-center gap-1.5">
+<span class="w-2 h-2 rounded-full bg-card-red animate-pulse"></span>
+<span class="font-label-caps text-label-caps uppercase text-card-red">LIVE FEED</span>
+</div>
+</div>
+<!-- Incidents Stream -->
+<div class="relative flex-1 space-y-space-md pr-1 overflow-y-auto max-h-[580px]">
+<!-- Continuous Timeline Track Line -->
+<div class="absolute top-2 bottom-2 left-3 w-0.5 bg-pitch-divider"></div>
+<!-- Event 8: Titans Goal -->
+<div class="relative flex items-start gap-space-sm pl-space-lg">
+<div class="absolute left-1.5 top-0.5 w-3.5 h-3.5 rounded-full bg-surface-variant flex items-center justify-center">
+<span class="w-1.5 h-1.5 rounded-full bg-referee-cyan"></span>
+</div>
+<div class="w-full bg-surface-container-low p-space-xs rounded-lg">
+<div class="flex items-center justify-between">
+<span class="font-label-tech text-label-tech text-referee-cyan">08:20</span>
+<span class="font-label-caps text-label-caps bg-referee-cyan/15 text-referee-cyan px-1 rounded uppercase">Score 2-2</span>
+</div>
+<div class="font-body-sm text-body-sm text-text-primary mt-1 flex items-center gap-1">
+<span>⚽ GOAL!</span>
+<span class="font-semibold text-text-primary">Elena</span>
+<span class="text-text-muted text-[11px]">(Titans)</span>
+</div>
+</div>
+</div>
+<!-- Event 7: Michael Alpha Goal -->
+<div class="relative flex items-start gap-space-sm pl-space-lg">
+<div class="absolute left-1.5 top-0.5 w-3.5 h-3.5 rounded-full bg-surface-variant flex items-center justify-center">
+<span class="w-1.5 h-1.5 rounded-full bg-neon-emerald"></span>
+</div>
+<div class="w-full bg-surface-container-low p-space-xs rounded-lg">
+<div class="flex items-center justify-between">
+<span class="font-label-tech text-label-tech text-neon-emerald">07:00</span>
+<span class="font-label-caps text-label-caps bg-neon-emerald/15 text-neon-emerald px-1 rounded uppercase">Score 2-1</span>
+</div>
+<div class="font-body-sm text-body-sm text-text-primary mt-1 flex items-center gap-1">
+<span>⚽ GOAL!</span>
+<span class="font-semibold text-text-primary">Michael</span>
+<span class="text-text-muted text-[11px]">(Alpha)</span>
+</div>
+</div>
+</div>
+<!-- Event 6: Substitution -->
+<div class="relative flex items-start gap-space-sm pl-space-lg">
+<div class="absolute left-1.5 top-0.5 w-3.5 h-3.5 rounded-full bg-surface-variant flex items-center justify-center">
+<span class="w-1.5 h-1.5 rounded-full bg-text-muted"></span>
+</div>
+<div class="w-full bg-surface-container-low p-space-xs rounded-lg">
+<div class="flex items-center justify-between">
+<span class="font-label-tech text-label-tech text-text-muted">05:30</span>
+<span class="font-label-caps text-label-caps bg-surface-variant text-text-secondary px-1 rounded uppercase">Tactical Sub</span>
+</div>
+<p class="font-body-sm text-body-sm text-text-secondary mt-1">
+                  🔄 Substitution: Michael <span class="text-neon-emerald">IN</span> / Alex <span class="text-card-red">OUT</span>
+</p>
+</div>
+</div>
+<!-- Event 5: Yellow Card -->
+<div class="relative flex items-start gap-space-sm pl-space-lg">
+<div class="absolute left-1.5 top-0.5 w-3.5 h-3.5 rounded-full bg-surface-variant flex items-center justify-center">
+<span class="w-1.5 h-1.5 rounded-full bg-card-yellow"></span>
+</div>
+<div class="w-full bg-surface-container-low p-space-xs rounded-lg">
+<div class="flex items-center justify-between">
+<span class="font-label-tech text-label-tech text-card-yellow">04:10</span>
+<span class="font-label-caps text-label-caps bg-card-yellow/20 text-card-yellow px-1 rounded uppercase">Discipline</span>
+</div>
+<p class="font-body-sm text-body-sm text-card-yellow mt-1">
+                  🟨 Yellow Card: Samuel (Conduct incident)
+                </p>
+</div>
+</div>
+<!-- Event 4: Question 2 No Goal -->
+<div class="relative flex items-start gap-space-sm pl-space-lg">
+<div class="absolute left-1.5 top-0.5 w-3.5 h-3.5 rounded-full bg-surface-variant flex items-center justify-center">
+<span class="w-1.5 h-1.5 rounded-full bg-card-red"></span>
+</div>
+<div class="w-full bg-surface-container-low p-space-xs rounded-lg">
+<div class="flex items-center justify-between">
+<span class="font-label-tech text-label-tech text-text-muted">02:32</span>
+<span class="font-label-caps text-label-caps bg-card-red/20 text-card-red px-1 rounded uppercase">VAR Denied</span>
+</div>
+<p class="font-body-sm text-body-sm text-text-secondary mt-1">
+                  ❌ NO GOAL — Question 2 (Joule)
+                </p>
+</div>
+</div>
+<!-- Event 3: Question 1 Goal David -->
+<div class="relative flex items-start gap-space-sm pl-space-lg">
+<div class="absolute left-1.5 top-0.5 w-3.5 h-3.5 rounded-full bg-surface-variant flex items-center justify-center">
+<span class="w-1.5 h-1.5 rounded-full bg-neon-emerald"></span>
+</div>
+<div class="w-full bg-surface-container-low p-space-xs rounded-lg">
+<div class="flex items-center justify-between">
+<span class="font-label-tech text-label-tech text-neon-emerald">01:12</span>
+<span class="font-label-caps text-label-caps bg-neon-emerald/15 text-neon-emerald px-1 rounded uppercase">Score 1-0</span>
+</div>
+<div class="font-body-sm text-body-sm text-text-primary mt-1 flex items-center gap-1">
+<span>⚽ GOAL!</span>
+<span class="font-semibold text-text-primary">David</span>
+<span class="text-text-muted text-[11px]">(Alpha)</span>
+</div>
+</div>
+</div>
+<!-- Event 2: Question 1 Opening -->
+<div class="relative flex items-start gap-space-sm pl-space-lg">
+<div class="absolute left-1.5 top-0.5 w-3.5 h-3.5 rounded-full bg-surface-variant flex items-center justify-center">
+<span class="w-1.5 h-1.5 rounded-full bg-text-muted"></span>
+</div>
+<div class="w-full bg-surface-container-low p-space-xs rounded-lg">
+<span class="font-label-tech text-label-tech text-text-muted">00:45</span>
+<p class="font-body-sm text-body-sm text-text-secondary mt-0.5">
+                  ❓ Question 1 (Newton) — First Blood Active
+                </p>
+</div>
+</div>
+<!-- Event 1: Kick-Off -->
+<div class="relative flex items-start gap-space-sm pl-space-lg">
+<div class="absolute left-1.5 top-0.5 w-3.5 h-3.5 rounded-full bg-surface-variant flex items-center justify-center">
+<span class="w-1.5 h-1.5 rounded-full bg-neon-emerald"></span>
+</div>
+<div class="w-full bg-surface-container-low p-space-xs rounded-lg">
+<span class="font-label-tech text-label-tech text-text-muted">00:00</span>
+<p class="font-body-sm text-body-sm text-text-primary mt-0.5 font-medium">
+                  🏟️ Kick-off &amp; Official Whistle Blown
+                </p>
+</div>
+</div>
+</div>
+<!-- Bottom Broadcast VAR Diagnostic -->
+<div class="mt-space-md pt-space-sm bg-pitch-base p-space-xs rounded-lg flex items-center justify-between">
+<span class="font-label-caps text-label-caps text-text-muted uppercase">VAR Cam 03: Arena Center</span>
+<span class="font-label-tech text-label-tech text-neon-emerald">CALIBRATED</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Interactive Script for Countdown, Answer Locking, and Scoreboard Hooks -->
+<script>
+    let timeLeft = 8;
+    const timerCircle = document.getElementById('timer-circle');
+    const timerText = document.getElementById('countdown-text');
+    const answerInput = document.getElementById('player-answer-input');
+    const submitBtn = document.getElementById('submit-goal-btn');
+    const soundToggle = document.getElementById('sound-toggle');
+
+    // Countdown logic simulation
+    const totalDuration = 10;
+    const perimeter = 2 * Math.PI * 42; // ~263.89
+
+    const interval = setInterval(() => {
+      if (timeLeft > 0) {
+        timeLeft--;
+        const formatted = (timeLeft < 10 ? '0' : '') + timeLeft + 's';
+        if (timerText) timerText.innerText = formatted;
+        
+        // Update circular dash offset
+        const fraction = timeLeft / totalDuration;
+        const offset = perimeter * (1 - fraction);
+        if (timerCircle) {
+          timerCircle.style.strokeDashoffset = offset;
+          if (timeLeft <= 4) {
+            timerCircle.classList.remove('text-neon-emerald');
+            timerCircle.classList.add('text-card-red');
+            timerText.classList.remove('text-neon-emerald');
+            timerText.classList.add('text-card-red');
+          }
+        }
+      } else {
+        clearInterval(interval);
+        if (timerText) timerText.innerText = '00s';
+        lockInputsOnTimeout();
+      }
+    }, 1000);
+
+    function submitAnswer() {
+      if (!answerInput || answerInput.value.trim() === '') return;
+      const submittedValue = answerInput.value;
+      answerInput.disabled = true;
+      answerInput.classList.add('opacity-50', 'cursor-not-allowed');
+      submitBtn.disabled = true;
+      submitBtn.classList.remove('bg-neon-emerald');
+      submitBtn.classList.add('bg-surface-variant', 'text-text-muted', 'cursor-not-allowed');
+      submitBtn.innerHTML = '<span class="material-symbols-outlined text-[18px]">lock</span> LOCKED — AWAITING REFEREE';
+    }
+
+    function lockInputsOnTimeout() {
+      if (!answerInput.disabled) {
+        answerInput.disabled = true;
+        answerInput.placeholder = 'TIME EXPIRED - SUBMISSION WINDOW CLOSED';
+        submitBtn.disabled = true;
+        submitBtn.classList.add('opacity-50', 'cursor-not-allowed');
+      }
+    }
+
+    function simulateGoal(team) {
+      const scoreElement = document.getElementById('score-' + team);
+      if (scoreElement) {
+        let current = parseInt(scoreElement.innerText);
+        scoreElement.innerText = current + 1;
+        scoreElement.classList.add('text-gold-trophy', 'scale-125');
+        setTimeout(() => {
+          scoreElement.classList.remove('scale-125');
+        }, 600);
+      }
+    }
+
+    function simulateNoGoal() {
+      const banner = document.querySelector('.bg-card-yellow\\/15');
+      if (banner) {
+        banner.classList.remove('bg-card-yellow/15');
+        banner.classList.add('bg-card-red/20');
+        banner.innerHTML = '<span class="material-symbols-outlined text-card-red">cancel</span><span class="font-label-caps text-label-caps uppercase text-card-red font-bold">REFEREE DECISION: NO GOAL - QUESTION VOID</span>';
+      }
+    }
+
+    if (soundToggle) {
+      soundToggle.addEventListener('click', () => {
+        const icon = soundToggle.querySelector('span');
+        if (icon.innerText === 'volume_up') {
+          icon.innerText = 'volume_off';
+          soundToggle.classList.add('text-card-red');
+        } else {
+          icon.innerText = 'volume_up';
+          soundToggle.classList.remove('text-card-red');
+        }
+      });
+    }
+  </script>
+</div></main><footer class="w-full bg-pitch-base py-space-lg"><div class="w-full px-arena-margin-desktop flex flex-col md:flex-row items-center justify-between gap-space-md text-text-muted font-body-sm text-body-sm"><span>© 2025 Stadium of Elite Academic Esports Federation. All telemetry and pitch data broadcast live.</span><div class="flex items-center gap-space-md font-label-caps text-label-caps uppercase text-on-surface-variant"><span>VAR Verified System</span><span>•</span><span>Official Referee Cockpit</span><span>•</span><span>Ultra-Low Latency Feed</span></div></div></footer></body></html>

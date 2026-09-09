@@ -28,7 +28,7 @@ export default async function Home() {
       include: { _count: { select: { teams: true, matches: true } } },
     }),
     prisma.round.findMany({
-      where: { decision: "GOAL", goalSubmission: { isNot: null }, match: { status: "FINISHED" } },
+      where: { decision: "GOAL", goalSubmission: { isNot: null }, match: { status: "FINISHED", competitionId: { not: null } } },
       include: { goalSubmission: { include: { player: { include: { user: { select: { id: true, name: true } } } } } } },
       take: 400,
     }),
@@ -243,7 +243,7 @@ export default async function Home() {
         {/* TOP SCORERS */}
         {topScorers.length > 0 ? (
           <section className="mx-auto max-w-7xl px-4 py-14">
-            <SectionHead title="Golden boot" subtitle="Most goals scored across all finished matches" action={{ href: "/players", label: "All players" }} />
+            <SectionHead title="Golden boot" subtitle="Most goals in competitive matches (friendlies excluded)" action={{ href: "/players", label: "All players" }} />
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {topScorers.map((s, i) => (
                 <Link

@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0" name="viewport"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" rel="stylesheet"/><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=Oswald:wght@500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><style>@layer base{html,body{margin:0;padding:0;}body{overscroll-behavior:none;}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config={darkMode:"class",theme:{extend:{colors:{"tertiary-container":"#fc7c78","card-yellow":"#FBBF24","error-container":"#93000a","on-tertiary-fixed-variant":"#842225","on-tertiary":"#650911","error":"#ffb4ab","on-surface-variant":"#bbcabf","tertiary":"#ffb3af","surface":"#0f131d","pitch-divider":"#1E293B","inverse-primary":"#006c49","on-primary-container":"#00422b","surface-dim":"#0f131d","on-secondary":"#472a00","on-error-container":"#ffdad6","pitch-border":"#374151","on-primary-fixed-variant":"#005236","pitch-elevated":"#1F2937","text-secondary":"#9CA3AF","on-primary":"#003824","surface-variant":"#313540","on-primary-fixed":"#002113","pitch-base":"#0B0F19","on-tertiary-container":"#711419","on-error":"#690005","primary-container":"#10b981","inverse-surface":"#dfe2f1","surface-container-low":"#171b26","primary":"#4edea3","text-muted":"#6B7280","background":"#0f131d","inverse-on-surface":"#2c303b","gold-trophy":"#F59E0B","pitch-void":"#050811","surface-tint":"#4edea3","secondary-container":"#ee9800","neon-emerald":"#10B981","neon-emerald-glow":"rgba(16, 185, 129, 0.25)","secondary-fixed":"#ffddb8","surface-container-highest":"#313540","surface-container-lowest":"#0a0e18","on-secondary-container":"#5b3800","primary-fixed":"#6ffbbe","secondary":"#ffb95f","on-secondary-fixed-variant":"#653e00","card-red-glow":"rgba(239, 68, 68, 0.25)","outline-variant":"#3c4a42","secondary-fixed-dim":"#ffb95f","card-red":"#EF4444","on-secondary-fixed":"#2a1700","on-background":"#dfe2f1","surface-container":"#1c1f2a","outline":"#86948a","pitch-surface":"#111827","tertiary-fixed-dim":"#ffb3af","primary-fixed-dim":"#4edea3","tertiary-fixed":"#ffdad7","gold-glow":"rgba(245, 158, 11, 0.2)","on-tertiary-fixed":"#410005","surface-bright":"#353944","referee-cyan":"#06B6D4","on-surface":"#dfe2f1","text-primary":"#F9FAFB","surface-container-high":"#262a35"},borderRadius:{DEFAULT:"0.125rem",lg:"0.25rem",xl:"0.5rem",full:"0.75rem"},spacing:{"space-lg":"1.5rem","space-2xs":"0.25rem","space-md":"1rem","space-sm":"0.75rem","arena-margin-desktop":"2.5rem","space-xl":"2rem","arena-margin-mobile":"1rem","scoreboard-gutter":"1rem","space-2xl":"3rem","space-3xl":"4rem","space-xs":"0.5rem","timeline-pad":"1.25rem"},fontFamily:{"headline-sm":["Oswald"],"headline-md":["Oswald"],"headline-lg-mobile":["Oswald"],"body-md":["Inter"],"display-hero":["Oswald"],"label-tech":["Inter"],"body-lg":["Inter"],"display-hero-mobile":["Oswald"],"timer-display":["Oswald"],"body-sm":["Inter"],"label-caps":["Inter"],"headline-lg":["Oswald"],"scoreboard-lg":["Oswald"],"scoreboard-lg-mobile":["Oswald"]},fontSize:{"headline-sm":["18px",{lineHeight:"24px",letterSpacing:"0.02em",fontWeight:"600"}],"headline-md":["24px",{lineHeight:"28px",letterSpacing:"0.01em",fontWeight:"600"}],"headline-lg-mobile":["26px",{lineHeight:"32px",letterSpacing:"0.02em",fontWeight:"600"}],"body-md":["15px",{lineHeight:"22px",fontWeight:"400"}],"display-hero":["72px",{lineHeight:"76px",letterSpacing:"0.02em",fontWeight:"700"}],"label-tech":["12px",{lineHeight:"16px",letterSpacing:"0.02em",fontWeight:"600"}],"body-lg":["18px",{lineHeight:"28px",fontWeight:"500"}],"display-hero-mobile":["44px",{lineHeight:"48px",letterSpacing:"0.02em",fontWeight:"700"}],"timer-display":["48px",{lineHeight:"48px",letterSpacing:"0.05em",fontWeight:"700"}],"body-sm":["13px",{lineHeight:"18px",fontWeight:"400"}],"label-caps":["11px",{lineHeight:"14px",letterSpacing:"0.08em",fontWeight:"700"}],"headline-lg":["32px",{lineHeight:"38px",letterSpacing:"0.02em",fontWeight:"600"}],"scoreboard-lg":["56px",{lineHeight:"60px",letterSpacing:"0.04em",fontWeight:"700"}],"scoreboard-lg-mobile":["36px",{lineHeight:"40px",letterSpacing:"0.03em",fontWeight:"700"}]}}}};</script></head><body class="bg-pitch-void text-on-surface font-body-md text-body-md flex items-center justify-center min-h-screen"><main class="w-full flex items-center justify-center"><div class="flex flex-col w-full px-arena-margin-mobile lg:px-arena-margin-desktop py-space-xl max-w-7xl mx-auto relative overflow-hidden">
+<!-- Subtle Ambient Glow Cones (No screen-edge pin, strictly contained) -->
+<div class="absolute -top-32 left-1/2 -translate-x-1/2 w-96 h-96 bg-primary/10 rounded-full blur-3xl pointer-events-none"></div>
+<div class="absolute top-1/3 -left-20 w-80 h-80 bg-referee-cyan/10 rounded-full blur-3xl pointer-events-none"></div>
+<div class="absolute top-1/2 -right-20 w-80 h-80 bg-gold-trophy/10 rounded-full blur-3xl pointer-events-none"></div>
+<!-- Gateway Top Metadata Strip -->
+<div class="w-full flex items-center justify-between pb-space-lg mb-space-xl bg-surface-container-lowest/60 backdrop-blur-md rounded-xl px-space-lg">
+<div class="flex items-center gap-space-sm">
+<span class="inline-block w-2.5 h-2.5 rounded-full bg-neon-emerald animate-pulse"></span>
+<span class="font-label-caps text-label-caps uppercase text-primary tracking-widest">GATEWAY SECURE V4.8</span>
+<span class="font-label-tech text-label-tech text-text-muted hidden md:inline">| MATCH PROTOCOL ACTIVE</span>
+</div>
+<div class="flex items-center gap-space-md font-label-tech text-label-tech text-text-secondary">
+<span class="flex items-center gap-1">
+<span class="material-symbols-outlined text-base text-referee-cyan">speed</span>
+<span>LATENCY: 12ms</span>
+</span>
+<span class="hidden sm:flex items-center gap-1">
+<span class="material-symbols-outlined text-base text-gold-trophy">verified_user</span>
+<span>AC-DEFENSE ENGAGED</span>
+</span>
+</div>
+</div>
+<!-- Tripartite Central Layout -->
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-space-xl items-start relative z-10">
+<!-- Left Column: Arena Visual & Live Bracket Snapshot -->
+<div class="lg:col-span-4 flex flex-col gap-space-lg order-2 lg:order-1">
+<!-- Arena Broadcast Atmosphere Card -->
+<div class="bg-surface-container-low rounded-xl p-space-lg shadow-xl relative overflow-hidden group">
+<div class="h-44 w-full rounded-lg mb-space-md overflow-hidden relative">
+<div class="w-full h-full bg-cover bg-center transition-transform duration-700 group-hover:scale-105" data-alt="Dark high-stakes indoor academic esports stadium championship arena with bright neon green stadium floodlights, dynamic smoke haze, large hanging digital scoreboards, stadium seats packed with spectators under moody cinematic spotlights." style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuA-TWPv4EV0qHr9kMqQni00or-oWbzWk0PcY-t8dNKOFysBkt5jiVOlOExaLJFkYCs4Kqxp4sio64h7njCVsSQ5FJ3U2Tq9y6XpmMm_hcsISe1YP_RSc5yZBmZGBf3ZArQiG-72Xziic9c-DFMqxO12bHGhhnSqKCsr8KU_EIs4FWixdpzEGNEolrah_M-uZmogqLPnesE7iVb7KLcQfe2DbwnfuBo_qadWAlQm2roIj2BGTIs0Z1oP')"></div>
+<div class="absolute inset-0 bg-gradient-to-t from-pitch-void via-pitch-void/40 to-transparent"></div>
+<div class="absolute bottom-space-sm left-space-sm flex items-center gap-2">
+<span class="px-2 py-0.5 rounded bg-card-red text-pitch-void font-label-caps text-label-caps uppercase font-bold tracking-wider">LIVE FEED</span>
+<span class="font-label-tech text-label-tech text-text-primary">CAM 01 // MAIN PITCH</span>
+</div>
+</div>
+<div class="flex flex-col gap-1">
+<div class="font-headline-sm text-headline-sm uppercase text-text-primary tracking-wide">CHAMPIONSHIP ARENA 07</div>
+<p class="font-body-sm text-body-sm text-text-secondary">Academic Grand Finals Series • Dual Referee Oversight Tier-1 Protocol.</p>
+</div>
+</div>
+<!-- Live Roster Queue -->
+<div class="bg-surface-container-low rounded-xl p-space-lg shadow-xl flex flex-col gap-space-md">
+<div class="flex items-center justify-between">
+<span class="font-headline-sm text-headline-sm uppercase text-text-primary tracking-wide">VERIFIED LOBBY</span>
+<span class="font-label-tech text-label-tech px-2 py-0.5 rounded bg-surface-container-high text-primary">8/10 SEATS</span>
+</div>
+<div class="space-y-space-xs">
+<!-- Roster Item 1 -->
+<div class="flex items-center justify-between p-space-xs rounded bg-surface-container hover:bg-surface-container-high transition-colors">
+<div class="flex items-center gap-space-sm">
+<span class="w-2 h-2 rounded-full bg-neon-emerald"></span>
+<div class="flex flex-col">
+<span class="font-label-tech text-label-tech text-text-primary font-bold">VORTEX_KAI</span>
+<span class="font-label-caps text-label-caps text-text-muted">TEAM ALPHA • CAPTAIN</span>
+</div>
+</div>
+<span class="material-symbols-outlined text-sm text-gold-trophy" style="font-variation-settings: 'FILL' 1;">star</span>
+</div>
+<!-- Roster Item 2 -->
+<div class="flex items-center justify-between p-space-xs rounded bg-surface-container hover:bg-surface-container-high transition-colors">
+<div class="flex items-center gap-space-sm">
+<span class="w-2 h-2 rounded-full bg-neon-emerald"></span>
+<div class="flex flex-col">
+<span class="font-label-tech text-label-tech text-text-primary font-bold">NOVA_PULSE</span>
+<span class="font-label-caps text-label-caps text-text-muted">TEAM ALPHA • FORWARD</span>
+</div>
+</div>
+<span class="font-label-tech text-label-tech text-text-muted">READY</span>
+</div>
+<!-- Roster Item 3 -->
+<div class="flex items-center justify-between p-space-xs rounded bg-surface-container hover:bg-surface-container-high transition-colors">
+<div class="flex items-center gap-space-sm">
+<span class="w-2 h-2 rounded-full bg-card-yellow"></span>
+<div class="flex flex-col">
+<span class="font-label-tech text-label-tech text-text-primary font-bold">CIPHER_SHADOW</span>
+<span class="font-label-caps text-label-caps text-text-muted">TEAM TITANS • DEFENDER</span>
+</div>
+</div>
+<span class="font-label-tech text-label-tech text-card-yellow">SYNCING</span>
+</div>
+<!-- Roster Item 4 -->
+<div class="flex items-center justify-between p-space-xs rounded bg-surface-container hover:bg-surface-container-high transition-colors">
+<div class="flex items-center gap-space-sm">
+<span class="w-2 h-2 rounded-full bg-card-red"></span>
+<div class="flex flex-col">
+<span class="font-label-tech text-label-tech text-text-muted">EMPTY SLOT</span>
+<span class="font-label-caps text-label-caps text-text-muted">TEAM TITANS</span>
+</div>
+</div>
+<span class="font-label-tech text-label-tech text-card-red">AWAITING</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Center Column: Primary Authentication Gateway Stage -->
+<div class="lg:col-span-8 flex flex-col gap-space-lg order-1 lg:order-2">
+<!-- Primary Gateway Center Stage Card -->
+<div class="bg-pitch-base rounded-xl p-space-lg sm:p-space-xl shadow-2xl relative overflow-hidden">
+<!-- Glowing Torch Emblem & Arena Branding -->
+<div class="flex flex-col items-center justify-center text-center pb-space-lg relative">
+<div class="relative mb-space-sm group">
+<div class="absolute -inset-2 bg-neon-emerald/20 rounded-full blur-xl group-hover:bg-neon-emerald/35 transition-all"></div>
+<img alt="Legacy Esports Arena Torch Crest" class="w-24 h-24 sm:w-28 sm:h-28 object-contain relative z-10 drop-shadow-[0_0_15px_rgba(16,185,129,0.4)]" src="https://lh3.googleusercontent.com/aida-public/AB6AXuATNtkjgp8hF227g3dKfca9kgM0_4JWNNMXhGWaIDLDfLHmvBw-FjxpZ11T_WnluiZenLOFus0pWjnhy0y2lj6auJqgY1w9CUEzNkXd5fhBe9RDLh7zgzYfzEdpJPL6IYCzsfqGEGuGpe_kgxHkO9Ye4fqOqiNKxNY8nGO9jusShBpRPUGTafiIRIrwiRjFi_LJYU3M4KnEuWvne5w-cRmwniU8eQXd1xi4Xc0ngbtU3SeZ7uvpe-aW"/>
+</div>
+<div class="font-headline-lg text-headline-lg sm:text-scoreboard-lg uppercase text-text-primary tracking-wider">
+            STADIUM OF ELITE
+          </div>
+<p class="font-body-md text-body-md text-text-secondary max-w-md">
+            Academic Esports Championship Portal. Synchronize credentials to unlock field telemetry and answering consoles.
+          </p>
+</div>
+<!-- Role Selection Switcher -->
+<div class="w-full bg-surface-container-lowest p-1 rounded-lg mb-space-lg grid grid-cols-3 gap-1">
+<button class="role-btn py-space-sm px-space-xs rounded flex flex-col items-center justify-center bg-pitch-elevated text-primary font-label-caps text-label-caps uppercase transition-all shadow-md" id="role-player" type="button">
+<span class="material-symbols-outlined text-base sm:text-lg mb-0.5">sports_esports</span>
+<span>PLAYER / SQUAD</span>
+</button>
+<button class="role-btn py-space-sm px-space-xs rounded flex flex-col items-center justify-center text-text-secondary hover:text-text-primary font-label-caps text-label-caps uppercase transition-all" id="role-referee" type="button">
+<span class="material-symbols-outlined text-base sm:text-lg mb-0.5">sports</span>
+<span>OFFICIAL / REF</span>
+</button>
+<button class="role-btn py-space-sm px-space-xs rounded flex flex-col items-center justify-center text-text-secondary hover:text-text-primary font-label-caps text-label-caps uppercase transition-all" id="role-spectator" type="button">
+<span class="material-symbols-outlined text-base sm:text-lg mb-0.5">visibility</span>
+<span>SPECTATOR</span>
+</button>
+</div>
+<!-- Authentication Form -->
+<form class="flex flex-col gap-space-md" id="arena-auth-form" onsubmit="event.preventDefault(); triggerArenaAuth();">
+<!-- Input 1: Gamertag / Tournament ID -->
+<div class="flex flex-col gap-1.5">
+<label class="flex items-center justify-between font-label-caps text-label-caps uppercase text-text-secondary tracking-wider" for="gamertag-input">
+<span>TOURNAMENT ID OR GAMERTAG</span>
+<span class="text-referee-cyan text-[10px]">CASE SENSITIVE</span>
+</label>
+<div class="relative flex items-center">
+<span class="material-symbols-outlined absolute left-space-md text-text-muted text-lg pointer-events-none">tag</span>
+<input class="w-full bg-surface-container text-text-primary font-body-md text-body-md pl-12 pr-space-md py-3 rounded-lg focus:outline-none focus:bg-surface-container-high transition-all" id="gamertag-input" placeholder="e.g., KAI_TITAN#904" required="" type="text"/>
+</div>
+</div>
+<!-- Input 2 & 3: Squad Select & Passcode (2 Column on Tablet+) -->
+<div class="grid grid-cols-1 sm:grid-cols-2 gap-space-md">
+<!-- Squad Select Dropdown -->
+<div class="flex flex-col gap-1.5">
+<label class="font-label-caps text-label-caps uppercase text-text-secondary tracking-wider" for="squad-select">SQUAD ALLOCATION</label>
+<div class="relative flex items-center">
+<span class="material-symbols-outlined absolute left-space-md text-text-muted text-lg pointer-events-none">shield</span>
+<select class="w-full bg-surface-container text-text-primary font-body-md text-body-md pl-12 pr-10 py-3 rounded-lg appearance-none focus:outline-none focus:bg-surface-container-high transition-all cursor-pointer" id="squad-select">
+<option value="alpha">Team Alpha — Division A</option>
+<option value="titans">Team Titans — Division A</option>
+<option value="nexus">Nexus Prime — Division B</option>
+<option value="valkyrie">Valkyrie Academy — Division B</option>
+<option value="unassigned">Independent / Substitute Pool</option>
+</select>
+<span class="material-symbols-outlined absolute right-space-md text-text-muted text-lg pointer-events-none">arrow_drop_down</span>
+</div>
+</div>
+<!-- Security Passcode -->
+<div class="flex flex-col gap-1.5">
+<label class="font-label-caps text-label-caps uppercase text-text-secondary tracking-wider" for="passcode-input">SQUAD PASSCODE / PIN</label>
+<div class="relative flex items-center">
+<span class="material-symbols-outlined absolute left-space-md text-text-muted text-lg pointer-events-none">lock</span>
+<input class="w-full bg-surface-container text-text-primary font-body-md text-body-md pl-12 pr-space-md py-3 rounded-lg focus:outline-none focus:bg-surface-container-high transition-all" id="passcode-input" placeholder="••••••••" required="" type="password"/>
+</div>
+</div>
+</div>
+<!-- Hardware Lock & Device Verification Token Check -->
+<div class="p-space-md rounded-lg bg-surface-container-lowest flex items-center justify-between gap-space-md">
+<div class="flex items-center gap-space-sm">
+<div class="w-9 h-9 rounded-lg bg-surface-container flex items-center justify-center text-primary">
+<span class="material-symbols-outlined text-lg">phonelink_lock</span>
+</div>
+<div class="flex flex-col">
+<span class="font-label-tech text-label-tech text-text-primary font-bold">HARDWARE LOCK TELEMETRY</span>
+<span class="font-label-caps text-label-caps text-text-secondary">READY FOR LIVE MATCH KEY ENCRYPTION</span>
+</div>
+</div>
+<label class="relative inline-flex items-center cursor-pointer">
+<input checked="" class="sr-only peer" id="hw-lock-toggle" type="checkbox"/>
+<div class="w-11 h-6 bg-surface-variant peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-text-primary after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-container"></div>
+</label>
+</div>
+<!-- Enter Stadium Arena Button -->
+<button class="w-full py-4 rounded-lg bg-primary text-pitch-void font-headline-md text-headline-md uppercase tracking-wider flex items-center justify-center gap-space-sm shadow-xl hover:bg-neon-emerald transition-all active:scale-[0.99] group mt-space-xs" id="auth-submit-btn" type="submit">
+<span class="material-symbols-outlined text-2xl group-hover:translate-x-1 transition-transform">login</span>
+<span id="btn-text">ENTER STADIUM ARENA</span>
+</button>
+<div class="hidden p-space-sm rounded bg-surface-container text-center font-label-tech text-label-tech text-primary" id="auth-status-bar">
+            AUTHORIZING WITH REFEREE NODE... HARDWARE VERIFIED.
+          </div>
+</form>
+</div>
+</div>
+</div>
+<!-- Bottom Quick Match Live Status Bar (Full Width Preview) -->
+<div class="w-full mt-space-xl bg-surface-container-low rounded-xl p-space-md sm:p-space-lg shadow-2xl relative overflow-hidden">
+<div class="flex flex-col lg:flex-row items-center justify-between gap-space-md">
+<!-- Live Indicator & Match Title -->
+<div class="flex items-center gap-space-md w-full lg:w-auto justify-between lg:justify-start">
+<div class="flex items-center gap-2">
+<span class="px-2.5 py-1 rounded bg-card-red text-pitch-void font-label-caps text-label-caps font-bold tracking-wider animate-pulse flex items-center gap-1">
+<span class="material-symbols-outlined text-sm">sensors</span>
+            LIVE ARENA
+          </span>
+<span class="font-headline-sm text-headline-sm uppercase text-text-primary">GRAND FINAL FIXTURE</span>
+</div>
+<span class="font-label-tech text-label-tech text-gold-trophy bg-pitch-void px-2.5 py-1 rounded">MATCH POINT</span>
+</div>
+<!-- Scoreboard Center Display -->
+<div class="flex items-center gap-space-lg bg-pitch-void px-space-xl py-space-sm rounded-lg shadow-inner">
+<div class="text-right">
+<span class="font-headline-sm text-headline-sm text-text-primary block">ALPHA</span>
+<span class="font-label-caps text-label-caps text-primary">DIV A LEAD</span>
+</div>
+<div class="font-scoreboard-lg text-scoreboard-lg text-primary tracking-tight leading-none px-2">
+          3 <span class="text-text-muted text-headline-md font-normal mx-1">—</span> 2
+        </div>
+<div class="text-left">
+<span class="font-headline-sm text-headline-sm text-text-primary block">TITANS</span>
+<span class="font-label-caps text-label-caps text-text-muted">CHALLENGER</span>
+</div>
+</div>
+<!-- Match Progress & Referee Meta -->
+<div class="flex items-center gap-space-lg w-full lg:w-auto justify-between lg:justify-end font-label-tech text-label-tech text-text-secondary">
+<div class="flex flex-col items-start lg:items-end">
+<span class="text-text-primary font-bold flex items-center gap-1">
+<span class="material-symbols-outlined text-sm text-referee-cyan">psychology_alt</span>
+            QUESTION 7 / 10
+          </span>
+<span class="text-text-muted text-xs">SPLIT CLOCK: 00:38</span>
+</div>
+<div class="h-8 w-px bg-pitch-divider hidden sm:block"></div>
+<div class="flex flex-col items-start lg:items-end">
+<span class="text-text-primary flex items-center gap-1">
+<span class="material-symbols-outlined text-sm text-card-yellow">sports</span>
+            REF: MARCUS VANCE
+          </span>
+<span class="text-primary flex items-center gap-1 text-xs">
+<span class="material-symbols-outlined text-xs">group</span>
+            16,420 IN ARENA
+          </span>
+</div>
+</div>
+</div>
+</div>
+<!-- Gateway Footer System Details -->
+<div class="w-full mt-space-lg pt-space-md flex flex-col md:flex-row items-center justify-between gap-space-md text-text-muted font-label-tech text-label-tech">
+<div class="flex items-center gap-space-md">
+<span class="flex items-center gap-1.5 text-primary">
+<span class="material-symbols-outlined text-base">verified</span>
+        FAIR-PLAY ANTI-CHEAT CERTIFIED
+      </span>
+<span>•</span>
+<span>WEBGL HIGH-DENSITY ENGINE</span>
+<span>•</span>
+<span>SYMMETRIC ENCRYPTION 256</span>
+</div>
+<div class="flex items-center gap-space-lg">
+<a class="hover:text-text-primary transition-colors" href="#">OFFICIAL RULEBOOK</a>
+<a class="hover:text-text-primary transition-colors" href="#">HARDWARE REQUIREMENTS</a>
+<a class="hover:text-text-primary transition-colors" href="#">REFEREE DISPUTE DESK</a>
+</div>
+</div>
+</div>
+<script>
+  // Role Selection Switcher Logic
+  const rolePlayer = document.getElementById('role-player');
+  const roleReferee = document.getElementById('role-referee');
+  const roleSpectator = document.getElementById('role-spectator');
+  const btnText = document.getElementById('btn-text');
+  const squadSelect = document.getElementById('squad-select');
+
+  const roleButtons = [rolePlayer, roleReferee, roleSpectator];
+
+  function setRole(activeBtn, label, squadDisabled) {
+    roleButtons.forEach(btn => {
+      btn.className = 'role-btn py-space-sm px-space-xs rounded flex flex-col items-center justify-center text-text-secondary hover:text-text-primary font-label-caps text-label-caps uppercase transition-all';
+    });
+    activeBtn.className = 'role-btn py-space-sm px-space-xs rounded flex flex-col items-center justify-center bg-pitch-elevated text-primary font-label-caps text-label-caps uppercase transition-all shadow-md';
+    btnText.textContent = label;
+    if (squadSelect) {
+      squadSelect.disabled = squadDisabled;
+      if (squadDisabled) {
+        squadSelect.classList.add('opacity-50', 'cursor-not-allowed');
+      } else {
+        squadSelect.classList.remove('opacity-50', 'cursor-not-allowed');
+      }
+    }
+  }
+
+  if (rolePlayer) {
+    rolePlayer.addEventListener('click', () => setRole(rolePlayer, 'ENTER STADIUM ARENA', false));
+  }
+  if (roleReferee) {
+    roleReferee.addEventListener('click', () => setRole(roleReferee, 'ACCESS REFEREE COCKPIT', true));
+  }
+  if (roleSpectator) {
+    roleSpectator.addEventListener('click', () => setRole(roleSpectator, 'TUNE IN AS SPECTATOR', true));
+  }
+
+  // Gateway Verification Interactive Micro-action
+  function triggerArenaAuth() {
+    const statusBar = document.getElementById('auth-status-bar');
+    const submitBtn = document.getElementById('auth-submit-btn');
+    if (statusBar && submitBtn) {
+      submitBtn.classList.add('opacity-80', 'pointer-events-none');
+      statusBar.classList.remove('hidden');
+      statusBar.textContent = 'CONNECTING TO HIGH-FREQUENCY PITCH STREAM... AUTH 100%';
+      setTimeout(() => {
+        statusBar.textContent = 'HARDWARE LOCKED: ADMISSION GRANTED. REDIRECTING TO BENCH...';
+      }, 1000);
+    }
+  }
+</script></main></body></html>

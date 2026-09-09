@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0" name="viewport"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" rel="stylesheet"/><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=Oswald:wght@500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><style>@layer base{html,body{margin:0;padding:0;}body{overscroll-behavior:none;}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config={darkMode:"class",theme:{extend:{colors:{"tertiary-container":"#fc7c78","card-yellow":"#FBBF24","error-container":"#93000a","on-tertiary-fixed-variant":"#842225","on-tertiary":"#650911","error":"#ffb4ab","on-surface-variant":"#bbcabf","tertiary":"#ffb3af","surface":"#0f131d","pitch-divider":"#1E293B","inverse-primary":"#006c49","on-primary-container":"#00422b","surface-dim":"#0f131d","on-secondary":"#472a00","on-error-container":"#ffdad6","pitch-border":"#374151","on-primary-fixed-variant":"#005236","pitch-elevated":"#1F2937","text-secondary":"#9CA3AF","on-primary":"#003824","surface-variant":"#313540","on-primary-fixed":"#002113","pitch-base":"#0B0F19","on-tertiary-container":"#711419","on-error":"#690005","primary-container":"#10b981","inverse-surface":"#dfe2f1","surface-container-low":"#171b26","primary":"#4edea3","text-muted":"#6B7280","background":"#0f131d","inverse-on-surface":"#2c303b","gold-trophy":"#F59E0B","pitch-void":"#050811","surface-tint":"#4edea3","secondary-container":"#ee9800","neon-emerald":"#10B981","neon-emerald-glow":"rgba(16, 185, 129, 0.25)","secondary-fixed":"#ffddb8","surface-container-highest":"#313540","surface-container-lowest":"#0a0e18","on-secondary-container":"#5b3800","primary-fixed":"#6ffbbe","secondary":"#ffb95f","on-secondary-fixed-variant":"#653e00","card-red-glow":"rgba(239, 68, 68, 0.25)","outline-variant":"#3c4a42","secondary-fixed-dim":"#ffb95f","card-red":"#EF4444","on-secondary-fixed":"#2a1700","on-background":"#dfe2f1","surface-container":"#1c1f2a","outline":"#86948a","pitch-surface":"#111827","tertiary-fixed-dim":"#ffb3af","primary-fixed-dim":"#4edea3","tertiary-fixed":"#ffdad7","gold-glow":"rgba(245, 158, 11, 0.2)","on-tertiary-fixed":"#410005","surface-bright":"#353944","referee-cyan":"#06B6D4","on-surface":"#dfe2f1","text-primary":"#F9FAFB","surface-container-high":"#262a35"},borderRadius:{DEFAULT:"0.125rem",lg:"0.25rem",xl:"0.5rem",full:"0.75rem"},spacing:{"space-lg":"1.5rem","space-2xs":"0.25rem","space-md":"1rem","space-sm":"0.75rem","arena-margin-desktop":"2.5rem","space-xl":"2rem","arena-margin-mobile":"1rem","scoreboard-gutter":"1rem","space-2xl":"3rem","space-3xl":"4rem","space-xs":"0.5rem","timeline-pad":"1.25rem"},fontFamily:{"headline-sm":["Oswald"],"headline-md":["Oswald"],"headline-lg-mobile":["Oswald"],"body-md":["Inter"],"display-hero":["Oswald"],"label-tech":["Inter"],"body-lg":["Inter"],"display-hero-mobile":["Oswald"],"timer-display":["Oswald"],"body-sm":["Inter"],"label-caps":["Inter"],"headline-lg":["Oswald"],"scoreboard-lg":["Oswald"],"scoreboard-lg-mobile":["Oswald"]},fontSize:{"headline-sm":["18px",{lineHeight:"24px",letterSpacing:"0.02em",fontWeight:"600"}],"headline-md":["24px",{lineHeight:"28px",letterSpacing:"0.01em",fontWeight:"600"}],"headline-lg-mobile":["26px",{lineHeight:"32px",letterSpacing:"0.02em",fontWeight:"600"}],"body-md":["15px",{lineHeight:"22px",fontWeight:"400"}],"display-hero":["72px",{lineHeight:"76px",letterSpacing:"0.02em",fontWeight:"700"}],"label-tech":["12px",{lineHeight:"16px",letterSpacing:"0.02em",fontWeight:"600"}],"body-lg":["18px",{lineHeight:"28px",fontWeight:"500"}],"display-hero-mobile":["44px",{lineHeight:"48px",letterSpacing:"0.02em",fontWeight:"700"}],"timer-display":["48px",{lineHeight:"48px",letterSpacing:"0.05em",fontWeight:"700"}],"body-sm":["13px",{lineHeight:"18px",fontWeight:"400"}],"label-caps":["11px",{lineHeight:"14px",letterSpacing:"0.08em",fontWeight:"700"}],"headline-lg":["32px",{lineHeight:"38px",letterSpacing:"0.02em",fontWeight:"600"}],"scoreboard-lg":["56px",{lineHeight:"60px",letterSpacing:"0.04em",fontWeight:"700"}],"scoreboard-lg-mobile":["36px",{lineHeight:"40px",letterSpacing:"0.03em",fontWeight:"700"}]}}}};</script></head><body class="bg-pitch-void text-on-surface font-body-md text-body-md"><header class="fixed top-0 w-full z-50 bg-pitch-base/95 backdrop-blur-xl shadow-[0_1px_8px_rgba(0,0,0,0.6)]"><div class="h-16 w-full px-arena-margin-desktop flex items-center justify-between gap-space-md"><div class="flex items-center gap-space-lg shrink-0"><div class="flex items-center gap-space-sm"><img alt="Stadium of Elite Crest" class="h-8 w-auto object-contain" src="https://lh3.googleusercontent.com/aida-public/AB6AXuATNtkjgp8hF227g3dKfca9kgM0_4JWNNMXhGWaIDLDfLHmvBw-FjxpZ11T_WnluiZenLOFus0pWjnhy0y2lj6auJqgY1w9CUEzNkXd5fhBe9RDLh7zgzYfzEdpJPL6IYCzsfqGEGuGpe_kgxHkO9Ye4fqOqiNKxNY8nGO9jusShBpRPUGTafiIRIrwiRjFi_LJYU3M4KnEuWvne5w-cRmwniU8eQXd1xi4Xc0ngbtU3SeZ7uvpe-aW"/><div class="flex flex-col"><span class="font-headline-sm text-headline-sm uppercase tracking-wider text-text-primary">Stadium of Elite</span><span class="font-label-caps text-label-caps uppercase text-neon-emerald tracking-widest">Academic Esports Championship</span></div></div><div class="hidden xl:flex items-center gap-space-xs px-space-sm py-space-2xs rounded-full bg-surface-container-high/80"><span class="w-2 h-2 rounded-full bg-card-red animate-ping"></span><span class="font-label-caps text-label-caps tracking-widest text-on-surface uppercase">MATCHDAY 4 • ARENA A • LIVE</span></div></div><nav class="hidden lg:flex items-center gap-space-sm" data-active-classes="bg-primary-container text-on-primary-container font-headline-sm text-headline-sm rounded-lg px-space-sm py-space-xs"><a class="font-headline-sm text-headline-sm uppercase px-space-sm py-space-xs text-on-surface-variant hover:text-on-surface transition-colors" data-path="match-arena" href="#">Match Arena</a><a aria-current="page" class="uppercase transition-colors bg-primary-container text-on-primary-container font-headline-sm text-headline-sm rounded-lg px-space-sm py-space-xs" data-path="referee-control-room" href="#">Referee Control Room</a><a class="font-headline-sm text-headline-sm uppercase px-space-sm py-space-xs text-on-surface-variant hover:text-on-surface transition-colors" data-path="team-dashboard" href="#">Team Dashboard</a><a class="font-headline-sm text-headline-sm uppercase px-space-sm py-space-xs text-on-surface-variant hover:text-on-surface transition-colors" data-path="leaderboard-and-timeline" href="#">Leaderboard &amp; Timeline</a><a class="font-headline-sm text-headline-sm uppercase px-space-sm py-space-xs text-on-surface-variant hover:text-on-surface transition-colors" data-path="rules-and-schedule" href="#">Rules &amp; Schedule</a></nav><div class="flex items-center gap-space-md shrink-0"><button class="relative p-space-xs text-on-surface-variant hover:text-on-surface transition-colors flex items-center justify-center"><span class="material-symbols-outlined">notifications</span><span class="absolute top-1 right-1 w-2 h-2 rounded-full bg-neon-emerald"></span></button><div class="flex items-center gap-space-sm bg-surface-container-high/60 px-space-sm py-space-2xs rounded-full"><div class="text-right hidden sm:flex flex-col"><span class="font-label-tech text-label-tech text-text-primary">David #09</span><span class="font-label-caps text-label-caps text-gold-trophy uppercase tracking-wider">Team Alpha Captain</span></div><img alt="Profile" class="w-8 h-8 rounded-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuByQuv0K6TOCjobUA2FcrC5GW8JJUkBZAgbENoQAtGE5V4wIJdEpz8CZcGkN6cekD0YQUutPRun389CGrWEKSrlfI8DjylDlIgbfkIcWyvcc-L2ucxDX4ZZgt8f0umIuDRsn3H3bmRv2EX3CJpGpG9J-Y5tFhaURLkdOFFH25pDpDUJYugM1TgFA68TGTcatW_ZLw_RI9G3m4hurgk5OSd6zNx94QjUZNHzDszZfHzTWsld4PIrNrG4"/></div></div></div></header><main class="w-full pt-16 bg-pitch-void min-h-screen"><div class="flex flex-col w-full">
+<div class="w-full bg-pitch-base px-arena-margin-desktop py-space-sm flex flex-col xl:flex-row items-center justify-between gap-space-md shadow-md">
+<div class="flex flex-wrap items-center gap-space-md w-full xl:w-auto">
+<div class="flex items-center gap-space-sm bg-pitch-elevated px-space-md py-space-xs rounded-lg shadow-sm">
+<span class="material-symbols-outlined text-referee-cyan" style="font-variation-settings: 'FILL' 1;">gavel</span>
+<div class="flex flex-col">
+<span class="font-label-caps text-label-caps text-text-secondary uppercase">Match 12 • Arena 1 Live Feed</span>
+<span class="font-headline-sm text-headline-sm text-text-primary uppercase tracking-wider">Alpha (4) vs (3) Titans</span>
+</div>
+</div>
+<div class="flex items-center gap-space-sm bg-surface-container-high px-space-md py-space-xs rounded-lg">
+<span class="w-2.5 h-2.5 rounded-full bg-card-red animate-pulse"></span>
+<div class="flex flex-col">
+<span class="font-label-caps text-label-caps text-card-yellow uppercase tracking-widest">Adjudication Lock</span>
+<span class="font-label-tech text-label-tech text-text-primary uppercase">Q7 Lockout • 00:00.000</span>
+</div>
+</div>
+</div>
+<div class="flex flex-wrap items-center gap-space-xs sm:gap-space-sm w-full xl:w-auto justify-start xl:justify-end">
+<button class="flex items-center gap-space-2xs px-space-md py-space-xs rounded-lg bg-surface-container-high hover:bg-surface-bright text-text-primary transition-colors font-headline-sm text-headline-sm uppercase shadow-sm">
+<span class="material-symbols-outlined text-body-md">pause_circle</span>
+<span>Pause Clock</span>
+</button>
+<button class="flex items-center gap-space-2xs px-space-md py-space-xs rounded-lg bg-surface-container-high hover:bg-card-yellow/20 text-card-yellow transition-colors font-headline-sm text-headline-sm uppercase shadow-sm">
+<span class="material-symbols-outlined text-body-md">timer</span>
+<span>Call Timeout</span>
+</button>
+<button class="flex items-center gap-space-2xs px-space-md py-space-xs rounded-lg bg-primary text-on-primary hover:bg-neon-emerald transition-colors font-headline-sm text-headline-sm uppercase shadow-md">
+<span class="material-symbols-outlined text-body-md">skip_next</span>
+<span>Next Question</span>
+</button>
+<button class="flex items-center gap-space-2xs px-space-sm py-space-xs rounded-lg bg-error-container text-on-error-container hover:bg-card-red hover:text-text-primary transition-colors font-headline-sm text-headline-sm uppercase shadow-sm">
+<span class="material-symbols-outlined text-body-md">cancel</span>
+<span>End Match</span>
+</button>
+</div>
+</div>
+<div class="w-full px-arena-margin-desktop py-space-xl flex flex-col gap-space-xl">
+<div class="w-full grid grid-cols-1 xl:grid-cols-12 gap-space-lg">
+<div class="xl:col-span-8 flex flex-col gap-space-lg">
+<div class="w-full bg-pitch-surface rounded-xl p-space-lg shadow-md relative overflow-hidden">
+<div class="absolute top-0 left-0 right-0 h-1 bg-neon-emerald"></div>
+<div class="flex flex-col md:flex-row md:items-center justify-between gap-space-md">
+<div class="flex flex-col gap-space-2xs">
+<div class="flex items-center gap-space-sm">
+<span class="px-space-xs py-0.5 rounded bg-surface-container-high text-neon-emerald font-label-caps text-label-caps uppercase">Standard Q7 / 10</span>
+<span class="text-text-secondary font-label-tech text-label-tech">Discipline: Electromagnetism &amp; Circuit Theory</span>
+</div>
+<h2 class="font-headline-md text-headline-md text-text-primary uppercase tracking-wide">
+                What is the SI unit of electric capacitance?
+              </h2>
+</div>
+<div class="flex items-center gap-space-md bg-pitch-base px-space-md py-space-sm rounded-lg shrink-0">
+<div class="flex flex-col text-right">
+<span class="font-label-caps text-label-caps text-text-muted uppercase">Verified Reference</span>
+<span class="font-headline-sm text-headline-sm text-neon-emerald tracking-wide">Farad (F)</span>
+</div>
+<span class="material-symbols-outlined text-neon-emerald text-headline-md">verified</span>
+</div>
+</div>
+</div>
+<div class="w-full bg-pitch-surface rounded-xl shadow-md overflow-hidden flex flex-col">
+<div class="px-space-lg py-space-md bg-pitch-base flex flex-col sm:flex-row sm:items-center justify-between gap-space-sm">
+<div class="flex items-center gap-space-sm">
+<span class="material-symbols-outlined text-referee-cyan">terminal</span>
+<span class="font-headline-sm text-headline-sm text-text-primary uppercase tracking-wider">Unmasked Telemetry Ingestion</span>
+<span class="px-space-xs py-0.5 rounded-full bg-surface-container-high text-text-secondary font-label-tech text-label-tech">5 Split Records</span>
+</div>
+<div class="flex items-center gap-space-sm font-label-caps text-label-caps text-text-muted">
+<span class="w-2 h-2 rounded-full bg-neon-emerald"></span>
+<span>Hardware-Synced Timestamping</span>
+</div>
+</div>
+<div class="w-full overflow-x-auto">
+<table class="w-full text-left">
+<thead>
+<tr class="bg-surface-container-low text-text-muted font-label-caps text-label-caps uppercase">
+<th class="py-space-sm px-space-md">Contender</th>
+<th class="py-space-sm px-space-md">Raw Signal</th>
+<th class="py-space-sm px-space-md">Normalized</th>
+<th class="py-space-sm px-space-md">Hardware Split</th>
+<th class="py-space-sm px-space-md">Audit Status</th>
+<th class="py-space-sm px-space-md text-right">Adjudicate</th>
+</tr>
+</thead>
+<tbody class="divide-y-0 font-body-sm text-body-sm text-text-primary">
+<tr class="bg-pitch-surface hover:bg-pitch-elevated transition-colors">
+<td class="py-space-md px-space-md">
+<div class="flex items-center gap-space-sm">
+<span class="w-2 h-2 rounded-full bg-neon-emerald"></span>
+<div class="flex flex-col">
+<span class="font-headline-sm text-headline-sm text-text-primary">David (#09)</span>
+<span class="font-label-caps text-label-caps text-neon-emerald uppercase">Team Alpha • Active</span>
+</div>
+</div>
+</td>
+<td class="py-space-md px-space-md font-label-tech text-label-tech text-text-primary">"Farad"</td>
+<td class="py-space-md px-space-md">
+<span class="px-space-xs py-0.5 rounded bg-surface-container-high text-neon-emerald font-label-tech text-label-tech">farad</span>
+</td>
+<td class="py-space-md px-space-md font-label-tech text-label-tech text-neon-emerald font-bold">00:03.104</td>
+<td class="py-space-md px-space-md">
+<span class="inline-flex items-center gap-space-2xs px-space-sm py-0.5 rounded-full bg-primary-container/20 text-neon-emerald font-label-caps text-label-caps uppercase">
+<span class="material-symbols-outlined text-body-sm">check_circle</span>
+                      Fastest Valid
+                    </span>
+</td>
+<td class="py-space-md px-space-md text-right">
+<button class="px-space-sm py-space-2xs rounded bg-primary text-on-primary hover:bg-neon-emerald font-headline-sm text-headline-sm uppercase transition-colors shadow-sm">
+                      Award Goal ⚽
+                    </button>
+</td>
+</tr>
+<tr class="bg-surface-container-low/40 hover:bg-pitch-elevated transition-colors">
+<td class="py-space-md px-space-md">
+<div class="flex items-center gap-space-sm">
+<span class="w-2 h-2 rounded-full bg-referee-cyan"></span>
+<div class="flex flex-col">
+<span class="font-headline-sm text-headline-sm text-text-primary">Elena (#04)</span>
+<span class="font-label-caps text-label-caps text-referee-cyan uppercase">Team Titans • Active</span>
+</div>
+</div>
+</td>
+<td class="py-space-md px-space-md font-label-tech text-label-tech text-text-primary">"farad"</td>
+<td class="py-space-md px-space-md">
+<span class="px-space-xs py-0.5 rounded bg-surface-container-high text-neon-emerald font-label-tech text-label-tech">farad</span>
+</td>
+<td class="py-space-md px-space-md font-label-tech text-label-tech text-text-secondary">00:03.420</td>
+<td class="py-space-md px-space-md">
+<span class="inline-flex items-center gap-space-2xs px-space-sm py-0.5 rounded-full bg-surface-container-high text-on-surface-variant font-label-caps text-label-caps uppercase">
+<span class="material-symbols-outlined text-body-sm">done</span>
+                      Valid Split (+0.316s)
+                    </span>
+</td>
+<td class="py-space-md px-space-md text-right">
+<button class="px-space-sm py-space-2xs rounded bg-surface-container-high text-text-secondary hover:bg-surface-bright hover:text-text-primary font-headline-sm text-headline-sm uppercase transition-colors">
+                      Award Goal ⚽
+                    </button>
+</td>
+</tr>
+<tr class="bg-pitch-surface hover:bg-pitch-elevated transition-colors">
+<td class="py-space-md px-space-md">
+<div class="flex items-center gap-space-sm">
+<span class="w-2 h-2 rounded-full bg-neon-emerald"></span>
+<div class="flex flex-col">
+<span class="font-headline-sm text-headline-sm text-text-primary">John (#11)</span>
+<span class="font-label-caps text-label-caps text-neon-emerald uppercase">Team Alpha • Active</span>
+</div>
+</div>
+</td>
+<td class="py-space-md px-space-md font-label-tech text-label-tech text-card-red">"Tesla"</td>
+<td class="py-space-md px-space-md">
+<span class="px-space-xs py-0.5 rounded bg-error-container/40 text-card-red font-label-tech text-label-tech">tesla</span>
+</td>
+<td class="py-space-md px-space-md font-label-tech text-label-tech text-text-secondary">00:05.018</td>
+<td class="py-space-md px-space-md">
+<span class="inline-flex items-center gap-space-2xs px-space-sm py-0.5 rounded-full bg-error-container/30 text-card-red font-label-caps text-label-caps uppercase">
+<span class="material-symbols-outlined text-body-sm">close</span>
+                      Incorrect Key
+                    </span>
+</td>
+<td class="py-space-md px-space-md text-right">
+<span class="font-label-caps text-label-caps text-card-red uppercase px-space-sm py-space-2xs rounded bg-surface-container-low">Rejected</span>
+</td>
+</tr>
+<tr class="bg-surface-container-low/40 hover:bg-pitch-elevated transition-colors">
+<td class="py-space-md px-space-md">
+<div class="flex items-center gap-space-sm">
+<span class="w-2 h-2 rounded-full bg-neon-emerald"></span>
+<div class="flex flex-col">
+<span class="font-headline-sm text-headline-sm text-text-primary">Samuel (#07)</span>
+<span class="font-label-caps text-label-caps text-neon-emerald uppercase">Team Alpha • Active</span>
+</div>
+</div>
+</td>
+<td class="py-space-md px-space-md font-label-tech text-label-tech text-text-primary">"Farads"</td>
+<td class="py-space-md px-space-md">
+<span class="px-space-xs py-0.5 rounded bg-surface-container-high text-neon-emerald font-label-tech text-label-tech">farad (lemmatized)</span>
+</td>
+<td class="py-space-md px-space-md font-label-tech text-label-tech text-text-secondary">00:05.221</td>
+<td class="py-space-md px-space-md">
+<span class="inline-flex items-center gap-space-2xs px-space-sm py-0.5 rounded-full bg-surface-container-high text-on-surface-variant font-label-caps text-label-caps uppercase">
+<span class="material-symbols-outlined text-body-sm">done_all</span>
+                      Valid Split (+2.117s)
+                    </span>
+</td>
+<td class="py-space-md px-space-md text-right">
+<button class="px-space-sm py-space-2xs rounded bg-surface-container-high text-text-secondary hover:bg-surface-bright hover:text-text-primary font-headline-sm text-headline-sm uppercase transition-colors">
+                      Award Goal ⚽
+                    </button>
+</td>
+</tr>
+<tr class="bg-pitch-surface hover:bg-pitch-elevated transition-colors opacity-60">
+<td class="py-space-md px-space-md">
+<div class="flex items-center gap-space-sm">
+<span class="w-2 h-2 rounded-full bg-text-muted"></span>
+<div class="flex flex-col">
+<span class="font-headline-sm text-headline-sm text-text-secondary">Peter (#03)</span>
+<span class="font-label-caps text-label-caps text-text-muted uppercase">Team Alpha • Active</span>
+</div>
+</div>
+</td>
+<td class="py-space-md px-space-md font-label-tech text-label-tech text-text-muted italic">[No Transmission Received]</td>
+<td class="py-space-md px-space-md font-label-tech text-label-tech text-text-muted">—</td>
+<td class="py-space-md px-space-md font-label-tech text-label-tech text-card-red">Expired (Timeout)</td>
+<td class="py-space-md px-space-md">
+<span class="inline-flex items-center gap-space-2xs px-space-sm py-0.5 rounded-full bg-surface-container-lowest text-text-muted font-label-caps text-label-caps uppercase">
+<span class="material-symbols-outlined text-body-sm">hourglass_disabled</span>
+                      Non-Responsive
+                    </span>
+</td>
+<td class="py-space-md px-space-md text-right">
+<span class="font-label-caps text-label-caps text-text-muted uppercase">No Goal</span>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+<div class="w-full grid grid-cols-1 md:grid-cols-2 gap-space-md">
+<button class="w-full flex items-center justify-between p-space-lg rounded-xl bg-neon-emerald hover:bg-primary text-on-primary shadow-xl transition-all group">
+<div class="flex items-center gap-space-md">
+<span class="material-symbols-outlined text-scoreboard-lg" style="font-variation-settings: 'FILL' 1;">sports_soccer</span>
+<div class="flex flex-col text-left">
+<span class="font-label-caps text-label-caps uppercase tracking-widest text-on-primary/80">Executive VAR Call</span>
+<span class="font-headline-lg text-headline-lg uppercase">Confirm Goal: David (#09)</span>
+<span class="font-label-tech text-label-tech text-on-primary-container">Official Score Impact: Alpha 5 - 3 Titans</span>
+</div>
+</div>
+<span class="material-symbols-outlined text-headline-lg group-hover:translate-x-1 transition-transform">arrow_forward</span>
+</button>
+<button class="w-full flex items-center justify-between p-space-lg rounded-xl bg-surface-container-high hover:bg-surface-bright text-card-red shadow-xl transition-all group">
+<div class="flex items-center gap-space-md">
+<span class="material-symbols-outlined text-scoreboard-lg" style="font-variation-settings: 'FILL' 1;">cancel_presentation</span>
+<div class="flex flex-col text-left">
+<span class="font-label-caps text-label-caps uppercase tracking-widest text-text-muted">No Score Awarded</span>
+<span class="font-headline-lg text-headline-lg uppercase">Declare No Goal ❌</span>
+<span class="font-label-tech text-label-tech text-text-secondary">Broadcast Correct Answer ('Farad') to Arena Screens</span>
+</div>
+</div>
+<span class="material-symbols-outlined text-headline-lg text-card-red group-hover:translate-x-1 transition-transform">close</span>
+</button>
+</div>
+</div>
+<div class="xl:col-span-4 flex flex-col gap-space-lg">
+<div class="w-full bg-pitch-surface rounded-xl p-space-lg shadow-md flex flex-col gap-space-md">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-space-sm">
+<span class="material-symbols-outlined text-card-yellow">warning</span>
+<span class="font-headline-sm text-headline-sm text-text-primary uppercase tracking-wider">Disciplinary Adjudication</span>
+</div>
+<span class="font-label-caps text-label-caps text-card-yellow uppercase px-space-xs py-0.5 rounded bg-surface-container-high">Referee Discretion</span>
+</div>
+<div class="flex flex-col gap-space-sm">
+<label class="font-label-caps text-label-caps text-text-secondary uppercase">Target Subject</label>
+<div class="p-space-sm rounded bg-pitch-base flex items-center justify-between">
+<div class="flex items-center gap-space-sm">
+<span class="w-2.5 h-2.5 rounded-full bg-neon-emerald"></span>
+<span class="font-headline-sm text-headline-sm text-text-primary">Samuel (#07 Team Alpha)</span>
+</div>
+<span class="font-label-tech text-label-tech text-referee-cyan">Target Locked</span>
+</div>
+</div>
+<div class="flex flex-col gap-space-sm">
+<label class="font-label-caps text-label-caps text-text-secondary uppercase">Alleged Match Code Infraction</label>
+<div class="p-space-sm rounded bg-pitch-base flex flex-col gap-space-2xs">
+<span class="font-headline-sm text-headline-sm text-text-primary uppercase">Code §4.2: Answer Sharing / Chat Spam</span>
+<span class="font-body-sm text-body-sm text-text-muted">Detected repeated unauthorized communication flag during countdown interval.</span>
+</div>
+</div>
+<div class="flex flex-col gap-space-sm">
+<label class="font-label-caps text-label-caps text-text-secondary uppercase">Execute Official Sanction</label>
+<div class="grid grid-cols-3 gap-space-xs">
+<button class="flex flex-col items-center justify-center p-space-sm rounded bg-surface-container-high hover:bg-surface-bright text-text-primary transition-colors">
+<span class="material-symbols-outlined text-body-lg text-text-secondary">campaign</span>
+<span class="font-label-caps text-label-caps uppercase mt-space-2xs">Warning</span>
+</button>
+<button class="flex flex-col items-center justify-center p-space-sm rounded bg-card-yellow text-pitch-base hover:bg-secondary transition-colors shadow-sm">
+<span class="material-symbols-outlined text-body-lg">crop_portrait</span>
+<span class="font-label-caps text-label-caps uppercase font-bold mt-space-2xs">🟨 Yellow Card</span>
+</button>
+<button class="flex flex-col items-center justify-center p-space-sm rounded bg-error-container hover:bg-card-red text-text-primary transition-colors shadow-sm">
+<span class="material-symbols-outlined text-body-lg">gavel</span>
+<span class="font-label-caps text-label-caps uppercase font-bold mt-space-2xs">🟥 Red Card</span>
+</button>
+</div>
+</div>
+</div>
+<div class="w-full bg-pitch-surface rounded-xl p-space-lg shadow-md flex flex-col gap-space-md">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-space-sm">
+<span class="material-symbols-outlined text-referee-cyan">swap_horizontal_circle</span>
+<span class="font-headline-sm text-headline-sm text-text-primary uppercase tracking-wider">Substitution Registry</span>
+</div>
+<span class="px-space-xs py-0.5 rounded-full bg-secondary-container/30 text-card-yellow font-label-caps text-label-caps uppercase">1 Pending</span>
+</div>
+<div class="p-space-md rounded-lg bg-pitch-base flex flex-col gap-space-sm">
+<div class="flex items-center justify-between">
+<span class="font-label-caps text-label-caps text-neon-emerald uppercase">Team Alpha Motion</span>
+<span class="font-label-tech text-label-tech text-text-muted">Stamp: 00:02.891</span>
+</div>
+<div class="flex items-center justify-between gap-space-sm bg-surface-container-high p-space-sm rounded">
+<div class="flex items-center gap-space-xs">
+<span class="material-symbols-outlined text-neon-emerald text-body-lg">arrow_upward</span>
+<div class="flex flex-col">
+<span class="font-headline-sm text-headline-sm text-text-primary">Michael (#02)</span>
+<span class="font-label-caps text-label-caps text-neon-emerald uppercase">IN • Specialist</span>
+</div>
+</div>
+<span class="material-symbols-outlined text-text-muted">multiple_stop</span>
+<div class="flex items-center gap-space-xs text-right">
+<div class="flex flex-col">
+<span class="font-headline-sm text-headline-sm text-text-secondary">Peter (#03)</span>
+<span class="font-label-caps text-label-caps text-card-red uppercase">OUT • Inactive</span>
+</div>
+<span class="material-symbols-outlined text-card-red text-body-lg">arrow_downward</span>
+</div>
+</div>
+<div class="grid grid-cols-2 gap-space-xs mt-space-2xs">
+<button class="px-space-sm py-space-xs rounded bg-primary text-on-primary hover:bg-neon-emerald font-headline-sm text-headline-sm uppercase transition-colors shadow-sm">
+                Approve Sub
+              </button>
+<button class="px-space-sm py-space-xs rounded bg-surface-container-high hover:bg-error-container text-card-red hover:text-text-primary font-headline-sm text-headline-sm uppercase transition-colors">
+                Deny Motion
+              </button>
+</div>
+</div>
+</div>
+<div class="w-full bg-pitch-surface rounded-xl p-space-lg shadow-md flex items-center justify-between">
+<div class="flex items-center gap-space-md">
+<div class="w-12 h-12 rounded-full bg-pitch-elevated flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-neon-emerald text-headline-md">shield_person</span>
+</div>
+<div class="flex flex-col">
+<span class="font-headline-sm text-headline-sm text-text-primary uppercase tracking-wide">Arena Senior Umpire</span>
+<span class="font-label-tech text-label-tech text-text-secondary">Chief Referee: Dr. Marcus Vance</span>
+<span class="font-label-caps text-label-caps text-neon-emerald uppercase mt-0.5">Encrypted Console Active</span>
+</div>
+</div>
+<span class="material-symbols-outlined text-text-muted">lock</span>
+</div>
+</div>
+</div>
+</div>
+</div></main><footer class="w-full bg-pitch-base py-space-lg"><div class="w-full px-arena-margin-desktop flex flex-col md:flex-row items-center justify-between gap-space-md text-text-muted font-body-sm text-body-sm"><span>© 2025 Stadium of Elite Academic Esports Federation. All telemetry and pitch data broadcast live.</span><div class="flex items-center gap-space-md font-label-caps text-label-caps uppercase text-on-surface-variant"><span>VAR Verified System</span><span>•</span><span>Official Referee Cockpit</span><span>•</span><span>Ultra-Low Latency Feed</span></div></div></footer></body></html>

@@ -642,7 +642,7 @@ export async function lockAndReveal(actor: Actor, input: { code: string; force?:
 
 export async function decideRound(
   actor: Actor,
-  input: { code: string; decision: "GOAL" | "NO_GOAL"; submissionId?: string },
+  input: { code: string; decision: "GOAL" | "NO_GOAL"; submissionId?: string; assistUserId?: string | null },
 ): Promise<ActionResult> {
   const match = await assertReferee(actor, input.code);
   const locked = match.rounds.find((r) => r.status === "LOCKED");
@@ -652,7 +652,7 @@ export async function decideRound(
     await prisma.$transaction(async (tx) => {
       await tx.round.update({
         where: { id: locked.id },
-        data: { status: "DECIDED", decision: "NO_GOAL", decidedAt: new Date() },
+        data: { status: "DECIDED", decision: "NO_GOAL", decidedAt: new Date(), goalSubmissionId: null, assistPlayerId: null },
       });
       await tx.match.update({
         where: { id: match.id },
@@ -676,13 +676,33 @@ export async function decideRound(
   const sub = locked.submissions.find((s) => s.id === input.submissionId);
   if (!sub) return err("That submission does not belong to the locked question.");
 
+  const scorerSlot = await prisma.matchPlayer.findUnique({ where: { id: sub.playerId } });
+  if (!scorerSlot) return err("Could not find the scoring player.");
+  const scorerTeam = scorerSlot.team;
+
+  // Optional assist: another active player on the SAME team is credited.
+  let assistSlotId: string | null = null;
+  if (input.assistUserId && input.assistUserId !== scorerSlot.userId) {
+    const assistSlot = await prisma.matchPlayer.findFirst({
+      where: { matchId: match.id, userId: input.assistUserId, team: scorerTeam },
+    });
+    if (!assistSlot) return err("The assist must go to an active player on the same team.");
+    assistSlotId = assistSlot.id;
+  }
+
   await prisma.$transaction(async (tx) => {
     await tx.round.update({
       where: { id: locked.id },
-      data: { status: "DECIDED", decision: "GOAL", decidedAt: new Date(), goalSubmissionId: sub.id },
+      data: {
+        status: "DECIDED",
+        decision: "GOAL",
+        decidedAt: new Date(),
+        goalSubmissionId: sub.id,
+        assistPlayerId: assistSlotId,
+      },
     });
-    const slot = await tx.matchPlayer.findUnique({ where: { id: sub.playerId } });
-    const scorerTeam = slot?.team ?? "HOME";
+    const scorerName = rosterNameOf(match, sub.playerId);
+    const assistName = assistSlotId ? rosterNameOf(match, assistSlotId) : null;
     await tx.match.update({
       where: { id: match.id },
       data: {
@@ -698,8 +718,8 @@ export async function decideRound(
         data: { points: { increment: GOAL_POINTS } },
       });
     }
-    const scorerName = rosterNameOf(match, sub.playerId);
     const teamName = teamNameOf(match, scorerTeam);
+    const goalDetail = assistName ? `${scorerName} scores for ${teamName}, assisted by ${assistName}` : `${scorerName} scores for ${teamName}`;
     const scoreLine =
       scorerTeam === "HOME"
         ? `${match.homeScore + 1}–${match.awayScore}`
@@ -708,7 +728,7 @@ export async function decideRound(
       tx,
       match.id,
       "GOAL",
-      `Goal — ${scorerName}`,
+      `Goal — ${goalDetail}`,
       `Answer: ${sub.answer} · ${teamName} lead ${scoreLine}`,
       actor.userId,
     );
@@ -892,12 +912,24 @@ export async function endMatch(actor: Actor, input: { code: string }): Promise<A
     const slug = `${match.code}-match-report`;
     const exists = await prisma.newsPost.findUnique({ where: { slug }, select: { id: true } });
     if (!exists) {
+      const highlights = match.timeline
+        .filter((t) => ["GOAL", "NO_GOAL", "SUBSTITUTION", "CARD", "HALF_TIME"].includes(t.type))
+        .map((t) => `• ${t.label}${t.detail ? ` — ${t.detail}` : ""}`);
+      const body = [
+        `Full-time: ${scoreline}.`,
+        ``,
+        `${match.homeName} and ${match.awayName} went through all ${decided} questions to reach this result.`,
+        ``,
+        highlights.length ? highlights.join("\n") : "No highlights were recorded.",
+        ``,
+        "This match report was posted automatically at full time. Vote for the Player of the Match on the match page.",
+      ].join("\n");
       await prisma.newsPost.create({
         data: {
           title: scoreline,
           slug,
-          excerpt: `Full-time at ${match.code}: ${match.homeScore}–${match.awayScore}.`,
-          body: `Full-time: ${scoreline}.\n\nAll ${decided} questions were played. This report was posted automatically at full time.`,
+          excerpt: `${match.homeName} ${match.homeScore}–${match.awayScore} ${match.awayName} — full-time report, goals and key moments.`,
+          body,
           published: true,
           authorId: actor.userId,
         },
