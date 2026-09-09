@@ -195,8 +195,8 @@ export async function startPenaltiesAction(code: string): Promise<ActionResult> 
   return runEngine((actor) => startPenalties(actor, { code }));
 }
 
-export async function takePenaltyKickAction(code: string, scored: boolean): Promise<ActionResult> {
-  return runEngine((actor) => takePenaltyKick(actor, { code, scored }));
+export async function takePenaltyKickAction(code: string, scored: boolean, takerUserId?: string): Promise<ActionResult> {
+  return runEngine((actor) => takePenaltyKick(actor, { code, scored, takerUserId }));
 }
 
 /* ------------------------------ substitutions ------------------------------ */

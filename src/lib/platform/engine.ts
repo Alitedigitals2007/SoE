@@ -146,17 +146,49 @@ export async function scheduleLeagueWave(
   const count = Math.max(1, Math.min(20, Math.floor(input.count) || 5));
   const comp = await prisma.competition.findUnique({
     where: { id: input.competitionId },
-    include: { matches: { where: { status: "DRAFT" }, orderBy: { createdAt: "asc" }, select: { id: true, homeTeamId: true, awayTeamId: true, scheduledAt: true } } },
+    include: {
+      matches: {
+        orderBy: { createdAt: "asc" },
+        select: { id: true, status: true, scheduledAt: true, homeTeamId: true, awayTeamId: true },
+      },
+    },
   });
   if (!comp) return err("Competition not found.");
 
-  const unscheduled = comp.matches.filter((m) => !m.scheduledAt);
+  const unscheduled = comp.matches.filter((m) => m.status === "DRAFT" && !m.scheduledAt);
   if (unscheduled.length === 0) return err("Every fixture is already scheduled.");
 
-  // Greedy pick of fixtures where no team appears twice in this wave.
+  // Load per team = matches already played + fixtures already scheduled.
+  // We schedule the fixtures the least-loaded teams need next, so the wave
+  // follows a fair round-robin order instead of "just the earliest rows".
+  const load = new Map<string, number>();
+  const bump = (id: string | null, amount: number) => {
+    if (!id) return;
+    load.set(id, (load.get(id) ?? 0) + amount);
+  };
+  for (const m of comp.matches) {
+    if (m.status === "FINISHED") {
+      bump(m.homeTeamId, 1);
+      bump(m.awayTeamId, 1);
+    } else if (m.scheduledAt) {
+      bump(m.homeTeamId, 1);
+      bump(m.awayTeamId, 1);
+    }
+  }
+
+  const getLoad = (id: string | null) => (id ? load.get(id) ?? 0 : 0);
+  const candidates = [...unscheduled].sort((a, b) => {
+    const al = Math.min(getLoad(a.homeTeamId), getLoad(a.awayTeamId));
+    const ah = Math.max(getLoad(a.homeTeamId), getLoad(a.awayTeamId));
+    const bl = Math.min(getLoad(b.homeTeamId), getLoad(b.awayTeamId));
+    const bh = Math.max(getLoad(b.homeTeamId), getLoad(b.awayTeamId));
+    return al - bl || ah - bh || 0; // createdAt order preserved on ties
+  });
+
+  // Greedy pick where no team appears twice in this wave.
   const selected: { id: string }[] = [];
   const busy = new Set<string>();
-  for (const m of unscheduled) {
+  for (const m of candidates) {
     if (selected.length >= count) break;
     if ((m.homeTeamId && busy.has(m.homeTeamId)) || (m.awayTeamId && busy.has(m.awayTeamId))) continue;
     selected.push({ id: m.id });

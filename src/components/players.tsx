@@ -4,7 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 import { Badge, Input, cn } from "@/components/ui";
 
-type Person = { id: string; name: string; teams?: { name: string; slug: string }[] };
+type Person = { id: string; name: string; matches?: number; teams?: { name: string; slug: string }[] };
 type Tab = "players" | "referees" | "fans";
 
 const TABS: { key: Tab; label: string; icon: string }[] = [
@@ -72,7 +72,7 @@ export function PlayersIndex({
           {filtered.map((p) => (
             <li key={p.id}>
               <Link
-                href={tab === "players" ? `/players/${p.id}` : "/players"}
+                href={tab === "players" ? `/players/${p.id}` : tab === "referees" ? `/referee/${p.id}` : "/players"}
                 className="flex items-center gap-3 rounded-xl border-2 border-fg/15 bg-bg-elevated px-4 py-3 shadow-[3px_3px_0_rgba(11,32,48,.06)] transition-all hover:-translate-y-0.5 hover:border-brand/40 hover:shadow-md"
               >
                 <span
@@ -99,7 +99,9 @@ export function PlayersIndex({
                       )}
                     </span>
                   ) : (
-                    <span className="text-xs text-muted">{tab === "referees" ? "Match official" : "Fantasy fan"}</span>
+                    <span className="text-xs text-muted">
+                      {tab === "referees" ? `${p.matches ?? 0} match${p.matches === 1 ? "" : "es"} refereed` : "Fantasy fan"}
+                    </span>
                   )}
                 </span>
               </Link>

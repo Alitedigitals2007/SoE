@@ -14,7 +14,7 @@ export default async function PlayersPage() {
     prisma.user.findMany({
       where: { role: "REFEREE" },
       orderBy: { name: "asc" },
-      select: { id: true, name: true },
+      select: { id: true, name: true, _count: { select: { matchesRefereed: true } } },
     }),
     prisma.user.findMany({
       where: { role: "USER" },
@@ -31,7 +31,7 @@ export default async function PlayersPage() {
         <p className="mt-1 text-muted">Everyone on the pitch and in the stands — players, referees and fans.</p>
         <PlayersIndex
           players={players.map((u) => ({ id: u.id, name: u.name, teams: u.teams.map((t) => ({ name: t.team.name, slug: t.team.slug })) }))}
-          referees={referees.map((u) => ({ id: u.id, name: u.name }))}
+          referees={referees.map((u) => ({ id: u.id, name: u.name, matches: u._count.matchesRefereed }))}
           fans={fans.map((u) => ({ id: u.id, name: u.name }))}
         />
       </div>

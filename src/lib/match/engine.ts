@@ -923,7 +923,6 @@ export async function startPenalties(actor: Actor, input: { code: string }): Pro
     return err("Start the match first — penalties come after the ten questions.");
   if (match.currentRound < 10) return err("All ten questions must be played before penalties.");
   if (match.homeScore !== match.awayScore) return err("Penalties are only available when the score is level.");
-  if (match.competition?.type !== "CUP") return err("Penalties are only available in knockout cup matches.");
   if (match.penaltyShootout) return err("A penalty shootout is already in progress.");
 
   await prisma.$transaction(async (tx) => {
@@ -944,7 +943,7 @@ export async function startPenalties(actor: Actor, input: { code: string }): Pro
 
 export async function takePenaltyKick(
   actor: Actor,
-  input: { code: string; scored: boolean },
+  input: { code: string; scored: boolean; takerUserId?: string },
 ): Promise<ActionResult> {
   const match = await assertReferee(actor, input.code);
   if (match.status !== "LIVE" && match.status !== "FINISHED")
@@ -956,6 +955,14 @@ export async function takePenaltyKick(
   const kicks = ps.kicks;
   const total = kicks.length + 1; // sequence of THIS kick (1-based)
   const teamSide: "HOME" | "AWAY" = total % 2 === 1 ? "HOME" : "AWAY"; // HOME kicks first, then strictly alternate
+
+  // Resolve who takes the kick: the nominated starter, the side's captain,
+  // or the first starter on the side as a fallback.
+  const sideRoster = match.roster.filter((r) => r.team === teamSide && r.role === "STARTER");
+  let taker = sideRoster.find((r) => r.userId === input.takerUserId);
+  if (!taker) taker = sideRoster.find((r) => r.isCaptain) ?? sideRoster[0] ?? null;
+  if (!taker) return err(`No active player is available on ${teamNameOf(match, teamSide)} to take the penalty.`);
+  const takerName = taker.user.name;
 
   // Prospective scores including this kick.
   const aScore = ps.teamAScore + (teamSide === "HOME" && input.scored ? 1 : 0);
@@ -994,7 +1001,7 @@ export async function takePenaltyKick(
 
     const teamName = teamSide === "HOME" ? match.homeName : match.awayName;
     const label = input.scored ? "Penalty scored" : "Penalty missed";
-    const detail = `${teamName} — ${input.scored ? "Scored" : "Missed"}`;
+    const detail = `${takerName} (${teamName}) — ${input.scored ? "Scored" : "Missed"}`;
     await appendTimeline(tx, match.id, input.scored ? "PENALTY_SCORED" : "PENALTY_MISS", label, detail, actor.userId);
 
     if (newStatus === "COMPLETE") {

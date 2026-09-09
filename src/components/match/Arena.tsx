@@ -408,10 +408,10 @@ function Stage({ snapshot, onError }: { snapshot: MatchSnapshot; onError: (e: st
           <div className="p-4">
             {isReferee ? (
               <div className="flex flex-wrap items-center gap-3">
-                {isCup && isDraw && !snapshot.penaltyShootout ? (
+                {isDraw && !snapshot.penaltyShootout ? (
                   <>
                     <Button variant="pitch" onClick={() => submit(startPenaltiesAction(snapshot.code), onError)}>
-                      Penalties
+                      Penalties — decide the winner
                     </Button>
                     <EndMatchButton code={snapshot.code} onError={onError} />
                   </>
@@ -421,7 +421,7 @@ function Stage({ snapshot, onError }: { snapshot: MatchSnapshot; onError: (e: st
               </div>
             ) : (
               <p className="text-sm text-muted">
-                {isCup && isDraw ? "Waiting for the referee to choose penalties or end the match." : "Waiting for the referee to end the match."}
+                {isDraw ? "Waiting for the referee to choose penalties or end the match." : "Waiting for the referee to end the match."}
               </p>
             )}
           </div>
@@ -1174,6 +1174,19 @@ function TimelineRow({ t }: { t: TimelineItemView }) {
 
 function PenaltyShootoutCard({ snapshot, onError }: { snapshot: MatchSnapshot; onError: (e: string | null) => void }) {
   const ps = snapshot.penaltyShootout;
+  const side = ps?.currentKickTeam ?? "HOME";
+  const sideStarters = React.useMemo(
+    () => (ps ? snapshot.roster.filter((r) => r.team === side && r.role === "STARTER") : []),
+    [snapshot.roster, side, ps],
+  );
+  const [taker, setTaker] = React.useState("");
+  React.useEffect(() => {
+    if (!ps) return;
+    const captain = sideStarters.find((r) => r.isCaptain);
+    const fallback = captain?.userId ?? sideStarters[0]?.userId ?? "";
+    setTaker((prev) => (prev && sideStarters.some((s) => s.userId === prev) ? prev : fallback));
+  }, [side, sideStarters, ps]);
+
   if (!ps) return null;
   const isReferee = snapshot.viewer.isReferee;
   const isComplete = ps.status === "COMPLETE";
@@ -1208,22 +1221,29 @@ function PenaltyShootoutCard({ snapshot, onError }: { snapshot: MatchSnapshot; o
         <PenaltyKicksList kicks={ps.kicks} homeName={snapshot.homeName} awayName={snapshot.awayName} />
 
         {!isComplete && isReferee && (
-          <div className="mt-5 flex flex-wrap items-center gap-3 border-t border-line pt-4">
+          <div className="mt-5 border-t border-line pt-4">
             <p className="text-xs text-subtle mr-2">
               Next kick: {ps.currentKickTeam === "HOME" ? snapshot.homeName : snapshot.awayName}
             </p>
-            <Button
-              variant="pitch"
-              onClick={() => submit(takePenaltyKickAction(snapshot.code, true), onError)}
-            >
-              Scored
-            </Button>
-            <Button
-              variant="danger"
-              onClick={() => submit(takePenaltyKickAction(snapshot.code, false), onError)}
-            >
-              Missed
-            </Button>
+            <div className="mt-2 flex flex-wrap items-center gap-3">
+              <label className="flex items-center gap-2 text-xs font-semibold text-muted">
+                Who takes it?
+                <Select value={taker} onChange={(e) => setTaker(e.target.value)} className="w-44 py-1 text-xs">
+                  {sideStarters.map((p) => (
+                    <option key={p.userId} value={p.userId}>
+                      {p.isCaptain ? `${p.name} (C)` : p.name}
+                    </option>
+                  ))}
+                </Select>
+              </label>
+              <Button variant="pitch" onClick={() => submit(takePenaltyKickAction(snapshot.code, true, taker), onError)}>
+                Scored
+              </Button>
+              <Button variant="danger" onClick={() => submit(takePenaltyKickAction(snapshot.code, false, taker), onError)}>
+                Missed
+              </Button>
+            </div>
+            <p className="mt-2 text-[11px] text-subtle">Nominate the taker first — the first player to volunteer usually earns it.</p>
           </div>
         )}
 
