@@ -32,7 +32,7 @@ export default async function FantasyIndex() {
         </div>
 
         {comps.length === 0 ? (
-          <div className="mt-8 rounded-2xl border border-dashed border-line-strong bg-white p-10 text-center">
+          <div className="mt-8 rounded-2xl border-2 border-dashed border-fg/20 bg-bg-elevated p-10 text-center">
             <p className="text-4xl" aria-hidden>🏟️</p>
             <p className="mt-2 font-semibold text-fg">No active competitions</p>
             <p className="text-sm text-muted">Fantasy opens for a competition once it is created.</p>
@@ -42,7 +42,7 @@ export default async function FantasyIndex() {
             {comps.map((c) => {
               const mine = c.fantasyEntries && c.fantasyEntries.length > 0 ? c.fantasyEntries[0] : null;
               return (
-                <Link key={c.id} href={`/fantasy/${c.id}`} className="group rounded-2xl border border-line bg-white p-6 shadow-sm transition-all hover:-translate-y-1 hover:border-brand/40 hover:shadow-lg">
+                <Link key={c.id} href={`/fantasy/${c.id}`} className="group animate-fade-up rounded-2xl border-2 border-fg/15 bg-bg-elevated p-6 shadow-[4px_4px_0_rgba(11,32,48,.08)] transition-all hover:-translate-y-1 hover:border-brand/40 hover:shadow-lg">
                   <div className="flex items-start justify-between gap-2">
                     <div>
                       <p className="text-lg font-extrabold text-fg group-hover:text-brand">{c.name}</p>

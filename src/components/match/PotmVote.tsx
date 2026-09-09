@@ -127,7 +127,7 @@ export function PotmVote({
         )}
 
         {closed && results.length > 0 ? (
-          <p className="rounded-md border border-gold/40 bg-gold/10 px-3 py-2 text-sm font-semibold text-gold-strong">
+          <p className="animate-pop rounded-md border border-gold/40 bg-gold/10 px-3 py-2 text-sm font-semibold text-gold-strong">
             🏆 Player of the Match: {results[0].playerName}
           </p>
         ) : null}

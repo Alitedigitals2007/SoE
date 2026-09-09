@@ -73,7 +73,7 @@ export default async function FantasyCompetition({ params }: { params: Promise<{
           <section>
             <h2 className="text-lg font-bold text-fg">Your entry</h2>
             {user ? (
-              <div className="mt-3 rounded-2xl border border-line bg-white p-5 shadow-sm">
+              <div className="mt-3 rounded-2xl border-2 border-fg/15 bg-bg-elevated p-5 shadow-[4px_4px_0_rgba(11,32,48,.08)]">
                 <div className="flex items-center justify-between">
                   <p className="font-bold text-fg">
                     {myEntry?.name ?? `${user.name}'s XI`}
@@ -96,14 +96,14 @@ export default async function FantasyCompetition({ params }: { params: Promise<{
           <section>
             <h2 className="text-lg font-bold text-fg">Leaderboard</h2>
             {boardData.length === 0 ? (
-              <p className="mt-3 rounded-xl border border-dashed border-line-strong bg-white p-6 text-center text-sm text-muted">
+              <p className="mt-3 rounded-xl border-2 border-dashed border-fg/20 bg-bg-elevated p-6 text-center text-sm text-muted">
                 No entries yet — be the first manager.
               </p>
             ) : (
               <ol className="mt-3 space-y-1.5">
                 {boardData.map((e) => (
                   <li key={e.rank}>
-                    <div className={`flex items-center gap-3 rounded-xl border px-4 py-2.5 ${e.mine ? "border-brand bg-brand/10" : "border-line bg-white"}`}>
+                    <div className={`flex items-center gap-3 rounded-xl border-2 px-4 py-2.5 transition-transform ${e.mine ? "border-brand bg-brand/10" : "border-fg/15 bg-bg-elevated hover:-translate-y-0.5"}`}>
                       <span className="w-6 shrink-0 text-center text-sm font-black text-subtle">{e.rank}</span>
                       <span className="min-w-0 flex-1">
                         <span className="block truncate text-sm font-semibold text-fg">

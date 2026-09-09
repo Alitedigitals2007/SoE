@@ -20,6 +20,7 @@ export function UsersManager({ users }: { users: UserRow[] }) {
   const [password, setPassword] = React.useState("");
   const [role, setRole] = React.useState<Role>("PLAYER");
   const [busy, setBusy] = React.useState(false);
+  const [filter, setFilter] = React.useState<"ALL" | Role>("ALL");
   const router = useRouter();
 
   function flash(r: { ok: boolean; error?: string }, okText: string) {
@@ -30,6 +31,15 @@ export function UsersManager({ users }: { users: UserRow[] }) {
       setNotice({ kind: "err", text: r.error ?? "Action failed." });
     }
   }
+
+  const tabs: { key: "ALL" | Role; label: string }[] = [
+    { key: "ALL", label: `All (${users.length})` },
+    { key: "ADMIN", label: `Admins (${users.filter((u) => u.role === "ADMIN").length})` },
+    { key: "REFEREE", label: `Referees (${users.filter((u) => u.role === "REFEREE").length})` },
+    { key: "PLAYER", label: `Players (${users.filter((u) => u.role === "PLAYER").length})` },
+    { key: "USER", label: `Fans (${users.filter((u) => u.role === "USER").length})` },
+  ];
+  const filtered = filter === "ALL" ? users : users.filter((u) => u.role === filter);
 
   return (
     <div className="grid gap-4 lg:grid-cols-3">
@@ -75,24 +85,45 @@ export function UsersManager({ users }: { users: UserRow[] }) {
       </Card>
 
       <Card className="lg:col-span-2">
-        <CardHeader title={`Accounts (${users.length})`} description="Referees run matches; players join rosters." />
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
-            <thead className="border-b border-line text-xs uppercase tracking-wider text-subtle">
-              <tr>
-                <th className="px-4 py-2 font-semibold">Name</th>
-                <th className="px-4 py-2 font-semibold">Email</th>
-                <th className="px-4 py-2 font-semibold">Role</th>
-                <th className="px-4 py-2 font-semibold">Reset password</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-line/70">
-              {users.map((u) => (
-                <UserRowItem key={u.id} user={u} flash={flash} />
-              ))}
-            </tbody>
-          </table>
+        <CardHeader title={`Accounts (${users.length})`} description="Filter by role, then manage them below." />
+        <div className="flex flex-wrap gap-1.5 border-b border-line px-4 py-3">
+          {tabs.map((t) => (
+            <button
+              key={t.key}
+              type="button"
+              onClick={() => setFilter(t.key)}
+              className={cn(
+                "rounded-full border px-3 py-1 text-xs font-bold uppercase tracking-wide transition-colors",
+                filter === t.key
+                  ? "border-brand bg-brand text-white"
+                  : "border-line-strong bg-surface text-muted hover:border-brand/40 hover:text-fg",
+              )}
+            >
+              {t.label}
+            </button>
+          ))}
         </div>
+        {filtered.length === 0 ? (
+          <p className="px-4 py-10 text-center text-sm text-muted">No accounts in this group.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm">
+              <thead className="border-b border-line text-xs uppercase tracking-wider text-subtle">
+                <tr>
+                  <th className="px-4 py-2 font-semibold">Name</th>
+                  <th className="px-4 py-2 font-semibold">Email</th>
+                  <th className="px-4 py-2 font-semibold">Role</th>
+                  <th className="px-4 py-2 font-semibold">Reset password</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-line/70">
+                {filtered.map((u) => (
+                  <UserRowItem key={u.id} user={u} flash={flash} />
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </Card>
     </div>
   );

@@ -3,6 +3,7 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { SiteFooter, SiteHeader } from "@/components/site";
 import { Badge } from "@/components/ui";
+import { KickoffCountdown } from "@/components/KickoffCountdown";
 
 export const dynamic = "force-dynamic";
 
@@ -20,6 +21,7 @@ export default async function Home() {
       where: { status: "DRAFT" },
       orderBy: { createdAt: "asc" },
       take: 8,
+      select: { id: true, code: true, homeName: true, awayName: true, status: true, scheduledAt: true },
     }),
     prisma.competition.findMany({
       orderBy: { createdAt: "asc" },
@@ -43,6 +45,7 @@ export default async function Home() {
   const topScorers = [...scorerMap.values()].sort((a, b) => b.goals - a.goals).slice(0, 6);
 
   const liveMatches = live;
+  const heroMatch = liveMatches[0] ?? upcoming.find((u) => u.scheduledAt) ?? null;
   const session = await auth();
   const isAdmin = session?.user?.role === "ADMIN";
 
@@ -93,28 +96,74 @@ export default async function Home() {
               </div>
             </div>
 
-            {/* Hero pitch card */}
+            {/* Hero board — real data: live match or next scheduled kick-off */}
             <div className="animate-pop">
-              <div className="pitch-bg animate-float rounded-[2rem] border-2 border-fg p-8 shadow-[10px_10px_0_rgba(11,32,48,.22)]">
-                <div className="flex items-center justify-between gap-4">
-                  <p className="text-lg font-extrabold uppercase tracking-wide text-white">Lagos United</p>
-                  <div className="text-center">
-                    <p className="text-5xl font-black tabular-nums text-white">
-                      2<span className="text-white/40"> – </span>1
-                    </p>
-                    <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-white/70">Question 8 / 10</p>
+              {heroMatch ? (
+                <div className="pitch-bg overflow-hidden rounded-[2rem] border-2 border-fg shadow-[10px_10px_0_rgba(11,32,48,.22)]">
+                  <div className="scoreboard-strip flex items-center justify-between px-4 py-1.5">
+                    <span className="text-[10px] font-black uppercase tracking-[0.25em]">Matchday board</span>
+                    {heroMatch.status === "LIVE" ? (
+                      <span className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-gold">
+                        <span aria-hidden className="size-1.5 animate-pulse rounded-full bg-danger" /> Live
+                      </span>
+                    ) : (
+                      <span className="text-[10px] font-black uppercase tracking-widest text-white/70">Up next</span>
+                    )}
                   </div>
-                  <p className="text-right text-lg font-extrabold uppercase tracking-wide text-white">Abuja Stars</p>
-                </div>
-                <div className="mt-6 grid grid-cols-3 gap-3 text-center text-white">
-                  {["5 starters", "1 referee", "10 questions"].map((t) => (
-                    <div key={t} className="rounded-xl bg-white/10 px-2 py-3 text-xs font-semibold uppercase tracking-wider">
-                      {t}
+                  <div className="p-6 sm:p-8">
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="min-w-0 flex-1 truncate text-left text-lg font-extrabold uppercase tracking-wide text-white">
+                        {heroMatch.homeName}
+                      </p>
+                      <div className="shrink-0 text-center">
+                        {heroMatch.status === "LIVE" ? (
+                          <p className="text-5xl font-black tabular-nums text-white sm:text-6xl">
+                            {heroMatch.homeScore}
+                            <span className="text-white/40"> – </span>
+                            {heroMatch.awayScore}
+                          </p>
+                        ) : (
+                          <span className="font-display text-3xl font-black text-white/70">vs</span>
+                        )}
+                      </div>
+                      <p className="min-w-0 flex-1 truncate text-right text-lg font-extrabold uppercase tracking-wide text-white">
+                        {heroMatch.awayName}
+                      </p>
                     </div>
-                  ))}
+                    <div className="mt-5 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-sm text-white/90">
+                      {heroMatch.status === "LIVE" ? (
+                        <span className="flex items-center gap-2 font-semibold uppercase tracking-wider">
+                          <span aria-hidden className="size-2 animate-pulse rounded-full bg-danger" /> Watch it live
+                        </span>
+                      ) : heroMatch.scheduledAt ? (
+                        <KickoffCountdown scheduledAt={heroMatch.scheduledAt.toISOString()} />
+                      ) : (
+                        <span className="font-semibold uppercase tracking-wider">Kick-off TBA</span>
+                      )}
+                    </div>
+                    <div className="mt-6 text-center">
+                      <Link
+                        href={heroMatch.status === "LIVE" ? `/watch/${heroMatch.code}` : `/match/${heroMatch.code}`}
+                        className="inline-flex h-11 items-center gap-2 rounded-xl bg-white px-6 text-sm font-black uppercase tracking-wider text-brand-deep shadow-md transition-transform hover:scale-[1.03]"
+                      >
+                        {heroMatch.status === "LIVE" ? "Watch free" : "View match"} →
+                      </Link>
+                    </div>
+                  </div>
                 </div>
-              </div>
-              <p className="mt-3 text-center text-xs text-subtle">Sample — live board during a match.</p>
+              ) : (
+                <div className="pitch-bg flex min-h-64 flex-col items-center justify-center rounded-[2rem] border-2 border-fg p-8 text-center shadow-[10px_10px_0_rgba(11,32,48,.22)]">
+                  <span className="text-5xl" aria-hidden>🏟️</span>
+                  <p className="mt-3 text-lg font-black uppercase tracking-wide text-white">No matches yet</p>
+                  <p className="mt-1 max-w-xs text-sm text-white/80">Create a friendly or competition to start the first matchday.</p>
+                  <Link
+                    href="/admin/matches/new"
+                    className="mt-5 inline-flex h-11 items-center gap-2 rounded-xl bg-white px-6 text-sm font-black uppercase tracking-wider text-brand-deep shadow-md transition-transform hover:scale-[1.03]"
+                  >
+                    Set up a match →
+                  </Link>
+                </div>
+              )}
             </div>
           </div>
         </section>
@@ -137,7 +186,7 @@ export default async function Home() {
             action={liveMatches.length ? { href: "/live", label: "All live matches" } : undefined}
           />
           {liveMatches.length === 0 ? (
-            <EmptyCard text="No live matches right now — check back soon or start one from your dashboard." />
+            <EmptyCard icon="📡" text="No live matches right now — check back soon or start one from your dashboard." />
           ) : (
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
               {liveMatches.map((m) => (
@@ -151,7 +200,7 @@ export default async function Home() {
         <section className="mx-auto max-w-7xl px-4 pb-14">
           <SectionHead title="Scheduled" subtitle="Next fixtures to watch" action={{ href: "/fixtures", label: "All fixtures" }} />
           {upcoming.length === 0 ? (
-            <EmptyCard text="Fixtures will appear here once leagues and cups are set up." />
+            <EmptyCard icon="🗓️" text="Fixtures will appear here once leagues and cups are set up." />
           ) : (
             <div className="grid gap-3 md:grid-cols-2">
               {upcoming.slice(0, 6).map((m) => (
@@ -171,6 +220,7 @@ export default async function Home() {
             />
             {competitions.length === 0 ? (
               <EmptyCard
+                icon="🏆"
                 text="No competitions yet."
                 action={
                   isAdmin ? (
@@ -199,7 +249,7 @@ export default async function Home() {
                 <Link
                   key={s.id}
                   href={`/players/${s.id}`}
-                  className="flex items-center gap-3 rounded-xl border border-line bg-white p-4 shadow-sm transition-all hover:-translate-y-0.5 hover:border-brand/40 hover:shadow-md"
+                  className="flex items-center gap-3 rounded-xl border-2 border-fg/15 bg-bg-elevated p-4 shadow-[3px_3px_0_rgba(11,32,48,.06)] transition-all hover:-translate-y-0.5 hover:border-brand/40 hover:shadow-md"
                 >
                   <span className="grid size-8 shrink-0 place-items-center rounded-full bg-surface text-sm font-black text-brand">
                     {i + 1}
@@ -282,9 +332,10 @@ function SectionHead({
   );
 }
 
-function EmptyCard({ text, action }: { text: string; action?: React.ReactNode }) {
+function EmptyCard({ text, action, icon }: { text: string; action?: React.ReactNode; icon?: string }) {
   return (
-    <div className="rounded-2xl border border-dashed border-line-strong bg-bg-elevated p-8 text-center">
+    <div className="rounded-2xl border-2 border-dashed border-fg/20 bg-bg-elevated p-10 text-center">
+      {icon ? <p className="text-4xl" aria-hidden>{icon}</p> : null}
       <p className="text-sm text-muted">{text}</p>
       {action ? <div className="mt-3">{action}</div> : null}
     </div>
@@ -317,18 +368,21 @@ function MatchCard({ m, live }: { m: { id: string; code: string; homeName: strin
   );
 }
 
-function UpcomingRow({ m }: { m: { id: string; code: string; homeName: string; awayName: string; status: string } }) {
+function UpcomingRow({ m }: { m: { id: string; code: string; homeName: string; awayName: string; status: string; scheduledAt: Date | null } }) {
   return (
     <Link
       href={`/match/${m.code}`}
-      className="flex items-center justify-between gap-3 rounded-xl border border-line bg-white px-4 py-3 shadow-sm transition-colors hover:border-brand/40"
+      className="flex flex-wrap items-center justify-between gap-3 rounded-xl border-2 border-fg/15 bg-bg-elevated px-4 py-3 shadow-[3px_3px_0_rgba(11,32,48,.06)] transition-colors hover:border-brand/40"
     >
       <span className="flex min-w-0 flex-1 items-center justify-between gap-2 text-sm font-semibold text-fg">
         <span className="truncate">{m.homeName}</span>
         <span className="text-xs text-subtle">vs</span>
         <span className="truncate">{m.awayName}</span>
       </span>
-      <Badge tone={m.status === "LIVE" ? "success" : "neutral"}>{m.status === "LIVE" ? "Live" : "Scheduled"}</Badge>
+      <span className="flex items-center gap-3">
+        {m.scheduledAt ? <KickoffCountdown scheduledAt={m.scheduledAt.toISOString()} label="" /> : null}
+        <Badge tone={m.status === "LIVE" ? "success" : "neutral"}>{m.status === "LIVE" ? "Live" : "Scheduled"}</Badge>
+      </span>
     </Link>
   );
 }
@@ -338,7 +392,7 @@ function CompetitionCard({ c }: { c: { id: string; slug: string; name: string; t
   return (
     <Link
       href={`/competition/${c.slug}`}
-      className="group rounded-2xl border border-line bg-white p-5 shadow-sm transition-all hover:-translate-y-0.5 hover:border-brand/40 hover:shadow-md"
+      className="group rounded-2xl border-2 border-fg/15 bg-bg-elevated p-5 shadow-[4px_4px_0_rgba(11,32,48,.08)] transition-all hover:-translate-y-0.5 hover:border-brand/40 hover:shadow-lg"
     >
       <div className="flex items-start justify-between gap-2">
         <p className="text-lg font-extrabold tracking-tight text-fg group-hover:text-brand">{c.name}</p>
@@ -347,7 +401,7 @@ function CompetitionCard({ c }: { c: { id: string; slug: string; name: string; t
       <div className="mt-3 flex items-center gap-2">
         <Badge tone={cup ? "info" : "pitch"}>{cup ? "Knockout cup" : "League"}</Badge>
         <Badge tone={c.status === "FINISHED" ? "neutral" : c.status === "ACTIVE" ? "success" : "warning"}>
-          {c.status === "FINISHED" ? "Finished" : c.status === "ACTIVE" ? "Active" : "Setup"}
+          {c.status === "FINISHED" ? "Closed" : c.status === "ACTIVE" ? "Live" : "Setup"}
         </Badge>
       </div>
       <p className="mt-3 text-xs text-muted">

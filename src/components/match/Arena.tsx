@@ -34,6 +34,7 @@ import {
   type TimelineItemView,
 } from "@/lib/domain";
 import { ChatBox } from "@/components/match/ChatBox";
+import { KickoffCountdown } from "@/components/KickoffCountdown";
 
 function CommentaryCard({ snapshot }: { snapshot: MatchSnapshot }) {
   const [on, setOn] = React.useState(false);
@@ -214,11 +215,36 @@ function MatchHeader({ snapshot, mode }: { snapshot: MatchSnapshot; mode: LiveMo
               {snapshot.homeScore}<span className="mx-1 text-white/40">–</span>{snapshot.awayScore}
             </div>
             <p className="mt-1 text-xs font-semibold uppercase tracking-widest text-white/70">{label}</p>
+            {snapshot.status === "LIVE" && snapshot.startedAt ? (
+              <LiveClock startedAt={snapshot.startedAt} paused={snapshot.paused} />
+            ) : snapshot.status === "DRAFT" && snapshot.scheduledAt ? (
+              <p className="mt-1 text-xs font-semibold text-white/80">
+                <KickoffCountdown scheduledAt={snapshot.scheduledAt} />
+              </p>
+            ) : null}
           </div>
           <TeamName name={snapshot.awayName} team="AWAY" align="left" />
         </div>
       </div>
     </div>
+  );
+}
+
+function LiveClock({ startedAt, paused }: { startedAt: string; paused: boolean }) {
+  const start = new Date(startedAt).getTime();
+  const [now, setNow] = React.useState(Date.now());
+  React.useEffect(() => {
+    const t = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(t);
+  }, []);
+  const elapsed = Math.max(0, Math.floor((now - start) / 1000));
+  const m = Math.floor(elapsed / 60);
+  const s = elapsed % 60;
+  return (
+    <span className={cn("mt-1 inline-flex items-center gap-1 text-xs font-bold tabular-nums", paused ? "text-gold" : "text-white/70")}>
+      {paused ? <span aria-hidden>⏸</span> : <span aria-hidden className="size-1.5 animate-pulse rounded-full bg-danger" />}
+      {String(m).padStart(2, "0")}:{String(s).padStart(2, "0")}
+    </span>
   );
 }
 
@@ -1238,7 +1264,7 @@ function PenaltyKicksList({
 function FullTime({ summary, snapshot }: { summary: NonNullable<MatchSnapshot["summary"]>; snapshot: MatchSnapshot }) {
   return (
     <>
-    <Card>
+    <Card className="animate-pop">
       <div className="pitch-bg p-6 text-center">
         <p className="text-2xl font-black uppercase tracking-widest text-white">Full-time</p>
         <p className="mt-1 text-4xl font-black tabular-nums text-white sm:text-6xl">
