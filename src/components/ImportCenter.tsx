@@ -11,14 +11,25 @@ import {
   type ImportPreview,
 } from "@/lib/imports/types";
 
+const KIND_ICONS: Record<ImportKind, string> = {
+  players: "👤",
+  teams: "🏟️",
+  roster: "📋",
+  questions: "❓",
+  competitionTeams: "🏆",
+  fixtures: "🗓️",
+};
+
 function download(name: string, content: string, type = "text/csv;charset=utf-8") {
   const blob = new Blob([content], { type });
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
   anchor.href = url;
   anchor.download = name;
+  document.body.appendChild(anchor);
   anchor.click();
-  URL.revokeObjectURL(url);
+  document.body.removeChild(anchor);
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 function escapeCsv(value: string): string {
@@ -33,8 +44,12 @@ export function ImportCenter() {
   const [result, setResult] = React.useState<ImportCommitResult | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [busy, setBusy] = React.useState(false);
+  const [dragOver, setDragOver] = React.useState(false);
+  const [copied, setCopied] = React.useState(false);
 
   const definition = IMPORT_DEFINITIONS[kind];
+  const template = `${definition.fields.map((field) => field.key).join(",")}\n${definition.sample.join("\n")}\n`;
+
   async function readFile(file: File | undefined) {
     if (!file) return;
     setError(null);
@@ -46,7 +61,7 @@ export function ImportCenter() {
 
   async function validate() {
     if (!csv.trim()) {
-      setError("Choose a CSV file first.");
+      setError("Paste a CSV file's contents first.");
       return;
     }
     setBusy(true);
@@ -90,89 +105,160 @@ export function ImportCenter() {
     setError(null);
   }
 
-  const template = `${definition.fields.map((field) => field.key).join(",")}\n${definition.sample.join("\n")}\n`;
+  async function copyTemplate() {
+    try {
+      await navigator.clipboard.writeText(template);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1800);
+    } catch { /* clipboard unavailable */ }
+  }
+
+  const step = result ? 4 : preview ? 3 : csv ? 2 : 1;
 
   return (
-    <div className="grid gap-5 xl:grid-cols-[18rem_1fr]">
-      <Card className="h-fit">
-        <CardHeader title="Import type" description="Choose what the CSV contains." />
-        <div className="space-y-1 p-3">
-          {IMPORT_KINDS.map((option) => {
-            const item = IMPORT_DEFINITIONS[option];
-            return (
-              <button
-                key={option}
-                type="button"
-                onClick={() => changeKind(option)}
-                className={cn(
-                  "w-full rounded-xl border px-3 py-3 text-left transition-all",
-                  kind === option ? "border-fg bg-fg text-white shadow-[3px_3px_0_rgba(11,32,48,.18)]" : "border-transparent hover:border-line-strong hover:bg-bg-raised",
-                )}
-              >
-                <span className="block text-sm font-black">{item.label}</span>
-                <span className={cn("mt-0.5 block text-xs", kind === option ? "text-white/70" : "text-muted")}>{item.description}</span>
-              </button>
-            );
-          })}
-        </div>
-      </Card>
+    <div className="space-y-5">
+      {/* Stepper */}
+      <ol className="flex flex-wrap items-center gap-x-6 gap-y-2 text-xs font-black uppercase tracking-wider text-muted">
+        <Step n={1} label="Pick a type" active={step === 1} done={step > 1} />
+        <Step n={2} label="Paste CSV" active={step === 2} done={step > 2} />
+        <Step n={3} label="Validate" active={step === 3} done={step > 3} />
+        <Step n={4} label="Imported" active={step === 4} done={step > 4} />
+      </ol>
 
-      <div className="space-y-5">
-        <Card>
-          <CardHeader
-            title={definition.label}
-            description={definition.description}
-            aside={<Badge tone="gold">Server validated</Badge>}
-          />
-          <div className="space-y-4 p-5">
-            <div className="flex flex-wrap items-center gap-3">
-              <label className="inline-flex h-11 cursor-pointer items-center rounded-xl border-2 border-fg bg-bg-elevated px-4 text-sm font-black text-fg shadow-[2px_2px_0_rgba(11,32,48,.1)] transition-transform hover:-translate-y-0.5">
-                Choose CSV
-                <input type="file" accept=".csv,text/csv" className="sr-only" onChange={(event) => void readFile(event.target.files?.[0])} />
-              </label>
-              <Button variant="secondary" onClick={() => download(`${kind}-template.csv`, template)}>
-                Download template
-              </Button>
-              {fileName ? <span className="text-sm font-semibold text-muted">{fileName}</span> : null}
-            </div>
-
-            <div className="rounded-xl border-2 border-dashed border-line-strong bg-bg-raised p-4">
-              <p className="text-xs font-black uppercase tracking-wider text-muted">Expected columns</p>
-              <div className="mt-2 flex flex-wrap gap-2">
-                {definition.fields.map((field) => (
-                  <code key={field.key} className={cn("rounded-md px-2 py-1 text-xs", field.required ? "bg-fg text-white" : "bg-surface text-muted")}>
-                    {field.key}{field.required ? " *" : ""}
-                  </code>
-                ))}
-              </div>
-            </div>
-
-            {csv ? (
-              <details className="rounded-xl border border-line bg-bg-raised p-3">
-                <summary className="cursor-pointer text-sm font-bold text-fg">View raw CSV</summary>
-                <pre className="mt-3 max-h-44 overflow-auto whitespace-pre-wrap text-xs text-muted">{csv}</pre>
-              </details>
-            ) : null}
-
-            {error ? <p role="alert" className="rounded-lg border-2 border-danger/40 bg-danger/10 px-4 py-3 text-sm font-semibold text-danger">{error}</p> : null}
-
-            <div className="flex flex-wrap gap-3">
-              <Button onClick={() => void validate()} loading={busy} disabled={!csv.trim()}>
-                Validate & preview
-              </Button>
-              {preview ? (
-                <Button variant="success" onClick={() => void commit()} loading={busy} disabled={!preview.canImport}>
-                  Import {preview.validRows} rows
-                </Button>
-              ) : null}
-            </div>
+      <div className="grid gap-5 xl:grid-cols-[18rem_1fr]">
+        {/* Kind picker */}
+        <Card className="h-fit">
+          <CardHeader title="Import type" description="Choose what the CSV contains." />
+          <div className="space-y-2 p-3">
+            {IMPORT_KINDS.map((option) => {
+              const item = IMPORT_DEFINITIONS[option];
+              const active = kind === option;
+              return (
+                <button
+                  key={option}
+                  type="button"
+                  onClick={() => changeKind(option)}
+                  className={cn(
+                    "flex w-full items-start gap-3 rounded-xl border-2 px-3 py-3 text-left transition-all",
+                    active
+                      ? "border-brand bg-brand/10 shadow-[3px_3px_0_rgba(8,122,85,.18)]"
+                      : "border-transparent hover:border-line-strong hover:bg-bg-raised",
+                  )}
+                >
+                  <span aria-hidden className={cn("grid size-9 shrink-0 place-items-center rounded-lg text-lg", active ? "bg-brand text-white" : "bg-surface")}>
+                    {KIND_ICONS[option]}
+                  </span>
+                  <span className="min-w-0">
+                    <span className={cn("block text-sm font-black", active ? "text-brand-deep" : "text-fg")}>{item.label}</span>
+                    <span className={cn("mt-0.5 block text-xs", active ? "text-brand-deep/70" : "text-muted")}>{item.description}</span>
+                  </span>
+                </button>
+              );
+            })}
           </div>
         </Card>
 
-        {preview ? <PreviewPanel preview={preview} /> : null}
-        {result ? <ResultPanel result={result} /> : null}
+        <div className="space-y-5">
+          <Card>
+            <CardHeader
+              title={`${KIND_ICONS[kind]} ${definition.label}`}
+              description={definition.description}
+              aside={
+                <div className="flex items-center gap-2">
+                  <Badge tone="gold">Server validated</Badge>
+                  <Button variant="secondary" size="sm" onClick={() => download(`${kind}-template.csv`, template)}>
+                    ⬇ Template
+                  </Button>
+                  <Button variant="ghost" size="sm" onClick={() => void copyTemplate()}>
+                    {copied ? "Copied ✓" : "Copy"}
+                  </Button>
+                </div>
+              }
+            />
+            <div className="space-y-4 p-5">
+              {/* Dropzone */}
+              <label
+                onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+                onDragLeave={() => setDragOver(false)}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  setDragOver(false);
+                  void readFile(e.dataTransfer.files?.[0]);
+                }}
+                className={cn(
+                  "flex cursor-pointer flex-col items-center justify-center gap-1 rounded-2xl border-2 border-dashed px-6 py-8 text-center transition-colors",
+                  dragOver ? "border-brand bg-brand/5" : "border-line-strong bg-bg-raised hover:border-brand/40",
+                )}
+              >
+                <span className="text-3xl" aria-hidden>📂</span>
+                <span className="text-sm font-black text-fg">Drop your CSV here or click to browse</span>
+                <span className="text-xs text-muted">
+                  {fileName ? `Loaded: ${fileName}` : `One file, columns: ${definition.fields.map((f) => f.key).join(", ")}`}
+                </span>
+                <input type="file" accept=".csv,text/csv" className="sr-only" onChange={(event) => void readFile(event.target.files?.[0])} />
+              </label>
+
+              {/* Or paste */}
+              <details className="rounded-xl border-2 border-line bg-bg-raised p-3">
+                <summary className="cursor-pointer text-sm font-bold text-fg">…or paste the CSV contents below</summary>
+                <textarea
+                  value={csv}
+                  onChange={(e) => { setCsv(e.target.value); setFileName(""); setPreview(null); setResult(null); }}
+                  rows={6}
+                  spellCheck={false}
+                  placeholder="name,email,number,password&#10;Ade Jones,ade@example.com,1,&#10;"
+                  className="mt-3 w-full rounded-lg border-2 border-line-strong bg-bg-elevated px-3 py-2 font-mono text-xs text-fg placeholder:text-subtle focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
+                />
+              </details>
+
+              {/* Expected columns */}
+              <div className="rounded-xl border-2 border-fg/10 bg-bg-raised p-4">
+                <p className="text-xs font-black uppercase tracking-wider text-muted">Expected columns</p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {definition.fields.map((field) => (
+                    <code key={field.key} className={cn("rounded-md px-2 py-1 text-xs", field.required ? "bg-fg text-white" : "bg-surface text-muted")}>
+                      {field.key}{field.required ? " *" : ""}
+                    </code>
+                  ))}
+                </div>
+              </div>
+
+              {error ? <p role="alert" className="rounded-lg border-2 border-danger/40 bg-danger/10 px-4 py-3 text-sm font-semibold text-danger">{error}</p> : null}
+
+              <div className="flex flex-wrap gap-3">
+                <Button onClick={() => void validate()} loading={busy} disabled={!csv.trim()}>
+                  Validate & preview
+                </Button>
+                {preview ? (
+                  <Button variant="success" onClick={() => void commit()} loading={busy} disabled={!preview.canImport}>
+                    Import {preview.validRows} rows
+                  </Button>
+                ) : null}
+              </div>
+            </div>
+          </Card>
+
+          {preview ? <PreviewPanel preview={preview} /> : null}
+          {result ? <ResultPanel result={result} /> : null}
+        </div>
       </div>
     </div>
+  );
+}
+
+function Step({ n, label, active, done }: { n: number; label: string; active: boolean; done: boolean }) {
+  return (
+    <li className="flex items-center gap-2">
+      <span
+        className={cn(
+          "grid size-6 place-items-center rounded-full text-xs font-black",
+          done ? "bg-success text-white" : active ? "bg-gold text-white" : "bg-surface text-muted",
+        )}
+      >
+        {done ? "✓" : n}
+      </span>
+      <span className={cn(done ? "text-success" : active ? "text-fg" : "text-muted")}>{label}</span>
+    </li>
   );
 }
 
