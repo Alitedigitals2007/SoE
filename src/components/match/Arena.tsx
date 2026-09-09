@@ -36,6 +36,41 @@ import {
 import { ChatBox } from "@/components/match/ChatBox";
 import { KickoffCountdown } from "@/components/KickoffCountdown";
 
+function commentaryLine(ev: TimelineItemView): string {
+  const detail = ev.detail && ev.detail !== ev.label ? `. ${ev.detail}` : "";
+  switch (ev.type) {
+    case "GOAL":
+      return `GOOOOAL! ${ev.label} for the fans in the stadium!${detail}`;
+    case "NO_GOAL":
+      return `Saved! No goal there — the chance goes begging.${detail}`;
+    case "QUESTION_OPEN":
+      return `Here comes the next question! ${ev.label} — think fast, play fast.${detail}`;
+    case "ANSWERS_LOCKED":
+      return `Time's up! Answers are locked in.${detail}`;
+    case "SUBSTITUTION":
+      return `A change coming up for one of the teams.${detail}`;
+    case "CARD":
+      return `Oooft, the referee reaches for a card here.${detail}`;
+    case "HALF_TIME":
+      return `Half-time! Grab a drink, catch your breath, we go again shortly.${detail}`;
+    case "FULL_TIME":
+      return `And it's full time here at the Stadium of Elite!${detail}`;
+    case "KICKOFF":
+      return `We are underway! ${detail ?? "Kick-off!"}`;
+    default:
+      return `${ev.label}.${detail}`;
+  }
+}
+
+function pickCommentaryVoice(synth: SpeechSynthesis): SpeechSynthesisVoice | null {
+  const voices = synth.getVoices();
+  if (!voices.length) return null;
+  const en = voices.filter((v) => v.lang.toLowerCase().startsWith("en"));
+  const pool = en.length ? en : voices;
+  const male = pool.find((v) => /male|david|daniel|george|james|ryan|guy|microsoft david|google uk english male/i.test(v.name));
+  return male ?? pool[0] ?? null;
+}
+
 function CommentaryCard({ snapshot }: { snapshot: MatchSnapshot }) {
   const [on, setOn] = React.useState(false);
   const baselineRef = React.useRef<number | null>(null);
@@ -45,18 +80,28 @@ function CommentaryCard({ snapshot }: { snapshot: MatchSnapshot }) {
   React.useEffect(() => {
     if (!on) return;
     const synth = window.speechSynthesis;
+    const voice = pickCommentaryVoice(synth);
     const say = (text: string) => {
       try {
         const u = new SpeechSynthesisUtterance(text);
-        u.rate = 1.05;
+        u.rate = 1.15;
+        u.pitch = 0.9;
+        u.volume = 1;
+        if (voice) u.voice = voice;
         synth.speak(u);
       } catch { /* ignore */ }
     };
 
-    // Announce a new score whenever it changes.
+    // Announce a new score whenever it changes — with commentary energy.
     const scoreKey = `${snapshot.homeScore}–${snapshot.awayScore}`;
     if (scoreRef.current && scoreRef.current !== scoreKey) {
-      say(`Score update: ${snapshot.homeName} ${snapshot.homeScore}, ${snapshot.awayName} ${snapshot.awayScore}`);
+      const homeLead = snapshot.homeScore > snapshot.awayScore ? snapshot.homeName : snapshot.awayName;
+      const leadDiff = Math.abs(snapshot.homeScore - snapshot.awayScore);
+      say(
+        leadDiff >= 2
+          ? `It's ${homeLead} stretching ahead! Score update: ${snapshot.homeName} ${snapshot.homeScore}, ${snapshot.awayName} ${snapshot.awayScore}.`
+          : `Score update! ${snapshot.homeName} ${snapshot.homeScore}, ${snapshot.awayName} ${snapshot.awayScore}.`,
+      );
     }
     scoreRef.current = scoreKey;
 
@@ -66,9 +111,7 @@ function CommentaryCard({ snapshot }: { snapshot: MatchSnapshot }) {
       return;
     }
     for (let i = baselineRef.current; i < tl.length; i++) {
-      const ev = tl[i];
-      const text = ev.detail && ev.detail !== ev.label ? `${ev.label}. ${ev.detail}` : ev.label;
-      say(text);
+      say(commentaryLine(tl[i]));
     }
     baselineRef.current = tl.length;
   }, [on, snapshot.timeline, snapshot.homeScore, snapshot.awayScore, snapshot.homeName, snapshot.awayName]);
@@ -95,7 +138,7 @@ function CommentaryCard({ snapshot }: { snapshot: MatchSnapshot }) {
         <span className="text-xs">{on ? "Tap to mute" : "Tap to start"}</span>
       </button>
       {on ? (
-        <p className="mt-1 text-[11px] text-subtle">Automatically reads out the action as it happens.</p>
+        <p className="mt-1 text-[11px] text-subtle">Male match commentator reads the action with full football energy.</p>
       ) : null}
     </div>
   );

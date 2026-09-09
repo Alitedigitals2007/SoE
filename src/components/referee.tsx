@@ -28,6 +28,8 @@ export function QuestionsManager({ code, questions }: { code: string; questions:
   const [text, setText] = React.useState("");
   const [ref, setRef] = React.useState("");
   const [editing, setEditing] = React.useState<string | null>(null);
+  const [bulk, setBulk] = React.useState("");
+  const [bulkBusy, setBulkBusy] = React.useState(false);
 
   function flash(r: { ok: boolean; error?: string }, t: string) {
     if (r.ok) {
@@ -41,11 +43,60 @@ export function QuestionsManager({ code, questions }: { code: string; questions:
   const inBank = questions.length;
   const selected = questions.filter((q) => q.roundNumber != null).length;
 
+  function parseBulk(raw: string): { ok: boolean; errors: string[]; items: { text: string; ref: string }[] } {
+    const items: { text: string; ref: string }[] = [];
+    const errors: string[] = [];
+    raw
+      .split(/\n+/)
+      .map((l) => l.trim())
+      .filter(Boolean)
+      .forEach((line, idx) => {
+        const parts = line.split("|").map((s) => s.trim());
+        const questionText = parts[0] ?? "";
+        const answer = parts.length > 1 ? parts[1] : "";
+        if (!questionText || !answer) {
+          errors.push(`Line ${idx + 1}: use  Question | Answer  and fill both sides.`);
+        } else {
+          items.push({ text: questionText, ref: answer });
+        }
+      });
+    return { ok: errors.length === 0, errors, items };
+  }
+
+  async function submitBulk() {
+    if (bulkBusy) return;
+    const { errors, items } = parseBulk(bulk);
+    if (items.length === 0) {
+      setNotice({ kind: "err", text: errors[0] ?? "Paste at least one question." });
+      return;
+    }
+    if (inBank + items.length > 20) {
+      setNotice({ kind: "err", text: `Only ${20 - inBank} more question(s) fit in the bank (you pasted ${items.length}).` });
+      return;
+    }
+    setBulkBusy(true);
+    let added = 0;
+    let failed = 0;
+    for (const item of items) {
+      const r = await addQuestionAction({ code, text: item.text, referenceAnswer: item.ref });
+      if (r.ok) added++;
+      else failed++;
+    }
+    setBulkBusy(false);
+    setBulk("");
+    setNotice(
+      failed === 0
+        ? { kind: "ok", text: `Added ${added} question(s). They auto-slot into the first open played slots.` }
+        : { kind: "err", text: `${added} added, ${failed} failed. Fix those lines and try again.` },
+    );
+    router.refresh();
+  }
+
   return (
     <Card>
       <CardHeader
         title="The twenty"
-        description={`Prepare up to 20 questions, then place the ten that will be played into slots 1–10. (${selected}/10 placed) · ${inBank} prepared`}
+        description={`Prepare up to 20 questions; the first ten are auto-placed into slots 1–10. (${selected}/10 placed) · ${inBank} prepared`}
         aside={<Badge tone={inBank >= 10 && selected === 10 ? "pitch" : "warning"}>{inBank < 20 ? `${inBank} prepared` : "Full bank"}</Badge>}
       />
 
@@ -76,6 +127,30 @@ export function QuestionsManager({ code, questions }: { code: string; questions:
       </form>
 
       {notice ? <NoticeLine notice={notice} /> : null}
+
+      <div className="border-b border-line p-4">
+        <details>
+          <summary className="cursor-pointer text-sm font-bold text-brand">⚡ Bulk import — paste many at once</summary>
+          <p className="mt-2 text-xs text-muted">
+            One question per line, separated by a pipe: <code className="rounded bg-surface px-1 py-0.5">What is the SI unit of force? | Newton</code>.
+            They auto-slot into the first open played slots (1–10).
+          </p>
+          <textarea
+            value={bulk}
+            onChange={(e) => setBulk(e.target.value)}
+            rows={7}
+            spellCheck={false}
+            placeholder={"What is the capital of Nigeria? | Abuja\nWhat is 2 + 2? | 4\nWho wrote Things Fall Apart? | Chinua Achebe"}
+            className="mt-3 w-full rounded-lg border-2 border-line-strong bg-bg-elevated px-3 py-2 font-mono text-xs text-fg placeholder:text-subtle focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20"
+          />
+          <div className="mt-2 flex flex-wrap items-center gap-3">
+            <Button variant="secondary" size="sm" disabled={!bulk.trim() || bulkBusy} loading={bulkBusy} onClick={() => void submitBulk()}>
+              Import questions
+            </Button>
+            <span className="text-xs text-subtle">{inBank}/20 used</span>
+          </div>
+        </details>
+      </div>
 
       <ul className="divide-y divide-line/70">
         {questions.length === 0 ? (
