@@ -36,23 +36,47 @@ import {
 import { ChatBox } from "@/components/match/ChatBox";
 import { KickoffCountdown } from "@/components/KickoffCountdown";
 
+function pickPhrase(seed: string, phrases: string[]): string {
+  let h = 0;
+  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) | 0;
+  return phrases[Math.abs(h) % phrases.length];
+}
+
+const GOAL_PHRASES = [
+  "What a wonderful goal!",
+  "What a strike — the keeper had no chance!",
+  "Sheer class from start to finish!",
+  "The crowd erupts — absolutely brilliant!",
+  "Beautifully placed into the back of the net!",
+  "Top drawer! You don't save those!",
+];
+
+const MISS_PHRASES = [
+  "Denied! The keeper reads it well.",
+  "So close! It flashes just wide of the post.",
+  "Off the woodwork! Unlucky there.",
+  "Great save — the crowd gasps!",
+];
+
 function commentaryLine(ev: TimelineItemView): string {
-  const detail = ev.detail && ev.detail !== ev.label ? `. ${ev.detail}` : "";
+  const detail = ev.detail && ev.detail !== ev.label ? ` ${ev.detail} —` : "";
   switch (ev.type) {
-    case "GOAL":
-      return `GOOOOAL! ${ev.label} for the fans in the stadium!${detail}`;
+    case "GOAL": {
+      const who = ev.detail && ev.detail !== ev.label ? ` ${ev.detail}` : "";
+      return `GOOOOAL!${who}! ${pickPhrase(ev.detail ?? ev.label, GOAL_PHRASES)}`;
+    }
     case "NO_GOAL":
-      return `Saved! No goal there — the chance goes begging.${detail}`;
+      return `${pickPhrase(ev.detail ?? ev.label, MISS_PHRASES)}${detail}`;
     case "QUESTION_OPEN":
-      return `Here comes the next question! ${ev.label} — think fast, play fast.${detail}`;
+      return `Here comes the next question! ${ev.label}${detail} think fast, play fast!`;
     case "ANSWERS_LOCKED":
-      return `Time's up! Answers are locked in.${detail}`;
+      return `Time's up — answers are locked in!${detail}`;
     case "SUBSTITUTION":
-      return `A change coming up for one of the teams.${detail}`;
+      return `A change coming up here${detail}`;
     case "CARD":
-      return `Oooft, the referee reaches for a card here.${detail}`;
+      return `Oooft, the referee reaches for a card here!${detail}`;
     case "HALF_TIME":
-      return `Half-time! Grab a drink, catch your breath, we go again shortly.${detail}`;
+      return `Half-time! Grab a drink, catch your breath — we go again shortly.${detail}`;
     case "FULL_TIME":
       return `And it's full time here at the Stadium of Elite!${detail}`;
     case "KICKOFF":
@@ -194,7 +218,7 @@ function ArenaInner({
               <PotmVote matchId={snapshot.matchId} snapshot={snapshot} />
             </>
           ) : snapshot.status === "FINISHED" && snapshot.summary ? (
-            <FullTime summary={snapshot.summary} snapshot={snapshot} />
+            <FullTime summary={snapshot.summary} snapshot={snapshot} onError={onError} />
           ) : snapshot.status === "DRAFT" ? (
             <PreMatch snapshot={snapshot} />
           ) : (
@@ -1324,9 +1348,31 @@ function PenaltyKicksList({
   );
 }
 
-function FullTime({ summary, snapshot }: { summary: NonNullable<MatchSnapshot["summary"]>; snapshot: MatchSnapshot }) {
+function FullTime({
+  summary,
+  snapshot,
+  onError,
+}: {
+  summary: NonNullable<MatchSnapshot["summary"]>;
+  snapshot: MatchSnapshot;
+  onError: (e: string | null) => void;
+}) {
+  const canDecideByPenalties =
+    snapshot.viewer.isReferee && snapshot.homeScore === snapshot.awayScore && !snapshot.penaltyShootout;
   return (
     <>
+    {canDecideByPenalties ? (
+      <Card className="mb-4">
+        <div className="flex flex-wrap items-center justify-between gap-3 p-4">
+          <p className="text-sm font-semibold text-fg">
+            It's level at full time — decide a winner with a penalty shootout.
+          </p>
+          <Button variant="pitch" onClick={() => submit(startPenaltiesAction(snapshot.code), onError)}>
+            ⚽ Start penalties
+          </Button>
+        </div>
+      </Card>
+    ) : null}
     <Card className="animate-pop">
       <div className="pitch-bg p-6 text-center">
         <p className="text-2xl font-black uppercase tracking-widest text-white">Full-time</p>
