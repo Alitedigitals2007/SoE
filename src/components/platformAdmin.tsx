@@ -11,6 +11,7 @@ import {
   generateCupRoundAction,
   generateGroupFixturesAction,
   generateLeagueFixturesAction,
+  redrawLeagueFixturesAction,
   removeTeamMemberAction,
   scheduleLeagueWaveAction,
   setCompetitionStatusAction,
@@ -454,6 +455,19 @@ export function CompetitionActions({
         ) : (
           <>
             <p className="text-sm text-muted">Fixtures exist. Manage referees below, then run each match.</p>
+            {type === "LEAGUE" ? (
+              <div className="flex flex-wrap items-end gap-2">
+                <Button
+                  variant="secondary"
+                  onClick={() => {
+                    if (confirm("Redraw the round-robin fixtures? This removes all scheduled league fixtures that haven't started."))
+                      void redrawLeagueFixturesAction({ competitionId }).then((r) => flash(r, "League fixtures redrawn."));
+                  }}
+                >
+                  ♻️ Redraw round-robin fixtures
+                </Button>
+              </div>
+            ) : null}
             <div className="flex flex-wrap items-end gap-2">
               <Button
                 variant="secondary"

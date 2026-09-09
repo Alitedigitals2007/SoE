@@ -355,6 +355,50 @@ async function createFixture(tx: Prisma.TransactionClient, opts: { competitionId
   return match;
 }
 
+/**
+ * Round-Robin plan per the rules:
+ *  - single round-robin = N(N-1)/2 matches, in N-1 rounds (even N) or N rounds (odd N, with a bye)
+ *  - cyclic (circle) method keeps the first team fixed and rotates the rest
+ *  - `rounds` > 1 plays that many full cycles (e.g. 2 = double round-robin,
+ *    second cycle swaps home/away for fairness)
+ */
+function roundRobinFixturePlan(teamIds: string[], rounds = 1): { home: string; away: string }[] {
+  const n = teamIds.length;
+  const m = n % 2 === 0 ? n : n + 1; // add a "bye" slot for odd counts
+  const base = [...teamIds, ...Array(m - n).fill("__BYE__")];
+  const list = [...base];
+
+  const oneCycle: { home: string; away: string }[] = [];
+  for (let r = 0; r < m - 1; r++) {
+    for (let i = 0; i < m / 2; i++) {
+      const a = list[i];
+      const b = list[m - 1 - i];
+      if (a === "__BYE__" || b === "__BYE__") continue;
+      const home = r % 2 === 0 ? a : b;
+      const away = r % 2 === 0 ? b : a;
+      oneCycle.push({ home, away });
+    }
+    // Rotate all but the first team (classic circle method).
+    list.splice(1, 0, list.pop()!);
+  }
+
+  const plan: { home: string; away: string }[] = [];
+  for (let cycle = 0; cycle < rounds; cycle++) {
+    for (const p of oneCycle) {
+      // Alternate home/away on the second cycle for a fair double round-robin.
+      plan.push(cycle % 2 === 0 ? p : { home: p.away, away: p.home });
+    }
+  }
+  return plan;
+}
+
+/** Smallest power of two >= n. */
+function nextPowerOfTwo(n: number): number {
+  let p = 1;
+  while (p < n) p *= 2;
+  return p;
+}
+
 export async function generateLeagueFixtures(actor: Actor, input: { competitionId: string }) {
   const blocked = await requireAdmin(actor);
   if (blocked) return blocked;
@@ -366,45 +410,59 @@ export async function generateLeagueFixtures(actor: Actor, input: { competitionI
   if (comp.type !== "LEAGUE" && comp.type !== "LEAGUE_CUP") return err("Only leagues get a round-robin schedule.");
   if (comp.matches.length > 0) return err("Fixtures already exist for this league.");
 
-  const teams = comp.teams.map((t) => t.team);
-  const n = teams.length;
-  const isEven = n % 2 === 0;
-  const list = isEven ? [...teams] : [...teams, null as unknown as typeof teams[0]];
+  const teamIds = comp.teams.map((t) => t.teamId);
+  const teamsById = new Map(comp.teams.map((t) => [t.teamId, t.team]));
+  if (teamIds.length < 2) return err("A league needs at least two teams.");
 
-  const pairings: { home: number; away: number }[] = [];
-  for (let r = 0; r < list.length - 1; r++) {
-    for (let i = 0; i < list.length / 2; i++) {
-      const a = list[i];
-      const b = list[list.length - 1 - i];
-      if (!a || !b) continue;
-      // alternate home/away each round for fairness
-      const home = r % 2 === 0 ? a : b;
-      const away = r % 2 === 0 ? b : a;
-      pairings.push({ home: teams.indexOf(home), away: teams.indexOf(away) });
-    }
-    list.splice(1, 0, list.pop()!);
-  }
-
-  // Respect roundsCount: limit pairings to roundsCount full round-robins
-  const roundsCount = comp.roundsCount ?? null;
-  let selectedPairings = pairings;
-  if (roundsCount && roundsCount > 0) {
-    const pairingsPerRound = pairings.length / (n - (isEven ? 1 : 0));
-    const totalPairs = Math.floor(pairingsPerRound) * roundsCount;
-    selectedPairings = pairings.slice(0, totalPairs);
-  }
-
+  const rounds = comp.roundsCount && comp.roundsCount > 0 ? comp.roundsCount : 1;
+  const plan = roundRobinFixturePlan(teamIds, rounds);
   const cd = comp.countdownSecs ?? 15;
 
   await prisma.competition.update({ where: { id: comp.id }, data: { status: "ACTIVE" } });
-  for (const p of selectedPairings) {
-    const home = teams[p.home];
-    const away = teams[p.away];
+  for (const p of plan) {
+    const home = teamsById.get(p.home);
+    const away = teamsById.get(p.away);
+    if (!home || !away) continue;
     await prisma.$transaction(async (tx) => {
       await createFixture(tx, { competitionId: comp.id, home: { id: home.id, name: home.name }, away: { id: away.id, name: away.name }, countdownSeconds: cd });
     });
   }
-  return ok({ count: selectedPairings.length });
+  return ok({ count: plan.length });
+}
+
+export async function redrawLeagueFixtures(actor: Actor, input: { competitionId: string }) {
+  const blocked = await requireAdmin(actor);
+  if (blocked) return blocked;
+  const comp = await prisma.competition.findUnique({
+    where: { id: input.competitionId },
+    include: {
+      teams: { include: { team: true }, orderBy: { seed: "asc" } },
+      matches: { select: { id: true, status: true } },
+    },
+  });
+  if (!comp) return err("Competition not found.");
+  if (comp.type !== "LEAGUE") return err("Only league (round-robin) fixtures can be redrawn.");
+  if (comp.matches.some((m) => m.status !== "DRAFT"))
+    return err("The league has started — you can't redraw once matches are live or finished.");
+
+  await prisma.$transaction(async (tx) => {
+    await tx.match.deleteMany({ where: { competitionId: comp.id } });
+  });
+
+  const teamIds = comp.teams.map((t) => t.teamId);
+  const teamsById = new Map(comp.teams.map((t) => [t.teamId, t.team]));
+  const rounds = comp.roundsCount && comp.roundsCount > 0 ? comp.roundsCount : 1;
+  const plan = roundRobinFixturePlan(teamIds, rounds);
+  const cd = comp.countdownSecs ?? 15;
+  for (const p of plan) {
+    const home = teamsById.get(p.home);
+    const away = teamsById.get(p.away);
+    if (!home || !away) continue;
+    await prisma.$transaction(async (tx) => {
+      await createFixture(tx, { competitionId: comp.id, home: { id: home.id, name: home.name }, away: { id: away.id, name: away.name }, countdownSeconds: cd });
+    });
+  }
+  return ok({ count: plan.length });
 }
 
 export async function generateCupRound(actor: Actor, input: { competitionId: string }) {
@@ -421,6 +479,7 @@ export async function generateCupRound(actor: Actor, input: { competitionId: str
   if (comp.type !== "CUP" && comp.type !== "LEAGUE_CUP") return err("Only knockout cups get rounds.");
 
   const cd = comp.countdownSecs ?? 15;
+  const teamById = new Map(comp.teams.map((ct) => [ct.teamId, ct.team]));
 
   if (comp.type === "LEAGUE_CUP") {
     if (comp.matches.length === 0)
@@ -483,29 +542,39 @@ export async function generateCupRound(actor: Actor, input: { competitionId: str
   }
 
   if (comp.matches.length === 0) {
-    // Round 1 from seeds
-    const ordered = comp.teams.map((t) => t.team);
-    if (ordered.length < 2 || ordered.length % 2 !== 0)
-      return err("A knockout needs an even number of seeded teams.");
-    const pairs: [typeof ordered[0], typeof ordered[0]][] = [];
-    for (let i = 0; i < ordered.length; i += 2) pairs.push([ordered[i], ordered[i + 1]]);
+    // Round 1 from seeds. If the field isn't a power of two, the top seeds
+    // receive byes straight into round two (as in a real bracket).
+    const all = comp.teams.map((ct) => ({ id: ct.teamId, name: ct.team.name }));
+    if (all.length < 2) return err("A knockout needs at least two teams.");
+    const byes = nextPowerOfTwo(all.length) - all.length;
+    const players = byes > 0 ? all.slice(byes) : all; // top `byes` seeds skip round 1
+    if (players.length % 2 !== 0) return err("Could not even up the first round.");
+
     await prisma.competition.update({ where: { id: comp.id }, data: { status: "ACTIVE" } });
-    for (const [a, b] of pairs) {
+    const pairs: { home: string; away: string }[] = [];
+    for (let i = 0; i < players.length / 2; i++) {
+      // Mirror-pair the seeded list (1 vs last, 2 vs second-to-last, ...).
+      pairs.push({ home: players[i].id, away: players[players.length - 1 - i].id });
+    }
+    for (const p of pairs) {
+      const home = teamById.get(p.home);
+      const away = teamById.get(p.away);
+      if (!home || !away) continue;
       await prisma.$transaction(async (tx) => {
-        await createFixture(tx, { competitionId: comp.id, home: { id: a.id, name: a.name }, away: { id: b.id, name: b.name }, cupRound: 1, countdownSeconds: cd });
+        await createFixture(tx, { competitionId: comp.id, home: { id: home.id, name: home.name }, away: { id: away.id, name: away.name }, cupRound: 1, countdownSeconds: cd });
       });
     }
-    return ok({ count: pairs.length });
+    return ok({ count: pairs.length, byes });
   }
 
-  // Advance from the finished matches of the latest round
+  // Advance from the finished matches of the latest round.
   const maxRound = Math.max(...comp.matches.map((m) => m.cupRound ?? 0));
   const roundMatches = comp.matches.filter((m) => m.cupRound === maxRound);
   if (roundMatches.length === 0) return err("No fixtures to advance from.");
   if (!roundMatches.every((m) => m.status === "FINISHED"))
     return err("Finish every match in the current round before generating the next.");
 
-  const winners: { id: string; name: string }[] = [];
+  const entrants: { id: string; name: string }[] = [];
   for (const m of roundMatches) {
     if (m.homeScore === m.awayScore) {
       if (!m.penaltyShootout || m.penaltyShootout.status !== "COMPLETE" || !m.penaltyShootout.winner)
@@ -513,21 +582,40 @@ export async function generateCupRound(actor: Actor, input: { competitionId: str
       const penWinner = m.penaltyShootout.winner === "HOME"
         ? { id: m.homeTeamId!, name: m.homeName }
         : { id: m.awayTeamId!, name: m.awayName };
-      winners.push(penWinner);
+      entrants.push(penWinner);
     } else {
-      winners.push(m.homeScore > m.awayScore ? { id: m.homeTeamId!, name: m.homeName } : { id: m.awayTeamId!, name: m.awayName });
+      entrants.push(m.homeScore > m.awayScore ? { id: m.homeTeamId!, name: m.homeName } : { id: m.awayTeamId!, name: m.awayName });
     }
   }
-  if (winners.length < 2) return err("The cup is over — a champion has been decided.");
 
+  // After round 1, fold in the seeded teams that had a bye (still alive).
+  if (maxRound === 1) {
+    const byes = nextPowerOfTwo(comp.teams.length) - comp.teams.length;
+    if (byes > 0) {
+      const playedTeams = new Set(
+        comp.matches.flatMap((m) => [m.homeTeamId, m.awayTeamId]).filter(Boolean) as string[],
+      );
+      for (const ct of comp.teams) {
+        if ((ct.seed ?? 0) <= byes && !playedTeams.has(ct.teamId)) {
+          entrants.push({ id: ct.teamId, name: ct.team.name });
+        }
+      }
+    }
+  }
+
+  if (entrants.length < 2) return err("The cup is over — a champion has been decided.");
   const nextRound = maxRound + 1;
-  const count = Math.floor(winners.length / 2);
+
+  // Re-seed entrants for the bracket so early rounds don't pair 1v2.
+  const seedMap = new Map(comp.teams.map((ct) => [ct.teamId, ct.seed ?? 99]));
+  entrants.sort((a, b) => (seedMap.get(a.id) ?? 99) - (seedMap.get(b.id) ?? 99));
+  const count = Math.floor(entrants.length / 2);
   for (let i = 0; i < count; i++) {
     await prisma.$transaction(async (tx) => {
       await createFixture(tx, {
         competitionId: comp.id,
-        home: winners[i * 2],
-        away: winners[i * 2 + 1],
+        home: entrants[i],
+        away: entrants[entrants.length - 1 - i],
         cupRound: nextRound,
         countdownSeconds: cd,
       });

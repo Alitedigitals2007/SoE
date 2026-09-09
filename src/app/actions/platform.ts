@@ -17,6 +17,7 @@ import {
   MAX_FANTASY_PICKS,
   PlatformError,
   playerStats,
+  redrawLeagueFixtures,
   removeTeamMember,
   scheduleLeagueWave,
   setCompetitionStatus,
@@ -109,6 +110,10 @@ export async function addCompetitionTeamAction(input: { competitionId: string; t
 
 export async function generateLeagueFixturesAction(input: { competitionId: string }) {
   return runEngine((a) => generateLeagueFixtures(a, input));
+}
+
+export async function redrawLeagueFixturesAction(input: { competitionId: string }) {
+  return runEngine((a) => redrawLeagueFixtures(a, input));
 }
 
 export async function generateCupRoundAction(input: { competitionId: string }) {
