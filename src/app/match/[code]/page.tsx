@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { notFound } from "next/navigation";
-import { requireRole } from "@/lib/authz";
-import { currentActor } from "@/lib/session";
+import { auth } from "@/auth";
 import { buildSnapshot, loadMatchFullByCode } from "@/lib/match/snapshot";
 import { TopBar } from "@/components/app";
 import { Arena } from "@/components/match/Arena";
@@ -38,16 +38,36 @@ export async function generateMetadata({ params }: { params: Promise<{ code: str
 }
 
 export default async function MatchArenaPage({ params }: { params: Promise<{ code: string }> }) {
-  const user = await requireRole();
   const { code } = await params;
   const match = await loadMatchFullByCode(code);
   if (!match) notFound();
-  const actor = await currentActor();
-  const snapshot = buildSnapshot(match, { role: actor?.role ?? "PUBLIC", userId: actor?.userId ?? null });
+
+  const session = await auth();
+  const user = session?.user ?? null;
+  const snapshot = buildSnapshot(
+    match,
+    user ? { role: user.role, userId: user.id } : { role: "PUBLIC", userId: null },
+  );
 
   return (
     <>
-      <TopBar name={user.name} role={user.role} />
+      {user ? (
+        <TopBar name={user.name} role={user.role} />
+      ) : (
+        <div className="border-b-2 border-fg bg-bg/95">
+          <div className="mx-auto flex h-12 max-w-6xl items-center justify-between px-4">
+            <Link href="/" className="flex items-center gap-2 text-sm font-bold tracking-wide text-fg">
+              <span aria-hidden className="grid size-6 place-items-center rounded-md bg-gold text-gold-ink">
+                ⚽
+              </span>
+              <span>
+                STADIUM <span className="text-gold">OF ELITE</span>
+              </span>
+            </Link>
+            <p className="text-xs text-subtle">Public viewing · sign in to referee or captain</p>
+          </div>
+        </div>
+      )}
       <main className="pb-10">
         <Arena code={match.code} initial={snapshot} />
       </main>
