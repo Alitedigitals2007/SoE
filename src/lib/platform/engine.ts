@@ -137,13 +137,12 @@ export async function transferTeamMember(
   return ok({ number });
 }
 
-export async function scheduleLeagueWave(
+export async function scheduleAllFixtures(
   actor: Actor,
-  input: { competitionId: string; count: number; firstKickAt?: Date },
+  input: { competitionId: string; firstKickAt?: Date; roundGapMs?: number; matchGapMs?: number },
 ) {
   const blocked = await requireAdmin(actor);
   if (blocked) return blocked;
-  const count = Math.max(1, Math.min(20, Math.floor(input.count) || 5));
   const comp = await prisma.competition.findUnique({
     where: { id: input.competitionId },
     include: {
@@ -154,57 +153,71 @@ export async function scheduleLeagueWave(
     },
   });
   if (!comp) return err("Competition not found.");
-
-  const unscheduled = comp.matches.filter((m) => m.status === "DRAFT" && !m.scheduledAt);
-  if (unscheduled.length === 0) return err("Every fixture is already scheduled.");
-
-  // Load per team = matches already played + fixtures already scheduled.
-  // We schedule the fixtures the least-loaded teams need next, so the wave
-  // follows a fair round-robin order instead of "just the earliest rows".
+  let unscheduled = comp.matches.filter((m) => m.status === "DRAFT" && !m.scheduledAt);
+  if (unscheduled.length === 0) return ok({ scheduled: 0, rounds: 0 });
+  // Per-team load = matches finished or already scheduled, used only to
+  // order which fixtures get picked first within a round (keeps a fair
+  // round-robin feel instead of "just the earliest rows").
   const load = new Map<string, number>();
   const bump = (id: string | null, amount: number) => {
     if (!id) return;
     load.set(id, (load.get(id) ?? 0) + amount);
   };
   for (const m of comp.matches) {
-    if (m.status === "FINISHED") {
-      bump(m.homeTeamId, 1);
-      bump(m.awayTeamId, 1);
-    } else if (m.scheduledAt) {
+    if (m.status === "FINISHED" || m.scheduledAt) {
       bump(m.homeTeamId, 1);
       bump(m.awayTeamId, 1);
     }
   }
-
   const getLoad = (id: string | null) => (id ? load.get(id) ?? 0 : 0);
-  const candidates = [...unscheduled].sort((a, b) => {
-    const al = Math.min(getLoad(a.homeTeamId), getLoad(a.awayTeamId));
-    const ah = Math.max(getLoad(a.homeTeamId), getLoad(a.awayTeamId));
-    const bl = Math.min(getLoad(b.homeTeamId), getLoad(b.awayTeamId));
-    const bh = Math.max(getLoad(b.homeTeamId), getLoad(b.awayTeamId));
-    return al - bl || ah - bh || 0; // createdAt order preserved on ties
-  });
+  const matchGapMs = input.matchGapMs ?? 2 * 60 * 60 * 1000; // 2h between kickoffs inside a round
+  const roundGapMs = input.roundGapMs ?? 24 * 60 * 60 * 1000; // 1 day between rounds
+  let kickoff = input.firstKickAt ?? new Date(Date.now() + 90 * 60 * 1000);
+  const allUpdates: { id: string; scheduledAt: Date }[] = [];
+  let roundsBuilt = 0;
+  // Keep building full rounds until every fixture has a kickoff time.
+  while (unscheduled.length > 0) {
+    const candidates = [...unscheduled].sort((a, b) => {
+      const al = Math.min(getLoad(a.homeTeamId), getLoad(a.awayTeamId));
+      const ah = Math.max(getLoad(a.homeTeamId), getLoad(a.awayTeamId));
+      const bl = Math.min(getLoad(b.homeTeamId), getLoad(b.awayTeamId));
+      const bh = Math.max(getLoad(b.homeTeamId), getLoad(b.awayTeamId));
+      return al - bl || ah - bh || 0;
+    });
 
-  // Greedy pick where no team appears twice in this wave.
-  const selected: { id: string }[] = [];
-  const busy = new Set<string>();
-  for (const m of candidates) {
-    if (selected.length >= count) break;
-    if ((m.homeTeamId && busy.has(m.homeTeamId)) || (m.awayTeamId && busy.has(m.awayTeamId))) continue;
-    selected.push({ id: m.id });
-    if (m.homeTeamId) busy.add(m.homeTeamId);
-    if (m.awayTeamId) busy.add(m.awayTeamId);
-  }
-  if (selected.length === 0) return err("No fixtures could be scheduled without a team clash.");
-
-  const start = input.firstKickAt ?? new Date(Date.now() + 90 * 60 * 1000);
-  const gapMs = 2 * 60 * 60 * 1000; // two hours between kick-offs
-  await prisma.$transaction(async (tx) => {
-    for (let i = 0; i < selected.length; i++) {
-      await tx.match.update({ where: { id: selected[i].id }, data: { scheduledAt: new Date(start.getTime() + i * gapMs) } });
+    const busy = new Set<string>();
+    const roundPicks: typeof unscheduled = [];
+    for (const m of candidates) {
+      if ((m.homeTeamId && busy.has(m.homeTeamId)) || (m.awayTeamId && busy.has(m.awayTeamId))) continue;
+      roundPicks.push(m);
+      if (m.homeTeamId) busy.add(m.homeTeamId);
+      if (m.awayTeamId) busy.add(m.awayTeamId);
     }
-  });
-  return ok({ scheduled: selected.length, remaining: unscheduled.length - selected.length });
+
+    if (roundPicks.length === 0) {
+      // Shouldn't happen (would mean a fixture can never be paired without
+      // a clash), but guard against an infinite loop rather than hang.
+      return err(`Could not schedule ${unscheduled.length} remaining fixture(s) without a team clash.`);
+    }
+
+    for (let i = 0; i < roundPicks.length; i++) {
+      allUpdates.push({ id: roundPicks[i].id, scheduledAt: new Date(kickoff.getTime() + i * matchGapMs) });
+      bump(roundPicks[i].homeTeamId, 1);
+      bump(roundPicks[i].awayTeamId, 1);
+    }
+
+    const pickedIds = new Set(roundPicks.map((m) => m.id));
+    unscheduled = unscheduled.filter((m) => !pickedIds.has(m.id));
+    roundsBuilt++;
+    // Next round starts a day after the last kickoff of this round.
+    kickoff = new Date(kickoff.getTime() + (roundPicks.length - 1) * matchGapMs + roundGapMs);
+  }
+
+  await prisma.$transaction(
+    allUpdates.map((u) => prisma.match.update({ where: { id: u.id }, data: { scheduledAt: u.scheduledAt } })),
+  );
+
+  return ok({ scheduled: allUpdates.length, rounds: roundsBuilt });
 }
 
 /* ------------------------------ Competitions ------------------------------- */
