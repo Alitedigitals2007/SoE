@@ -10,6 +10,8 @@ import { generateMatchCode } from "@/lib/matchCode";
 import { publishMatchUpdate } from "@/lib/realtime/server";
 import { notifyAllUsers } from "@/lib/notify";
 import { GOAL_POINTS } from "@/lib/platform/engine";
+import { settleMatchBets } from "@/lib/bet/engine";
+import { applyWalletTxn } from "@/lib/bet/wallet";
 import type { ActionResult, ErrResult, Role, TeamSide as TeamSideView } from "@/lib/domain";
 
 type Tx = Prisma.TransactionClient;
@@ -344,6 +346,7 @@ export async function adminOverrideScore(
       note ?? "Manual score override by admin",
       actor.userId,
     );
+    await settleMatchBets(tx, match.id);
   });
   await publishMatchUpdate(match.code);
   return ok(undefined);
@@ -409,6 +412,7 @@ export async function adminEditGoalRound(
         actor.userId,
       );
       await bumpVersion(tx, match.id);
+      await settleMatchBets(tx, match.id);
     });
     await publishMatchUpdate(match.code);
     return ok(undefined);
@@ -457,6 +461,7 @@ export async function adminEditGoalRound(
       actor.userId,
     );
     await bumpVersion(tx, match.id);
+    await settleMatchBets(tx, match.id);
   });
   await publishMatchUpdate(match.code);
   return ok(undefined);
@@ -868,12 +873,27 @@ export async function decideRound(
         awayScore: scorerTeam === "AWAY" ? { increment: 1 } : undefined,
       },
     });
-    // Fantasy: every manager in this competition who picked the scorer earns points
+    // Fantasy: every manager in this competition who picked the scorer earns
+    // points — and those points are credited to their virtual-points wallet.
     if (match.competitionId) {
-      await tx.fantasyEntry.updateMany({
+      const holders = await tx.fantasyEntry.findMany({
         where: { competitionId: match.competitionId, picks: { some: { playerUserId: sub.player.userId } } },
-        data: { points: { increment: GOAL_POINTS } },
+        select: { id: true, userId: true },
       });
+      for (const holder of holders) {
+        await tx.fantasyEntry.update({
+          where: { id: holder.id },
+          data: { points: { increment: GOAL_POINTS } },
+        });
+        await applyWalletTxn(
+          tx,
+          holder.userId,
+          GOAL_POINTS,
+          "FANTASY_GOAL",
+          `Fantasy: ${rosterNameOf(match, sub.playerId)} scored — +${GOAL_POINTS} points`,
+          { matchId: match.id },
+        );
+      }
     }
     const teamName = teamNameOf(match, scorerTeam);
     const goalDetail = assistName ? `${scorerName} scores for ${teamName}, assisted by ${assistName}` : `${scorerName} scores for ${teamName}`;
@@ -1061,6 +1081,7 @@ export async function endMatch(actor: Actor, input: { code: string }): Promise<A
     });
     await appendTimeline(tx, match.id, "FULL_TIME", "Full-time", `${match.homeScore}–${match.awayScore}`, actor.userId);
     await bumpVersion(tx, match.id);
+    await settleMatchBets(tx, match.id);
   });
   await publishMatchUpdate(match.code);
   const decided = match.rounds.filter((r) => r.status === "DECIDED").length;

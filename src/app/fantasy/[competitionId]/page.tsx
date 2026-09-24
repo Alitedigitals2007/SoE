@@ -50,7 +50,10 @@ export default async function FantasyCompetition({ params }: { params: Promise<{
           <Badge tone="gold">Season {comp.season}</Badge>
           {comp.status === "FINISHED" ? <Badge tone="neutral">Closed</Badge> : <Badge tone="success">Live</Badge>}
         </div>
-        <p className="mt-1 text-muted">Pick up to {MAX_FANTASY_PICKS} players from the competition. Each goal they score = 10 fantasy points.</p>
+        <p className="mt-1 text-muted">
+          Pick up to {MAX_FANTASY_PICKS} players from the competition. Each goal they score = 10 fantasy points — credited straight to
+          your <Link href="/bet" className="font-semibold text-brand hover:underline">Bet wallet</Link>.
+        </p>
 
         {!user ? (
           <div className="mt-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-brand/30 bg-brand/5 p-5">

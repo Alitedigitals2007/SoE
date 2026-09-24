@@ -75,6 +75,8 @@ export default async function FixturesPage({
           page={resultPage}
           totalItems={resultsTotal}
           section="page"
+          collapsible
+          defaultOpen={resultPage > 1}
         />
       </div>
     </PublicShell>
@@ -89,6 +91,8 @@ function FixturesGroup({
   page,
   totalItems,
   section,
+  collapsible,
+  defaultOpen,
 }: {
   title: string;
   matches: { id: string; code: string; homeName: string; awayName: string; homeScore: number; awayScore: number; status: string; scheduledAt: Date | null }[];
@@ -97,8 +101,84 @@ function FixturesGroup({
   page: number;
   totalItems: number;
   section: string;
+  collapsible?: boolean;
+  defaultOpen?: boolean;
 }) {
   const totalPages = Math.max(1, Math.ceil(totalItems / PAGE_SIZE));
+
+  const body = matches.length === 0 ? (
+    <p className="mt-2 rounded-xl border border-dashed border-line-strong bg-white p-6 text-center text-sm text-muted">
+      {section === "upcoming" ? "No scheduled matches yet — kick-off times appear here once fixed." : "Nothing here yet."}
+    </p>
+  ) : (
+    <div className="mt-3 space-y-2">
+      {matches.map((m) => {
+        const showScore = m.status === "FINISHED" || live;
+        const scheduled = !!m.scheduledAt && m.status !== "FINISHED";
+        const sideText = live ? (
+          <>
+            <span aria-hidden className="size-1.5 animate-pulse rounded-full bg-danger" /> Live
+          </>
+        ) : m.status === "FINISHED" ? (
+          "Full-time"
+        ) : m.scheduledAt ? (
+          formatKickoffWat(m.scheduledAt.toISOString())
+        ) : (
+          "Scheduled"
+        );
+        return (
+          <Link
+            key={m.id}
+            href={`/match/${m.code}`}
+            className="block rounded-xl border border-line bg-white px-4 py-3 shadow-sm transition-all hover:-translate-y-0.5 hover:border-brand/40 hover:shadow-md"
+          >
+            <div className="flex items-center justify-between gap-3">
+              <p className="flex min-w-0 flex-1 items-center justify-between gap-2 text-sm font-semibold text-fg">
+                <span className="min-w-0 flex-1 truncate text-right">{m.homeName}</span>
+                <span className="mx-2 shrink-0 rounded-lg bg-surface px-3 py-1 font-black tabular-nums">
+                  {showScore ? `${m.homeScore} – ${m.awayScore}` : "vs"}
+                </span>
+                <span className="min-w-0 flex-1 truncate">{m.awayName}</span>
+              </p>
+              <span className="hidden max-w-40 shrink-0 truncate text-xs font-medium text-muted sm:block">
+                {sideText}
+              </span>
+            </div>
+            {scheduled && m.scheduledAt ? (
+              <p className="mt-1.5 flex items-center gap-1.5 truncate text-[11px] font-medium text-muted sm:hidden">
+                <span aria-hidden>🗓️</span> {formatKickoffWat(m.scheduledAt.toISOString())}
+              </p>
+            ) : null}
+          </Link>
+        );
+      })}
+    </div>
+  );
+
+  const pagination = (
+    <Suspense>
+      <FixturesPagination section={section} page={page} totalPages={totalPages} />
+    </Suspense>
+  );
+
+  if (collapsible) {
+    return (
+      <details className="group mt-8" open={defaultOpen}>
+        <summary className="flex cursor-pointer list-none items-center gap-2 rounded-lg px-2 py-1 -mx-2 transition-colors hover:bg-surface [&::-webkit-details-marker]:hidden">
+          <h2 className="text-lg font-bold text-fg">{title}</h2>
+          <Badge tone={tone}>{totalItems}</Badge>
+          <span
+            aria-hidden
+            className="ml-auto text-base text-subtle transition-transform duration-200 group-open:rotate-180"
+          >
+            ▾
+          </span>
+        </summary>
+        {body}
+        {pagination}
+      </details>
+    );
+  }
 
   return (
     <section className="mt-8">
@@ -106,57 +186,8 @@ function FixturesGroup({
         <h2 className="text-lg font-bold text-fg">{title}</h2>
         <Badge tone={tone}>{totalItems}</Badge>
       </div>
-      {matches.length === 0 ? (
-        <p className="mt-2 rounded-xl border border-dashed border-line-strong bg-white p-6 text-center text-sm text-muted">
-          {section === "upcoming" ? "No scheduled matches yet — kick-off times appear here once fixed." : "Nothing here yet."}
-        </p>
-      ) : (
-        <div className="mt-3 space-y-2">
-          {matches.map((m) => {
-            const showScore = m.status === "FINISHED" || live;
-            const scheduled = !!m.scheduledAt && m.status !== "FINISHED";
-            const sideText = live ? (
-              <>
-                <span aria-hidden className="size-1.5 animate-pulse rounded-full bg-danger" /> Live
-              </>
-            ) : m.status === "FINISHED" ? (
-              "Full-time"
-            ) : m.scheduledAt ? (
-              formatKickoffWat(m.scheduledAt.toISOString())
-            ) : (
-              "Scheduled"
-            );
-            return (
-              <Link
-                key={m.id}
-                href={`/match/${m.code}`}
-                className="block rounded-xl border border-line bg-white px-4 py-3 shadow-sm transition-all hover:-translate-y-0.5 hover:border-brand/40 hover:shadow-md"
-              >
-                <div className="flex items-center justify-between gap-3">
-                  <p className="flex min-w-0 flex-1 items-center justify-between gap-2 text-sm font-semibold text-fg">
-                    <span className="min-w-0 flex-1 truncate text-right">{m.homeName}</span>
-                    <span className="mx-2 shrink-0 rounded-lg bg-surface px-3 py-1 font-black tabular-nums">
-                      {showScore ? `${m.homeScore} – ${m.awayScore}` : "vs"}
-                    </span>
-                    <span className="min-w-0 flex-1 truncate">{m.awayName}</span>
-                  </p>
-                  <span className="hidden max-w-40 shrink-0 truncate text-xs font-medium text-muted sm:block">
-                    {sideText}
-                  </span>
-                </div>
-                {scheduled && m.scheduledAt ? (
-                  <p className="mt-1.5 flex items-center gap-1.5 truncate text-[11px] font-medium text-muted sm:hidden">
-                    <span aria-hidden>🗓️</span> {formatKickoffWat(m.scheduledAt.toISOString())}
-                  </p>
-                ) : null}
-              </Link>
-            );
-          })}
-        </div>
-      )}
-      <Suspense>
-        <FixturesPagination section={section} page={page} totalPages={totalPages} />
-      </Suspense>
+      {body}
+      {pagination}
     </section>
   );
 }

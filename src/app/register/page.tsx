@@ -5,7 +5,8 @@ import { AuthCard } from "@/components/AuthCard";
 
 export const dynamic = "force-dynamic";
 
-export default async function RegisterPage() {
+export default async function RegisterPage({ searchParams }: { searchParams: Promise<{ next?: string }> }) {
+  const sp = await searchParams;
   const session = await auth();
   if (session?.user) redirect(homePath(session.user.role));
 
@@ -36,7 +37,7 @@ export default async function RegisterPage() {
 
         {/* Auth card with staggered entrance */}
         <div className="animate-fade-up w-full" style={{ animationDelay: "0.25s" }}>
-          <AuthCard mode="register" />
+          <AuthCard mode="register" next={sp.next} />
         </div>
 
         {/* Bottom broadcast ticker */}

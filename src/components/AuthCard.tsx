@@ -5,9 +5,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { loginAction, registerAction } from "@/app/actions/auth";
 import { Button, Card, Field, Input } from "@/components/ui";
-import { SiteLogo } from "@/components/site";
 
-export function AuthCard({ mode }: { mode: "login" | "register" }) {
+export function AuthCard({ mode, next }: { mode: "login" | "register"; next?: string }) {
   const router = useRouter();
   const [name, setName] = React.useState("");
   const [email, setEmail] = React.useState("");
@@ -16,6 +15,8 @@ export function AuthCard({ mode }: { mode: "login" | "register" }) {
   const [busy, setBusy] = React.useState(false);
 
   const isLogin = mode === "login";
+  const home = next ?? "/dashboard";
+  const nextQuery = next ? `?next=${encodeURIComponent(next)}` : "";
 
   return (
     <Card className="w-full max-w-md overflow-hidden">
@@ -50,12 +51,12 @@ export function AuthCard({ mode }: { mode: "login" | "register" }) {
             setBusy(true);
             setError(null);
             const action = isLogin
-              ? loginAction({ email, password })
-              : registerAction({ name, email, password });
+              ? loginAction({ email, password, next })
+              : registerAction({ name, email, password, next });
             void action
               .then((res) => {
                 if (res.ok) {
-                  router.replace("/dashboard");
+                  router.replace(home);
                   router.refresh();
                 } else {
                   setError(res.error);
@@ -119,14 +120,14 @@ export function AuthCard({ mode }: { mode: "login" | "register" }) {
           {isLogin ? (
             <>
               No account yet?{" "}
-              <Link href="/register" className="font-semibold text-brand underline-offset-2 hover:underline">
+              <Link href={`/register${nextQuery}`} className="font-semibold text-brand underline-offset-2 hover:underline">
                 Register free
               </Link>
             </>
           ) : (
             <>
               Already registered?{" "}
-              <Link href="/login" className="font-semibold text-brand underline-offset-2 hover:underline">
+              <Link href={`/login${nextQuery}`} className="font-semibold text-brand underline-offset-2 hover:underline">
                 Sign in
               </Link>
             </>

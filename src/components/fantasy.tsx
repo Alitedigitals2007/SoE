@@ -64,7 +64,8 @@ export function FantasyPicker({
     <div>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-muted">
-          <span className="font-bold text-brand">{picked.length}</span>/{maxPicks} selected · 10 points per goal from a picked scorer.
+          <span className="font-bold text-brand">{picked.length}</span>/{maxPicks} selected · 10 points per goal from a picked scorer —
+          added to your wallet.
         </p>
         <Button size="sm" variant="primary" disabled={disabled || busy} loading={busy} onClick={() => void save()}>
           Save squad

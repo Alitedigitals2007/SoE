@@ -15,6 +15,7 @@ const NAV = [
   { href: "/players", label: "Players" },
   { href: "/compare", label: "Compare" },
   { href: "/fantasy", label: "Fantasy" },
+  { href: "/bet", label: "Bet" },
 ] as const;
 
 export function SiteLogo({ href = "/", tone = "default" }: { href?: string; tone?: "default" | "inverse" }) {

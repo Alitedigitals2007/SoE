@@ -10,6 +10,13 @@ import { hashPassword } from "@/lib/password";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+/** Only allow safe same-site relative paths as post-login destinations. */
+function safeNext(next?: string | null): string | undefined {
+  if (!next) return undefined;
+  if (next.startsWith("/") && !next.startsWith("//") && !next.startsWith("/\\")) return next;
+  return undefined;
+}
+
 export async function signOutAction() {
   await signOut({ redirectTo: "/" });
 }
@@ -17,19 +24,20 @@ export async function signOutAction() {
 export async function loginAction(input: {
   email: string;
   password: string;
+  next?: string;
 }): Promise<{ ok: true } | { ok: false; error: string }> {
   const email = input.email.trim().toLowerCase();
   const password = input.password;
   if (!email || !password) return { ok: false, error: "Email and password are required." };
   try {
-    await signIn("credentials", { email, password, redirectTo: "/dashboard" });
+    await signIn("credentials", { email, password, redirectTo: safeNext(input.next) ?? "/dashboard" });
     return { ok: true };
   } catch (error) {
     if (error instanceof AuthError) {
       if (error.type === "CredentialsSignin") return { ok: false, error: "Invalid email or password." };
       return { ok: false, error: "Sign-in failed, please try again." };
     }
-    throw error; // redirect to "/dashboard" handled by NextAuth
+    throw error; // redirect handled by NextAuth
   }
 }
 
@@ -37,6 +45,7 @@ export async function registerAction(input: {
   name: string;
   email: string;
   password: string;
+  next?: string;
 }): Promise<{ ok: true } | { ok: false; error: string }> {
   const name = input.name.trim();
   const email = input.email.trim().toLowerCase();
@@ -57,7 +66,7 @@ export async function registerAction(input: {
   }
 
   try {
-    await signIn("credentials", { email, password, redirectTo: "/dashboard" });
+    await signIn("credentials", { email, password, redirectTo: safeNext(input.next) ?? "/dashboard" });
     return { ok: true };
   } catch (error) {
     if (error instanceof AuthError) {
