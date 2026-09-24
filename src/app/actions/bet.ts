@@ -1,7 +1,7 @@
 "use server";
 
 import { Prisma } from "@prisma/client";
-import { placeBet, type PlaceBetInput } from "@/lib/bet/engine";
+import { claimDaily, placeAcca, placeBet, type AccaLeg, type PlaceBetInput } from "@/lib/bet/engine";
 import { currentActor } from "@/lib/session";
 import { PlatformError } from "@/lib/platform/engine";
 import type { ActionResult } from "@/lib/domain";
@@ -22,4 +22,12 @@ async function runBet<T>(fn: (actor: { userId: string }) => Promise<ActionResult
 
 export async function placeBetAction(input: PlaceBetInput) {
   return runBet((a) => placeBet(a, input));
+}
+
+export async function placeAccaAction(input: { legs: AccaLeg[]; stake: number }) {
+  return runBet((a) => placeAcca(a, input));
+}
+
+export async function claimDailyAction() {
+  return runBet((a) => claimDaily(a));
 }

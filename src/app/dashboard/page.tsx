@@ -4,6 +4,7 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { homePath } from "@/lib/authz";
 import { fantasyBoard } from "@/lib/platform/engine";
+import { ensureWallet } from "@/lib/bet/wallet";
 import { PublicShell } from "@/components/site";
 import { Badge } from "@/components/ui";
 
@@ -15,13 +16,15 @@ export default async function FanDashboard() {
   if (!user) redirect("/login");
   if (user.role !== "USER") redirect(homePath(user.role));
 
-  const [liveCount, comps] = await Promise.all([
+  const [liveCount, comps, walletBalance, openBets] = await Promise.all([
     prisma.match.count({ where: { status: "LIVE" } }),
     prisma.competition.findMany({
       where: { status: { not: "FINISHED" } },
       orderBy: { createdAt: "desc" },
       include: { _count: { select: { teams: true, fantasyEntries: true } } },
     }),
+    ensureWallet(prisma, user.id).then((w) => w.balance),
+    prisma.bet.count({ where: { userId: user.id, status: "PENDING" } }),
   ]);
 
   const entries = await Promise.all(
@@ -66,9 +69,11 @@ export default async function FanDashboard() {
         </div>
 
         {/* Topline stats */}
-        <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6 mt-6">
           <Stat label="Fantasy entries" value={myEntries.length} />
           <Stat label="Total points" value={points} tone="gold" />
+          <Stat label="Wallet" value={walletBalance} tone="gold" />
+          <Stat label="Open bets" value={openBets} />
           <Stat label="Live matches" value={liveCount} tone={liveCount > 0 ? "danger" : undefined} />
           <Stat label="Active comps" value={comps.length} />
         </div>
@@ -123,9 +128,10 @@ export default async function FanDashboard() {
         </div>
 
         {/* Wayfinding */}
-        <div className="mt-8 grid gap-3 sm:grid-cols-3">
+        <div className="mt-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <QuickLink href="/live" icon="📺" title="Watch live" desc="Live quiz matches happening now." />
           <QuickLink href="/fixtures" icon="🗓️" title="Fixtures & results" desc="Scheduled and finished matches." />
+          <QuickLink href="/bet" icon="🎟️" title="Bet with points" desc="Predict fixtures, win virtual points." />
           <QuickLink href="/compare" icon="⚖️" title="Compare" desc="Player and team head-to-heads." />
         </div>
       </div>

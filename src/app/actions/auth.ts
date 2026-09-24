@@ -35,6 +35,7 @@ export async function loginAction(input: {
   } catch (error) {
     if (error instanceof AuthError) {
       if (error.type === "CredentialsSignin") return { ok: false, error: "Invalid email or password." };
+      console.error("[auth] loginAction failed", error.type, error, (error as Error).cause);
       return { ok: false, error: "Sign-in failed, please try again." };
     }
     throw error; // redirect handled by NextAuth
@@ -70,6 +71,8 @@ export async function registerAction(input: {
     return { ok: true };
   } catch (error) {
     if (error instanceof AuthError) {
+      if (error.type !== "CredentialsSignin")
+        console.error("[auth] registerAction signIn failed", error.type, error, (error as Error).cause);
       return { ok: false, error: "Account created — please sign in." };
     }
     throw error;

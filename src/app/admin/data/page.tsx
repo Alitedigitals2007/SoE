@@ -2,8 +2,9 @@ import Link from "next/link";
 import { requireRole } from "@/lib/authz";
 import { prisma } from "@/lib/prisma";
 import { TopBar } from "@/components/app";
-import { Badge, Card } from "@/components/ui";
+import { Badge, Card, cn } from "@/components/ui";
 import { AdminTabs, type AdminTab } from "@/components/admin";
+import { WalletAdjust, type WalletUser } from "@/components/wallet-admin";
 import { formatKickoffWat } from "@/lib/format";
 import { StatusBadge } from "../page";
 
@@ -15,7 +16,7 @@ export default async function AdminDataPage() {
   const user = await requireRole(["ADMIN"]);
 
   const [
-    users, teams, matches, goals, timeline, competitions, counts,
+    users, teams, matches, goals, timeline, competitions, counts, wallets,
   ] = await Promise.all([
     prisma.user.findMany({ orderBy: { createdAt: "desc" }, take: TAKE, select: { id: true, name: true, email: true, role: true, createdAt: true } }),
     prisma.team.findMany({ orderBy: { name: "asc" }, include: { _count: { select: { members: true } } } }),
@@ -42,7 +43,14 @@ export default async function AdminDataPage() {
       prisma.match.count(),
       prisma.round.count({ where: { decision: "GOAL" } }),
     ]),
+    prisma.user.findMany({
+      orderBy: [{ virtualPoints: "desc" }, { createdAt: "asc" }],
+      take: 200,
+      select: { id: true, name: true, virtualPoints: true },
+    }),
   ]);
+
+  const walletUsers: WalletUser[] = wallets.map((u) => ({ id: u.id, name: u.name, balance: u.virtualPoints ?? 0 }));
 
   const tabs: AdminTab[] = [
     {
@@ -194,6 +202,30 @@ export default async function AdminDataPage() {
             ))}
             {competitions.length === 0 ? <li className="px-4 py-6 text-sm text-muted">No competitions yet.</li> : null}
           </ul>
+        </Card>
+      ),
+    },
+    {
+      key: "wallets",
+      label: "Wallets",
+      badge: walletUsers.length,
+      content: (
+        <Card className="p-0">
+          <WalletAdjust users={walletUsers} />
+          <ul className="divide-y divide-line/70">
+            {walletUsers.map((u) => (
+              <li key={u.id} className="flex items-center justify-between gap-2 px-4 py-2.5 text-sm">
+                <span className="min-w-0 truncate font-medium text-fg">{u.name}</span>
+                <span className={cn("shrink-0 font-black tabular-nums", u.balance > 0 ? "text-success" : u.balance < 0 ? "text-danger" : "text-subtle")}>
+                  {u.balance} pts
+                </span>
+              </li>
+            ))}
+            {walletUsers.length === 0 ? <li className="px-4 py-6 text-sm text-muted">No users yet.</li> : null}
+          </ul>
+          <p className="border-t border-line px-4 py-2 text-xs text-subtle">
+            Top {walletUsers.length} balances · point history lives in each user&apos;s Wallet tab.
+          </p>
         </Card>
       ),
     },

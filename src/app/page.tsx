@@ -179,6 +179,34 @@ export default async function Home() {
           </div>
         </section>
 
+        {/* BET PROMO */}
+        <section className="border-b-2 border-fg brand-gradient text-white">
+          <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-5 px-4 py-7">
+            <div className="min-w-0">
+              <p className="text-[11px] font-black uppercase tracking-[.25em] text-white/85">New · virtual points betting</p>
+              <p className="mt-1 text-2xl font-black uppercase leading-none tracking-tight sm:text-3xl">Call the score. Win the points.</p>
+              <p className="mt-1.5 max-w-2xl text-sm text-white/85">
+                Auto odds on every scheduled fixture — results, exact scores up to 10–0, goal totals and accumulators.
+                Claim 20 points free daily; new accounts start with 100.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Link
+                href="/bet"
+                className="inline-flex h-11 items-center rounded-xl bg-white px-5 text-sm font-black uppercase tracking-wider text-brand-deep shadow-md transition-transform hover:scale-[1.03]"
+              >
+                Open betting →
+              </Link>
+              <Link
+                href="/register?next=/bet"
+                className="inline-flex h-11 items-center rounded-xl px-5 text-sm font-black uppercase tracking-wider text-white ring-2 ring-white/70 transition-all hover:bg-white/10"
+              >
+                Get 100 points
+              </Link>
+            </div>
+          </div>
+        </section>
+
         {/* LIVE NOW */}
         <section className="mx-auto max-w-7xl px-4 py-14">
           <SectionHead

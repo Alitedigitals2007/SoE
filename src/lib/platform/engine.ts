@@ -1,7 +1,9 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { generateMatchCode } from "@/lib/matchCode";
-import type { ErrResult, Role, TeamSide } from "@/lib/domain";
+import { notifyAllUsers } from "@/lib/notify";
+import { applyWalletTxn } from "@/lib/bet/wallet";
+import type { ActionResult, ErrResult, Role, TeamSide } from "@/lib/domain";
 
 export type Actor = { userId: string; role: Role };
 
@@ -217,6 +219,13 @@ export async function scheduleAllFixtures(
     allUpdates.map((u) => prisma.match.update({ where: { id: u.id }, data: { scheduledAt: u.scheduledAt } })),
   );
 
+  notifyAllUsers({
+    icon: "🗓️",
+    title: `${comp.name}: ${allUpdates.length} fixtures scheduled`,
+    body: "Kick-off times are live — check the fixtures page.",
+    link: "/fixtures",
+  }).catch(() => {});
+
   return ok({ scheduled: allUpdates.length, rounds: roundsBuilt });
 }
 
@@ -292,6 +301,13 @@ export async function scheduleLeagueWave(
       }),
     ),
   );
+
+  notifyAllUsers({
+    icon: "🗓️",
+    title: `${comp.name}: ${picks.length} fixtures scheduled`,
+    body: "Kick-off times are live — check the fixtures page.",
+    link: "/fixtures",
+  }).catch(() => {});
 
   return ok({ scheduled: picks.length });
 }
@@ -1056,4 +1072,33 @@ export async function competitionTopAssists(competitionId: string, limit = 10) {
     map.set(p.id, cur);
   }
   return [...map.values()].sort((a, b) => b.assists - a.assists).slice(0, limit);
+}
+
+/* ------------------------------ wallet (admin) ----------------------------- */
+
+/**
+ * Manually credit or debit a fan's virtual-points wallet (disputes, giveaways,
+ * corrections). The amount always lands in the user's transaction history as
+ * an ADMIN_ADJUST entry.
+ */
+export async function adminAdjustWallet(
+  actor: Actor,
+  input: { userId: string; amount: number; note?: string },
+): Promise<ActionResult<{ balance: number }>> {
+  const blocked = await requireAdmin(actor);
+  if (blocked) return blocked;
+  const amount = Math.floor(Number(input.amount));
+  if (!Number.isFinite(amount) || amount === 0) return err("Enter a non-zero whole number of points.");
+  if (amount > 100000 || amount < -100000) return err("Adjustments are capped at ±100,000 points.");
+  const user = await prisma.user.findUnique({ where: { id: input.userId }, select: { id: true, name: true } });
+  if (!user) return err("User not found.");
+
+  const balance = await applyWalletTxn(
+    prisma,
+    input.userId,
+    amount,
+    "ADMIN_ADJUST",
+    input.note?.trim() || `Admin adjustment ${amount > 0 ? "+" : ""}${amount} points for ${user.name}`,
+  );
+  return ok({ balance });
 }

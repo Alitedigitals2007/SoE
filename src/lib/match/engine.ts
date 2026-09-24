@@ -8,9 +8,9 @@ import {
 import { prisma } from "@/lib/prisma";
 import { generateMatchCode } from "@/lib/matchCode";
 import { publishMatchUpdate } from "@/lib/realtime/server";
-import { notifyAllUsers } from "@/lib/notify";
+import { notifyAllUsers, notifyUsers } from "@/lib/notify";
 import { GOAL_POINTS } from "@/lib/platform/engine";
-import { settleMatchBets } from "@/lib/bet/engine";
+import { emitSettleNotices, settleMatchBets, type SettleNotice } from "@/lib/bet/engine";
 import { applyWalletTxn } from "@/lib/bet/wallet";
 import type { ActionResult, ErrResult, Role, TeamSide as TeamSideView } from "@/lib/domain";
 
@@ -333,6 +333,7 @@ export async function adminOverrideScore(
   if (homeScore > 99 || awayScore > 99) return err("Scores must be 99 or fewer.");
   const note = input.note?.trim() || null;
 
+  let settleNotices: SettleNotice[] = [];
   await prisma.$transaction(async (tx) => {
     await tx.match.update({
       where: { id: match.id },
@@ -346,8 +347,9 @@ export async function adminOverrideScore(
       note ?? "Manual score override by admin",
       actor.userId,
     );
-    await settleMatchBets(tx, match.id);
+    settleNotices = await settleMatchBets(tx, match.id);
   });
+  await emitSettleNotices(settleNotices);
   await publishMatchUpdate(match.code);
   return ok(undefined);
 }
@@ -397,6 +399,7 @@ export async function adminEditGoalRound(
   };
 
   if (input.decision === "NO_GOAL") {
+    let settleNotices: SettleNotice[] = [];
     await prisma.$transaction(async (tx) => {
       await tx.round.update({
         where: { id: round.id },
@@ -412,8 +415,9 @@ export async function adminEditGoalRound(
         actor.userId,
       );
       await bumpVersion(tx, match.id);
-      await settleMatchBets(tx, match.id);
+      settleNotices = await settleMatchBets(tx, match.id);
     });
+    await emitSettleNotices(settleNotices);
     await publishMatchUpdate(match.code);
     return ok(undefined);
   }
@@ -438,6 +442,7 @@ export async function adminEditGoalRound(
   const assistName = assistSlotId ? rosterNameOf(match, assistSlotId) : null;
   const teamName = teamNameOf(match, scorerSlot.team);
 
+  let goalNotices: SettleNotice[] = [];
   await prisma.$transaction(async (tx) => {
     await tx.round.update({
       where: { id: round.id },
@@ -461,8 +466,9 @@ export async function adminEditGoalRound(
       actor.userId,
     );
     await bumpVersion(tx, match.id);
-    await settleMatchBets(tx, match.id);
+    goalNotices = await settleMatchBets(tx, match.id);
   });
+  await emitSettleNotices(goalNotices);
   await publishMatchUpdate(match.code);
   return ok(undefined);
 }
@@ -842,6 +848,9 @@ export async function decideRound(
   if (!scorerSlot) return err("Could not find the scoring player.");
   const scorerTeam = scorerSlot.team;
 
+  // Fantasy managers credited in the transaction below — notified after commit.
+  const fantasyNotifyIds: string[] = [];
+
   // Optional assist: another active player on the SAME team is credited.
   let assistSlotId: string | null = null;
   if (input.assistUserId && input.assistUserId !== scorerSlot.userId) {
@@ -893,6 +902,7 @@ export async function decideRound(
           `Fantasy: ${rosterNameOf(match, sub.playerId)} scored — +${GOAL_POINTS} points`,
           { matchId: match.id },
         );
+        fantasyNotifyIds.push(holder.userId);
       }
     }
     const teamName = teamNameOf(match, scorerTeam);
@@ -912,6 +922,15 @@ export async function decideRound(
     await bumpVersion(tx, match.id);
   });
   await publishMatchUpdate(match.code);
+  if (fantasyNotifyIds.length) {
+    const scorerName = rosterNameOf(match, sub.playerId);
+    notifyUsers(fantasyNotifyIds, {
+      icon: "⭐",
+      title: "Fantasy points banked",
+      body: `${scorerName} scored — +${GOAL_POINTS} points added to your wallet.`,
+      link: "/bet",
+    }).catch(() => {});
+  }
   return ok(undefined);
 }
 
@@ -1074,6 +1093,7 @@ export async function endMatch(actor: Actor, input: { code: string }): Promise<A
   if (match.status !== "LIVE") return err("This match is not live.");
   if (match.currentRound < 10) return err("All ten questions must be played before full time.");
 
+  let settleNotices: SettleNotice[] = [];
   await prisma.$transaction(async (tx) => {
     await tx.match.update({
       where: { id: match.id },
@@ -1081,8 +1101,9 @@ export async function endMatch(actor: Actor, input: { code: string }): Promise<A
     });
     await appendTimeline(tx, match.id, "FULL_TIME", "Full-time", `${match.homeScore}–${match.awayScore}`, actor.userId);
     await bumpVersion(tx, match.id);
-    await settleMatchBets(tx, match.id);
+    settleNotices = await settleMatchBets(tx, match.id);
   });
+  await emitSettleNotices(settleNotices);
   await publishMatchUpdate(match.code);
   const decided = match.rounds.filter((r) => r.status === "DECIDED").length;
   const scoreline = `${match.homeName} ${match.homeScore}–${match.awayScore} ${match.awayName}`;

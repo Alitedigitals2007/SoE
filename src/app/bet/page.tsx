@@ -1,19 +1,30 @@
 import Link from "next/link";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { oddsForMatch } from "@/lib/bet/odds";
+import { formGuide, goalsOdds, oddsForMatch } from "@/lib/bet/odds";
 import { ensureWallet } from "@/lib/bet/wallet";
 import { PublicShell } from "@/components/site";
 import { Badge } from "@/components/ui";
-import { BetTerminal, type BetMatch, type BetRow, type TxnRow } from "@/components/bet";
+import { BetTerminal, type BetMatch, type BetRow, type LeaderRow, type TxnRow } from "@/components/bet";
 
 export const dynamic = "force-dynamic";
 
-const selectionLabel = (market: string, selection: string): string => {
-  if (market === "MATCH_RESULT")
-    return { HOME: "Home win", DRAW: "Draw", AWAY: "Away win" }[selection] ?? selection;
-  return `Score ${selection}`;
-};
+function selectionLabel(market: string, selection: string, legCount?: number): string {
+  switch (market) {
+    case "MATCH_RESULT":
+      return { HOME: "Home win", DRAW: "Draw", AWAY: "Away win" }[selection] ?? selection;
+    case "EXACT_SCORE":
+      return `Score ${selection}`;
+    case "TOTAL_GOALS":
+      return selection.startsWith("O") ? `Over ${selection.slice(1)} goals` : `Under ${selection.slice(1)} goals`;
+    case "BOTH_TEAMS_TO_SCORE":
+      return selection === "YES" ? "Yes" : "No";
+    case "ACCA":
+      return `${legCount ?? 0} legs`;
+    default:
+      return selection;
+  }
+}
 
 export default async function BetPage() {
   const session = await auth();
@@ -45,16 +56,34 @@ export default async function BetPage() {
       competition: m.competition?.name ?? null,
       kickoff: m.scheduledAt!.toISOString(),
       odds: await oddsForMatch(m),
+      goals: await goalsOdds(m),
+      form: await formGuide(m.homeTeamId, m.awayTeamId),
     })),
   );
+
+  // Public leaderboard: top virtual-point balances.
+  const topUsers = await prisma.user.findMany({
+    where: { virtualPoints: { not: null } },
+    orderBy: [{ virtualPoints: "desc" }, { createdAt: "asc" }],
+    take: 20,
+    select: { id: true, name: true, virtualPoints: true },
+  });
+  const leaderboard: LeaderRow[] = topUsers.map((u, i) => ({
+    rank: i + 1,
+    name: u.name,
+    balance: u.virtualPoints ?? 0,
+    mine: u.id === user?.id,
+  }));
 
   let balance = 0;
   let bets: BetRow[] = [];
   let txns: TxnRow[] = [];
+  let myRank: number | null = null;
+  let claimedToday = false;
 
   if (user) {
     balance = (await ensureWallet(prisma, user.id)).balance;
-    const [rawBets, rawTxns] = await Promise.all([
+    const [rawBets, rawTxns, lastClaim, richerThanMe] = await Promise.all([
       prisma.bet.findMany({
         where: { userId: user.id },
         orderBy: { placedAt: "desc" },
@@ -68,20 +97,38 @@ export default async function BetPage() {
         orderBy: { createdAt: "desc" },
         take: 50,
       }),
+      prisma.walletTransaction.findFirst({
+        where: { userId: user.id, kind: "DAILY_CLAIM" },
+        orderBy: { createdAt: "desc" },
+        select: { createdAt: true },
+      }),
+      prisma.user.count({ where: { virtualPoints: { gt: balance } } }),
     ]);
-    bets = rawBets.map((b) => ({
-      id: b.id,
-      fixture: `${b.match.homeName} v ${b.match.awayName}`,
-      market: b.market,
-      selectionLabel: selectionLabel(b.market, b.selection),
-      odds: Number(b.odds),
-      stake: b.stake,
-      potentialReturn: b.potentialReturn,
-      status: b.status,
-      payout: b.payout,
-      placedAt: b.placedAt.toISOString(),
-      result: b.match.status === "FINISHED" ? `${b.match.homeScore}–${b.match.awayScore}` : null,
-    }));
+    myRank = richerThanMe + 1;
+    claimedToday = !!lastClaim && lastClaim.createdAt.toISOString().slice(0, 10) === new Date().toISOString().slice(0, 10);
+    bets = rawBets.map((b) => {
+      const legs = Array.isArray(b.legs)
+        ? (b.legs as { fixture?: string; label?: string; odds?: number }[]).map((l) => ({
+            fixture: l.fixture ?? "",
+            label: l.label ?? "",
+            odds: Number(l.odds ?? 0),
+          }))
+        : undefined;
+      return {
+        id: b.id,
+        fixture: `${b.match.homeName} v ${b.match.awayName}`,
+        market: b.market,
+        selectionLabel: selectionLabel(b.market, b.selection, legs?.length),
+        odds: Number(b.odds),
+        stake: b.stake,
+        potentialReturn: b.potentialReturn,
+        status: b.status,
+        payout: b.payout,
+        placedAt: b.placedAt.toISOString(),
+        result: b.match.status === "FINISHED" ? `${b.match.homeScore}–${b.match.awayScore}` : null,
+        legs,
+      };
+    });
     txns = rawTxns.map((t) => ({
       id: t.id,
       amount: t.amount,
@@ -101,7 +148,7 @@ export default async function BetPage() {
           {user ? <Badge tone="success">Balance {balance}</Badge> : null}
         </div>
         <p className="mt-1 text-muted">
-          Predict match results and exact scores with virtual points — auto odds, no money, ever.
+          Predict results, exact scores and goal markets with virtual points — auto odds, no money, ever.
         </p>
 
         {!user ? (
@@ -122,18 +169,29 @@ export default async function BetPage() {
         ) : null}
 
         <div className="mt-6">
-          <BetTerminal signedIn={!!user} balance={balance} matches={matches} bets={bets} txns={txns} />
+          <BetTerminal
+            signedIn={!!user}
+            balance={balance}
+            matches={matches}
+            bets={bets}
+            txns={txns}
+            leaderboard={leaderboard}
+            myRank={myRank}
+            claimedToday={claimedToday}
+          />
         </div>
 
         <section className="mt-10 rounded-2xl border border-line bg-white p-5">
           <h2 className="text-sm font-black uppercase tracking-wider text-fg">How it works</h2>
           <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-muted">
             <li>Every new account gets <strong className="text-fg">100 virtual points</strong> — these are not real money.</li>
-            <li>Markets open on every scheduled match: <strong className="text-fg">home win / draw / away win</strong> and <strong className="text-fg">exact scores</strong>.</li>
-            <li>Odds are automatic — league matches use the standings, other matches standard prices. The score grid runs on an expected-goals model.</li>
+            <li>Markets open on every scheduled match: <strong className="text-fg">home win / draw / away win</strong>, <strong className="text-fg">exact scores (0–0 up to 10–0)</strong>, <strong className="text-fg">over/under totals</strong> and <strong className="text-fg">both-teams-to-score</strong>.</li>
+            <li>Add 2–6 selections from different matches for an <strong className="text-fg">accumulator</strong> — the odds multiply.</li>
+            <li>Stake up to <strong className="text-fg">500 points</strong> per bet (max 5 open bets per match, 10 open accumulators).</li>
+            <li>Odds are automatic — league matches use the standings, other matches standard prices; exact scores and totals run on an expected-goals model. Each card shows both teams&apos; recent form.</li>
             <li>Betting closes at kick-off and settles at full time from the 10-question scoreline (penalty shootouts don&apos;t affect bets).</li>
             <li>A winning bet returns <strong className="text-fg">stake × odds</strong> in points; every movement appears in your Wallet history.</li>
-            <li>Fantasy keeps paying too: every goal by a player you picked adds <strong className="text-fg">+10 points</strong> straight to your wallet.</li>
+            <li><strong className="text-fg">Claim 20 free points daily</strong> from the Wallet tab, and fantasy keeps paying too — every goal by a player you picked adds <strong className="text-fg">+10 points</strong> straight to your wallet.</li>
           </ul>
         </section>
       </div>

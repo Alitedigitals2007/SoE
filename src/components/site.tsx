@@ -4,19 +4,9 @@ import { auth } from "@/auth";
 import { signOutAction } from "@/app/actions/auth";
 import { homePath } from "@/lib/authz";
 import { unreadCount } from "@/lib/notify";
+import { NAV } from "@/lib/nav";
 import { cn } from "@/components/ui";
-
-const NAV = [
-  { href: "/fixtures", label: "Fixtures" },
-  { href: "/live", label: "Live" },
-  { href: "/news", label: "News" },
-  { href: "/competitions", label: "Leagues & Cups" },
-  { href: "/teams", label: "Teams" },
-  { href: "/players", label: "Players" },
-  { href: "/compare", label: "Compare" },
-  { href: "/fantasy", label: "Fantasy" },
-  { href: "/bet", label: "Bet" },
-] as const;
+import { MobileNav } from "@/components/nav";
 
 export function SiteLogo({ href = "/", tone = "default" }: { href?: string; tone?: "default" | "inverse" }) {
   return (
@@ -115,21 +105,7 @@ export async function SiteHeader() {
         </div>
       </div>
 
-      <div className="border-t-2 border-fg/10 bg-surface lg:hidden">
-        <nav className="mx-auto flex max-w-7xl gap-1 overflow-x-auto px-4 py-2" aria-label="Primary small screens">
-          {NAV.map((n) => (
-            <Link
-              key={n.href}
-              href={n.href}
-              className={cn(
-                "shrink-0 rounded-md px-2.5 py-1.5 text-[.65rem] font-black uppercase tracking-wider text-muted transition-colors hover:bg-bg-elevated hover:text-fg",
-              )}
-            >
-              {n.label}
-            </Link>
-          ))}
-        </nav>
-      </div>
+      <MobileNav />
     </header>
   );
 }

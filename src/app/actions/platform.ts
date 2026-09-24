@@ -4,6 +4,7 @@ import { Prisma } from "@prisma/client";
 import {
   addCompetitionTeam,
   addTeamMember,
+  adminAdjustWallet,
   assignReferee,
   createCompetition,
   createTeam,
@@ -191,4 +192,10 @@ export async function fantasyBoardAction(competitionId: string) {
     console.error(e);
     return { ok: false as const, error: "Could not load the leaderboard." };
   }
+}
+
+/* --------------------------------- wallet ---------------------------------- */
+
+export async function adminAdjustWalletAction(input: { userId: string; amount: number; note?: string }) {
+  return runEngine((a) => adminAdjustWallet(a, input));
 }

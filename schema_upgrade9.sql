@@ -2,12 +2,18 @@
 -- SoE upgrade 9 — virtual-points betting (wallet + bet ledger + bets)
 --
 -- ⚠️ Run this file OUTSIDE a transaction (psql runs statements one-by-one by
---    default; in psql do NOT wrap it in BEGIN/COMMIT, and do not paste it
---    into a tool that auto-wraps multi-statement scripts in a transaction,
---    because CREATE TYPE / ALTER TYPE cannot run inside one in older Postgres).
+--    default; do NOT wrap it in BEGIN/COMMIT, and do not paste it into a tool
+--    that auto-wraps multi-statement scripts — CREATE TYPE / ALTER TYPE cannot
+--    safely run inside one).
 --
--- After running it, restart the app (Prisma client must be regenerated on
--- deploy: `npx prisma generate` — Vercel does this automatically).
+-- This is the CONSOLIDATED version (includes the totals/BTTS/accumulator
+-- markets, daily claim & admin-adjust wallet kinds, and Bet.legs columns).
+--
+--   • If you have NEVER run an upgrade9 before → run THIS file only.
+--   • If you already ran the earlier upgrade9 → run schema_upgrade10.sql
+--     instead (this file's CREATE TYPE statements will fail on re-run).
+--
+-- After running, restart/redeploy the app (Vercel runs `prisma generate`).
 -- ============================================================================
 
 -- Wallet ledger kinds ---------------------------------------------------------
@@ -17,11 +23,19 @@ CREATE TYPE "WalletTxnKind" AS ENUM (
   'BET_WON',       -- stake returned + winnings
   'BET_LOST',      -- result record (amount 0 — the stake was debited on placement)
   'BET_VOID',      -- stake refunded
-  'FANTASY_GOAL'   -- +10 for each goal by a fantasy-picked scorer
+  'FANTASY_GOAL',  -- +10 for each goal by a fantasy-picked scorer
+  'DAILY_CLAIM',   -- +20 once per day
+  'ADMIN_ADJUST'   -- admin manual credit/debit
 );
 
 -- Bet markets / statuses ------------------------------------------------------
-CREATE TYPE "BetMarket" AS ENUM ('MATCH_RESULT', 'EXACT_SCORE');
+CREATE TYPE "BetMarket" AS ENUM (
+  'MATCH_RESULT',
+  'EXACT_SCORE',
+  'TOTAL_GOALS',
+  'BOTH_TEAMS_TO_SCORE',
+  'ACCA'
+);
 CREATE TYPE "BetStatus" AS ENUM ('PENDING', 'WON', 'LOST', 'VOID');
 
 -- User wallet balance (NULL = wallet not opened yet; first touch credits 100) --
@@ -62,6 +76,8 @@ CREATE TABLE "Bet" (
   "payout"          INTEGER NOT NULL DEFAULT 0,
   "placedAt"        TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
   "settledAt"       TIMESTAMP(3),
+  "legs"            JSONB,
+  "legMatchIds"     TEXT[] NOT NULL DEFAULT '{}',
 
   CONSTRAINT "Bet_pkey" PRIMARY KEY ("id")
 );

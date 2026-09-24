@@ -11,8 +11,8 @@ export type MatchOdds = {
   home: number;
   draw: number;
   away: number;
-  /** Exact-score grid, home goals 0–4 × away goals 0–4. */
-  scores: ExactScoreOdd[];
+  /** Exact-score prices for every 0–10 v 0–10 line (121 entries, index = home*11+away). */
+  scoreOdds: number[];
   /** "table" = derived from league standings, "default" = standard prices. */
   source: "table" | "default";
 };
@@ -104,25 +104,84 @@ async function expectedGoals(match: MatchTeams): Promise<{ xgHome: number; xgAwa
   return { xgHome: DEFAULT_XG_HOME, xgAway: DEFAULT_XG_AWAY };
 }
 
-/** Auto odds for a match: 1X2 + exact-score grid. */
+/** Auto odds for a match: 1X2 + exact-score matrix (0–10 per side). */
 export async function oddsForMatch(match: MatchTeams): Promise<MatchOdds> {
   const [{ pHome, pDraw, pAway, source }, { xgHome, xgAway }] = await Promise.all([
     outcomeProbs(match),
     expectedGoals(match),
   ]);
 
-  const scores: ExactScoreOdd[] = [];
-  for (let h = 0; h <= 4; h++) {
-    for (let a = 0; a <= 4; a++) {
-      scores.push({ home: h, away: a, odds: price(poisson(h, xgHome) * poisson(a, xgAway)) });
+  const scoreOdds: number[] = [];
+  for (let h = 0; h <= 10; h++) {
+    for (let a = 0; a <= 10; a++) {
+      scoreOdds.push(price(poisson(h, xgHome) * poisson(a, xgAway)));
     }
   }
 
-  return { home: price(pHome), draw: price(pDraw), away: price(pAway), scores, source };
+  return { home: price(pHome), draw: price(pDraw), away: price(pAway), scoreOdds, source };
 }
 
-/** Odds for a single exact scoreline (0–9 per side), e.g. when placing a bet. */
+/** Odds for a single exact scoreline (0–10 goals per side), e.g. when placing a bet. */
 export async function exactScoreOdds(match: MatchTeams, homeGoals: number, awayGoals: number): Promise<number> {
   const { xgHome, xgAway } = await expectedGoals(match);
   return price(poisson(homeGoals, xgHome) * poisson(awayGoals, xgAway));
+}
+
+/* ------------------------------- goals markets ----------------------------- */
+
+export type GoalsOdds = {
+  btts: { yes: number; no: number };
+  /** Classic over/under lines (half-ball, so no pushes). */
+  lines: { line: number; over: number; under: number }[];
+};
+
+const TOTAL_LINES = [1.5, 2.5, 3.5];
+
+/** Over/under + both-teams-to-score prices from the same expected-goals model. */
+export async function goalsOdds(match: MatchTeams): Promise<GoalsOdds> {
+  const { xgHome, xgAway } = await expectedGoals(match);
+
+  // Convolve the two Poisson distributions into a total-goals distribution.
+  const maxGoals = 20;
+  const total: number[] = [];
+  for (let t = 0; t <= maxGoals; t++) {
+    let p = 0;
+    for (let i = 0; i <= t; i++) p += poisson(i, xgHome) * poisson(t - i, xgAway);
+    total.push(p);
+  }
+
+  const lines = TOTAL_LINES.map((line) => {
+    const pOver = total.reduce((acc, p, t) => (t > line ? acc + p : acc), 0);
+    return { line, over: price(pOver), under: price(1 - pOver) };
+  });
+
+  const pBtts = (1 - poisson(0, xgHome)) * (1 - poisson(0, xgAway));
+  return { btts: { yes: price(pBtts), no: price(1 - pBtts) }, lines };
+}
+
+/* -------------------------------- form guide ------------------------------- */
+
+export type FormGuide = { home: ("W" | "D" | "L")[]; away: ("W" | "D" | "L")[] };
+
+async function lastFive(teamId: string): Promise<("W" | "D" | "L")[]> {
+  const rows = await prisma.match.findMany({
+    where: { status: "FINISHED", OR: [{ homeTeamId: teamId }, { awayTeamId: teamId }] },
+    orderBy: { finishedAt: "desc" },
+    take: 5,
+    select: { homeTeamId: true, homeScore: true, awayScore: true },
+  });
+  return rows.map((m) => {
+    const gf = m.homeTeamId === teamId ? m.homeScore : m.awayScore;
+    const ga = m.homeTeamId === teamId ? m.awayScore : m.homeScore;
+    return gf > ga ? "W" : gf < ga ? "L" : "D";
+  });
+}
+
+/** Last-five form for both sides (empty arrays when a side has no team record). */
+export async function formGuide(homeTeamId: string | null, awayTeamId: string | null): Promise<FormGuide> {
+  const [home, away] = await Promise.all([
+    homeTeamId ? lastFive(homeTeamId) : Promise.resolve([]),
+    awayTeamId ? lastFive(awayTeamId) : Promise.resolve([]),
+  ]);
+  return { home, away };
 }

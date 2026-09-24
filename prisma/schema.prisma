@@ -576,6 +576,8 @@ enum WalletTxnKind {
   BET_LOST // result record (amount 0 — stake was debited on placement)
   BET_VOID // stake refunded
   FANTASY_GOAL // +10 for each goal by a fantasy-picked scorer
+  DAILY_CLAIM // +20 once per day
+  ADMIN_ADJUST // admin manual credit/debit
 }
 
 model WalletTransaction {
@@ -596,6 +598,9 @@ model WalletTransaction {
 enum BetMarket {
   MATCH_RESULT // 1 / X / 2
   EXACT_SCORE // e.g. "2-1"
+  TOTAL_GOALS // over/under a line, e.g. "O2.5"
+  BOTH_TEAMS_TO_SCORE // "YES" | "NO"
+  ACCA // accumulator across matches (legs in `legs`)
 }
 
 enum BetStatus {
@@ -612,7 +617,7 @@ model Bet {
   matchId         String
   match           Match       @relation(fields: [matchId], references: [id], onDelete: Cascade)
   market          BetMarket
-  selection       String // "HOME" | "DRAW" | "AWAY" or "2-1"
+  selection       String // "HOME" | "DRAW" | "AWAY" | "2-1" | "O2.5" | "YES" | "ACCA"
   odds            Decimal     @db.Decimal(5, 2)
   stake           Int
   potentialReturn Int // floor(stake * odds), credited if the bet wins
@@ -620,6 +625,11 @@ model Bet {
   payout          Int         @default(0)
   placedAt        DateTime    @default(now())
   settledAt       DateTime?
+
+  // Accumulator payload: full leg list (JSON) plus the denormalised match ids
+  // so settlement can find accas that reference a given match.
+  legs         Json?
+  legMatchIds  String[]
 
   @@index([userId, placedAt])
   @@index([matchId, status])
