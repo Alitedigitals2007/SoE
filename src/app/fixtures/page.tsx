@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { PublicShell } from "@/components/site";
 import { Badge } from "@/components/ui";
 import { FixturesPagination } from "@/components/FixturesPagination";
+import { formatKickoffWat } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
@@ -19,6 +20,7 @@ export default async function FixturesPage({
   const livePage = Math.max(1, Number(sp.livePage) || 1);
   const upcomingPage = Math.max(1, Number(sp.upcomingPage) || 1);
 
+  // Only matches with a scheduled kick-off (date & time) are shown publicly.
   const [liveMatches, liveTotal, scheduledMatches, scheduledTotal, results, resultsTotal] = await Promise.all([
     prisma.match.findMany({
       where: { status: "LIVE" },
@@ -28,12 +30,12 @@ export default async function FixturesPage({
     }),
     prisma.match.count({ where: { status: "LIVE" } }),
     prisma.match.findMany({
-      where: { status: "DRAFT" },
-      orderBy: { createdAt: "desc" },
+      where: { status: "DRAFT", scheduledAt: { not: null } },
+      orderBy: { scheduledAt: "asc" },
       skip: (upcomingPage - 1) * PAGE_SIZE,
       take: PAGE_SIZE,
     }),
-    prisma.match.count({ where: { status: "DRAFT" } }),
+    prisma.match.count({ where: { status: "DRAFT", scheduledAt: { not: null } } }),
     prisma.match.findMany({
       where: { status: "FINISHED" },
       orderBy: { finishedAt: "desc" },
@@ -42,8 +44,6 @@ export default async function FixturesPage({
     }),
     prisma.match.count({ where: { status: "FINISHED" } }),
   ]);
-
-  const matchFields = { id: true, code: true, homeName: true, awayName: true, homeScore: true, awayScore: true, status: true } as const;
 
   return (
     <PublicShell>
@@ -91,7 +91,7 @@ function FixturesGroup({
   section,
 }: {
   title: string;
-  matches: { id: string; code: string; homeName: string; awayName: string; homeScore: number; awayScore: number; status: string }[];
+  matches: { id: string; code: string; homeName: string; awayName: string; homeScore: number; awayScore: number; status: string; scheduledAt: Date | null }[];
   tone: "success" | "warning" | "neutral";
   live?: boolean;
   page: number;
@@ -108,32 +108,47 @@ function FixturesGroup({
       </div>
       {matches.length === 0 ? (
         <p className="mt-2 rounded-xl border border-dashed border-line-strong bg-white p-6 text-center text-sm text-muted">
-          Nothing here yet.
+          {section === "upcoming" ? "No scheduled matches yet — kick-off times appear here once fixed." : "Nothing here yet."}
         </p>
       ) : (
         <div className="mt-3 space-y-2">
           {matches.map((m) => {
             const showScore = m.status === "FINISHED" || live;
+            const scheduled = !!m.scheduledAt && m.status !== "FINISHED";
+            const sideText = live ? (
+              <>
+                <span aria-hidden className="size-1.5 animate-pulse rounded-full bg-danger" /> Live
+              </>
+            ) : m.status === "FINISHED" ? (
+              "Full-time"
+            ) : m.scheduledAt ? (
+              formatKickoffWat(m.scheduledAt.toISOString())
+            ) : (
+              "Scheduled"
+            );
             return (
-              <Link key={m.id} href={`/match/${m.code}`} className="flex items-center justify-between gap-3 rounded-xl border border-line bg-white px-4 py-3 shadow-sm transition-all hover:-translate-y-0.5 hover:border-brand/40 hover:shadow-md">
-                <p className="flex min-w-0 flex-1 items-center justify-between gap-2 text-sm font-semibold text-fg">
-                  <span className="min-w-0 flex-1 truncate text-right">{m.homeName}</span>
-                  <span className="mx-2 rounded-lg bg-surface px-3 py-1 font-black tabular-nums">
-                    {showScore ? `${m.homeScore} – ${m.awayScore}` : "vs"}
+              <Link
+                key={m.id}
+                href={`/match/${m.code}`}
+                className="block rounded-xl border border-line bg-white px-4 py-3 shadow-sm transition-all hover:-translate-y-0.5 hover:border-brand/40 hover:shadow-md"
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <p className="flex min-w-0 flex-1 items-center justify-between gap-2 text-sm font-semibold text-fg">
+                    <span className="min-w-0 flex-1 truncate text-right">{m.homeName}</span>
+                    <span className="mx-2 shrink-0 rounded-lg bg-surface px-3 py-1 font-black tabular-nums">
+                      {showScore ? `${m.homeScore} – ${m.awayScore}` : "vs"}
+                    </span>
+                    <span className="min-w-0 flex-1 truncate">{m.awayName}</span>
+                  </p>
+                  <span className="hidden max-w-40 shrink-0 truncate text-xs font-medium text-muted sm:block">
+                    {sideText}
                   </span>
-                  <span className="min-w-0 flex-1 truncate">{m.awayName}</span>
-                </p>
-                <span className="flex shrink-0 items-center gap-1.5 text-xs font-medium text-muted">
-                  {live ? (
-                    <>
-                      <span aria-hidden className="size-1.5 animate-pulse rounded-full bg-danger" /> Live
-                    </>
-                  ) : m.status === "FINISHED" ? (
-                    "Full-time"
-                  ) : (
-                    "Scheduled"
-                  )}
-                </span>
+                </div>
+                {scheduled && m.scheduledAt ? (
+                  <p className="mt-1.5 flex items-center gap-1.5 truncate text-[11px] font-medium text-muted sm:hidden">
+                    <span aria-hidden>🗓️</span> {formatKickoffWat(m.scheduledAt.toISOString())}
+                  </p>
+                ) : null}
               </Link>
             );
           })}

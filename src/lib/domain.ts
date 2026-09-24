@@ -67,7 +67,8 @@ export interface TimelineItemView {
     | "PENALTY_SCORED"
     | "PENALTY_MISS"
     | "PENALTY_SHOOTOUT_START"
-    | "PENALTY_SHOOTOUT_END";
+    | "PENALTY_SHOOTOUT_END"
+    | "ADMIN_OVERRIDE";
   label: string;
   detail?: string | null;
   at: string; // ISO

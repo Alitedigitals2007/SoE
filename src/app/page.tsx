@@ -17,9 +17,10 @@ export default async function Home() {
       orderBy: { startedAt: "asc" },
       take: 6,
     }),
+    // Public "Up next" list: only matches with a scheduled kick-off (date & time).
     prisma.match.findMany({
-      where: { status: "DRAFT" },
-      orderBy: { createdAt: "asc" },
+      where: { status: "DRAFT", scheduledAt: { not: null } },
+      orderBy: { scheduledAt: "asc" },
       take: 8,
       select: { id: true, code: true, homeName: true, awayName: true, status: true, scheduledAt: true },
     }),

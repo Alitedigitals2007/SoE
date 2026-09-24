@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { addPlayerAction, createMatchAction, postponeMatchAction, removePlayerAction, setMatchScheduleAction } from "@/app/actions/match";
+import { addPlayerAction, createMatchAction, postponeMatchAction, removePlayerAction, setMatchScheduleAction, adminEditGoalRoundAction, adminOverrideScoreAction } from "@/app/actions/match";
 import { createUserAction, updateUserAction } from "@/app/actions/admin";
 import { Badge, Button, Card, CardHeader, cn, Field, Input, Select } from "@/components/ui";
 import type { Role, TeamSide } from "@/lib/domain";
@@ -586,5 +586,331 @@ function NoticeLine({ notice }: { notice: Notice }) {
     >
       {notice?.text}
     </p>
+  );
+}
+
+/* ------------------------------ admin tabs --------------------------------- */
+
+export type AdminTab = { key: string; label: string; badge?: number; content: React.ReactNode };
+
+/** Client-side tab strip that holds server-rendered sections — keeps long admin pages uncluttered. */
+export function AdminTabs({ tabs }: { tabs: AdminTab[] }) {
+  const [active, setActive] = React.useState(tabs[0]?.key ?? "");
+  const current = tabs.find((t) => t.key === active) ?? tabs[0];
+
+  return (
+    <div>
+      <div className="flex flex-wrap gap-1.5 border-b border-line pb-3" role="tablist" aria-label="Admin sections">
+        {tabs.map((t) => (
+          <button
+            key={t.key}
+            type="button"
+            role="tab"
+            aria-selected={t.key === current?.key}
+            onClick={() => setActive(t.key)}
+            className={cn(
+              "rounded-lg border-2 px-3 py-1.5 text-sm font-semibold transition-colors",
+              t.key === current?.key
+                ? "border-brand bg-brand/10 text-brand-deep"
+                : "border-line bg-surface text-muted hover:border-brand/40 hover:text-fg",
+            )}
+          >
+            {t.label}
+            {typeof t.badge === "number" ? (
+              <span className="ml-1.5 rounded-full bg-surface px-1.5 py-0.5 text-[10px] font-black text-subtle">{t.badge}</span>
+            ) : null}
+          </button>
+        ))}
+      </div>
+      <div className="mt-4">{current?.content}</div>
+    </div>
+  );
+}
+
+/* --------------------------- admin: score override -------------------------- */
+
+export function ScoreOverrideEditor({
+  code,
+  homeName,
+  awayName,
+  homeScore,
+  awayScore,
+}: {
+  code: string;
+  homeName: string;
+  awayName: string;
+  homeScore: number;
+  awayScore: number;
+}) {
+  const [home, setHome] = React.useState(homeScore);
+  const [away, setAway] = React.useState(awayScore);
+  const [note, setNote] = React.useState("");
+  const [notice, setNotice] = React.useState<Notice>(null);
+  const [busy, setBusy] = React.useState(false);
+  const router = useRouter();
+  const dirty = home !== homeScore || away !== awayScore || note.trim() !== "";
+
+  return (
+    <Card>
+      <CardHeader
+        title="Manual score override"
+        description="Set the scoreline directly — it is recorded on the match timeline as an admin correction."
+        aside={dirty ? <Badge tone="warning">Unsaved</Badge> : <Badge tone="neutral">Saved</Badge>}
+      />
+      <form
+        className="space-y-4 p-4"
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (busy) return;
+          setBusy(true);
+          setNotice(null);
+          void adminOverrideScoreAction({ code, homeScore: home, awayScore: away, note: note.trim() || undefined }).then((r) => {
+            setBusy(false);
+            if (r.ok) {
+              setNote("");
+              setNotice({ kind: "ok", text: "Score overridden." });
+              router.refresh();
+            } else {
+              setNotice({ kind: "err", text: r.error ?? "Could not override the score." });
+            }
+          });
+        }}
+      >
+        <div className="grid gap-3 sm:grid-cols-3">
+          <Field label={`${homeName} (home)`}>
+            <Input
+              type="number"
+              min={0}
+              max={99}
+              value={home}
+              onChange={(e) => setHome(Math.max(0, Math.floor(Number(e.target.value) || 0)))}
+            />
+          </Field>
+          <Field label={`${awayName} (away)`}>
+            <Input
+              type="number"
+              min={0}
+              max={99}
+              value={away}
+              onChange={(e) => setAway(Math.max(0, Math.floor(Number(e.target.value) || 0)))}
+            />
+          </Field>
+          <Field label="Reason (optional)" hint="Shown on the timeline.">
+            <Input value={note} onChange={(e) => setNote(e.target.value)} placeholder="e.g. Typo corrected" maxLength={200} />
+          </Field>
+        </div>
+        {notice ? <NoticeLine notice={notice} /> : null}
+        <Button type="submit" variant="secondary" loading={busy} disabled={!dirty}>
+          Save score
+        </Button>
+      </form>
+    </Card>
+  );
+}
+
+/* --------------------------- admin: goal round editor ----------------------- */
+
+export type GoalRoundSubmissionRow = {
+  submissionId: string;
+  userId: string;
+  name: string;
+  team: TeamSide;
+  answer: string;
+};
+
+export type GoalRoundRow = {
+  roundId: string;
+  number: number;
+  decision: "GOAL" | "NO_GOAL";
+  questionText: string;
+  scorer: GoalRoundSubmissionRow | null;
+  assist: { userId: string; name: string } | null;
+  submissions: GoalRoundSubmissionRow[];
+};
+
+export function GoalRoundsEditor({
+  code,
+  homeName,
+  awayName,
+  rounds,
+  roster,
+}: {
+  code: string;
+  homeName: string;
+  awayName: string;
+  rounds: GoalRoundRow[];
+  roster: { userId: string; name: string; team: TeamSide }[];
+}) {
+  const [openId, setOpenId] = React.useState<string | null>(null);
+  const [notice, setNotice] = React.useState<Notice>(null);
+
+  return (
+    <Card>
+      <CardHeader
+        title="Goals, scorers & assists"
+        description="Edit any decided question — change the decision, the scorer or the assist. The score follows automatically."
+        aside={<Badge tone="neutral">{rounds.length} decided</Badge>}
+      />
+      <div className="space-y-2 p-3">
+        {notice ? <NoticeLine notice={notice} /> : null}
+        {rounds.length === 0 ? (
+          <p className="px-4 py-6 text-sm text-muted">No decided questions yet — goals appear here as the referee decides them.</p>
+        ) : (
+          rounds.map((r) => (
+            <GoalRoundRowItem
+              key={r.roundId}
+              code={code}
+              homeName={homeName}
+              awayName={awayName}
+              round={r}
+              roster={roster}
+              open={openId === r.roundId}
+              onToggle={() => setOpenId(openId === r.roundId ? null : r.roundId)}
+              onClose={() => setOpenId(null)}
+              onNotice={setNotice}
+            />
+          ))
+        )}
+      </div>
+    </Card>
+  );
+}
+
+function GoalRoundRowItem({
+  code,
+  homeName,
+  awayName,
+  round,
+  roster,
+  open,
+  onToggle,
+  onClose,
+  onNotice,
+}: {
+  code: string;
+  homeName: string;
+  awayName: string;
+  round: GoalRoundRow;
+  roster: { userId: string; name: string; team: TeamSide }[];
+  open: boolean;
+  onToggle: () => void;
+  onClose: () => void;
+  onNotice: (n: Notice) => void;
+}) {
+  const isGoal = round.decision === "GOAL";
+  const [decision, setDecision] = React.useState<"GOAL" | "NO_GOAL">(round.decision);
+  const [scorerId, setScorerId] = React.useState(round.scorer?.submissionId ?? "");
+  const [assistId, setAssistId] = React.useState(round.assist?.userId ?? "");
+  const [busy, setBusy] = React.useState(false);
+  const router = useRouter();
+
+  const scorerTeam = round.submissions.find((s) => s.submissionId === scorerId)?.team ?? null;
+  const assistCandidates = scorerTeam ? roster.filter((p) => p.team === scorerTeam && p.userId !== round.submissions.find((s) => s.submissionId === scorerId)?.userId) : [];
+  const dirty =
+    decision !== round.decision ||
+    (decision === "GOAL" && scorerId !== (round.scorer?.submissionId ?? "")) ||
+    (decision === "GOAL" && assistId !== (round.assist?.userId ?? ""));
+
+  function save() {
+    if (busy) return;
+    if (decision === "GOAL" && !scorerId) return;
+    setBusy(true);
+    onNotice(null);
+    void adminEditGoalRoundAction({
+      code,
+      roundId: round.roundId,
+      decision,
+      scorerSubmissionId: decision === "GOAL" ? scorerId : null,
+      assistPlayerId: decision === "GOAL" ? assistId || null : null,
+    }).then((r) => {
+      setBusy(false);
+      if (r.ok) {
+        onNotice({ kind: "ok", text: `Question ${round.number} updated.` });
+        onClose();
+        router.refresh();
+      } else {
+        onNotice({ kind: "err", text: r.error ?? "Could not update the round." });
+      }
+    });
+  }
+
+  return (
+    <div className="rounded-xl border border-line bg-bg-raised">
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={open}
+        className="flex w-full flex-wrap items-center justify-between gap-2 px-4 py-3 text-left"
+      >
+        <span className="min-w-0">
+          <span className="flex items-center gap-2 text-sm font-semibold text-fg">
+            <span className="shrink-0 text-xs font-black text-subtle">Q{round.number}</span>
+            <Badge tone={isGoal ? "gold" : "neutral"}>{isGoal ? "⚽ Goal" : "No goal"}</Badge>
+            <span className="min-w-0 truncate">
+              {isGoal && round.scorer
+                ? `${round.scorer.name}${round.assist ? ` (assist: ${round.assist.name})` : ""}`
+                : "No scorer"}
+            </span>
+          </span>
+          <span className="mt-0.5 block truncate text-xs text-subtle">{round.questionText}</span>
+        </span>
+        <span className="shrink-0 text-xs font-semibold text-brand">{open ? "Close" : "Edit"}</span>
+      </button>
+
+      {open ? (
+        <div className="space-y-3 border-t border-line px-4 py-3">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field label="Decision">
+              <Select
+                value={decision}
+                onChange={(e) => {
+                  setDecision(e.target.value as "GOAL" | "NO_GOAL");
+                  setAssistId("");
+                }}
+              >
+                <option value="GOAL">⚽ Goal</option>
+                <option value="NO_GOAL">No goal</option>
+              </Select>
+            </Field>
+            {decision === "GOAL" ? (
+              <Field label="Scorer (answer that counts)">
+                <Select value={scorerId} onChange={(e) => { setScorerId(e.target.value); setAssistId(""); }}>
+                  <option value="">Pick an answer…</option>
+                  {round.submissions.map((s) => (
+                    <option key={s.submissionId} value={s.submissionId}>
+                      {s.name} ({s.team === "HOME" ? homeName : awayName}) — {s.answer}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+            ) : null}
+          </div>
+          {decision === "GOAL" && scorerTeam ? (
+            <Field label="Assist (optional, same team)">
+              <Select value={assistId} onChange={(e) => setAssistId(e.target.value)}>
+                <option value="">No assist</option>
+                {assistCandidates.map((p) => (
+                  <option key={p.userId} value={p.userId}>
+                    {p.name}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+          ) : null}
+          {decision === "GOAL" && scorerId && !scorerTeam ? (
+            <p className="text-xs text-danger">Pick a scoring answer first.</p>
+          ) : null}
+          <div className="flex flex-wrap items-center gap-3">
+            <Button size="sm" variant="pitch" onClick={save} loading={busy} disabled={decision === "GOAL" && (!scorerId || !scorerTeam)}>
+              Save changes
+            </Button>
+            <Button size="sm" variant="ghost" onClick={onClose}>
+              Cancel
+            </Button>
+            {!dirty ? <span className="text-xs text-subtle">No changes yet.</span> : null}
+          </div>
+        </div>
+      ) : null}
+    </div>
   );
 }

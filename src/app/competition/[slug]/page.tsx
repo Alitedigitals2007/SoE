@@ -6,6 +6,7 @@ import { PublicShell } from "@/components/site";
 import { Badge } from "@/components/ui";
 import { CsvDownloadButton } from "@/components/CsvDownloadButton";
 import { exportCompetitionCsvAction } from "@/app/actions/exports";
+import { formatKickoffWat } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
@@ -41,6 +42,7 @@ export default async function CompetitionDetail({ params }: { params: Promise<{ 
     }
   }
   const rounds = cup ? [...groupByRound.entries()].sort((a, b) => a[0] - b[0]) : [];
+  const publicMatches = comp.matches.filter((m) => m.status !== "DRAFT" || m.scheduledAt);
 
   return (
     <PublicShell>
@@ -80,51 +82,54 @@ export default async function CompetitionDetail({ params }: { params: Promise<{ 
           <div className="mt-8 overflow-hidden rounded-2xl border border-line bg-white shadow-sm">
               <div className="px-5 py-4">
                 <h2 className="text-lg font-bold text-fg">Standings</h2>
+                <p className="mt-0.5 text-xs text-muted lg:hidden">Swipe sideways to see all columns →</p>
               </div>
-              <table className="w-full text-left text-sm">
-                <thead className="border-y border-line bg-bg-raised text-xs uppercase tracking-wider text-muted">
-                  <tr>
-                    <th className="px-4 py-2 font-semibold">#</th>
-                    <th className="px-4 py-2 font-semibold">Team</th>
-                    <th className="px-2 py-2 text-center font-semibold">P</th>
-                    <th className="px-2 py-2 text-center font-semibold">W</th>
-                    <th className="px-2 py-2 text-center font-semibold">D</th>
-                    <th className="px-2 py-2 text-center font-semibold">L</th>
-                    <th className="px-2 py-2 text-center font-semibold">GF</th>
-                    <th className="px-2 py-2 text-center font-semibold">GA</th>
-                    <th className="px-2 py-2 text-center font-semibold">GD</th>
-                    <th className="px-4 py-2 text-center font-semibold">Pts</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-line/70">
-                  {rows.every((r) => r.p === 0) ? (
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[640px] text-left text-sm">
+                  <thead className="border-y border-line bg-bg-raised text-xs uppercase tracking-wider text-muted">
                     <tr>
-                      <td colSpan={10} className="px-4 py-10 text-center text-muted">
-                        No finished matches yet — results fill the table as matches end.
-                      </td>
+                      <th className="px-4 py-2 font-semibold">#</th>
+                      <th className="px-4 py-2 font-semibold">Team</th>
+                      <th className="px-2 py-2 text-center font-semibold">P</th>
+                      <th className="px-2 py-2 text-center font-semibold">W</th>
+                      <th className="px-2 py-2 text-center font-semibold">D</th>
+                      <th className="px-2 py-2 text-center font-semibold">L</th>
+                      <th className="px-2 py-2 text-center font-semibold">GF</th>
+                      <th className="px-2 py-2 text-center font-semibold">GA</th>
+                      <th className="px-2 py-2 text-center font-semibold">GD</th>
+                      <th className="px-4 py-2 text-center font-semibold">Pts</th>
                     </tr>
-                  ) : (
-                    rows.map((r, i) => (
-                      <tr key={r.id} className="hover:bg-bg-raised">
-                        <td className="px-4 py-2.5 font-bold text-subtle">{i + 1}</td>
-                        <td className="px-4 py-2.5">
-                          <Link href={`/teams/${r.slug}`} className="font-semibold text-fg hover:text-brand">
-                            {r.name}
-                          </Link>
+                  </thead>
+                  <tbody className="divide-y divide-line/70">
+                    {rows.every((r) => r.p === 0) ? (
+                      <tr>
+                        <td colSpan={10} className="px-4 py-10 text-center text-muted">
+                          No finished matches yet — results fill the table as matches end.
                         </td>
-                        <td className="px-2 py-2.5 text-center text-muted">{r.p}</td>
-                        <td className="px-2 py-2.5 text-center text-muted">{r.w}</td>
-                        <td className="px-2 py-2.5 text-center text-muted">{r.d}</td>
-                        <td className="px-2 py-2.5 text-center text-muted">{r.l}</td>
-                        <td className="px-2 py-2.5 text-center text-muted">{r.gf}</td>
-                        <td className="px-2 py-2.5 text-center text-muted">{r.ga}</td>
-                        <td className="px-2 py-2.5 text-center font-semibold text-fg">{r.gf - r.ga}</td>
-                        <td className="px-4 py-2.5 text-center text-base font-black text-brand">{r.pts}</td>
                       </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
+                    ) : (
+                      rows.map((r, i) => (
+                        <tr key={r.id} className="hover:bg-bg-raised">
+                          <td className="px-4 py-2.5 font-bold text-subtle">{i + 1}</td>
+                          <td className="px-4 py-2.5">
+                            <Link href={`/teams/${r.slug}`} className="font-semibold text-fg hover:text-brand">
+                              {r.name}
+                            </Link>
+                          </td>
+                          <td className="px-2 py-2.5 text-center text-muted">{r.p}</td>
+                          <td className="px-2 py-2.5 text-center text-muted">{r.w}</td>
+                          <td className="px-2 py-2.5 text-center text-muted">{r.d}</td>
+                          <td className="px-2 py-2.5 text-center text-muted">{r.l}</td>
+                          <td className="px-2 py-2.5 text-center text-muted">{r.gf}</td>
+                          <td className="px-2 py-2.5 text-center text-muted">{r.ga}</td>
+                          <td className="px-2 py-2.5 text-center font-semibold text-fg">{r.gf - r.ga}</td>
+                          <td className="px-4 py-2.5 text-center text-base font-black text-brand">{r.pts}</td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </div>
         ) : (
           <div className="mt-8 rounded-2xl border-2 border-dashed border-fg/15 bg-bg-elevated p-8 text-center">
@@ -173,17 +178,17 @@ export default async function CompetitionDetail({ params }: { params: Promise<{ 
           </div>
         ) : null}
 
-        {/* Fixtures */}
+        {/* Fixtures — public view: unscheduled drafts (no date & time yet) stay hidden */}
         <div id="fixtures" className="mt-10">          <h2 className="text-xl font-bold text-fg">
-            {cup ? "Matches" : "Fixtures"} <span className="text-base font-medium text-muted">({comp.matches.length})</span>
+            {cup ? "Matches" : "Fixtures"} <span className="text-base font-medium text-muted">({publicMatches.length})</span>
           </h2>
           <div className="mt-3 grid gap-2">
-            {comp.matches.length === 0 ? (
+            {publicMatches.length === 0 ? (
               <p className="rounded-xl border border-dashed border-line-strong p-6 text-center text-sm text-muted">
                 No fixtures scheduled yet.
               </p>
             ) : (
-              comp.matches.map((m) => (
+              publicMatches.map((m) => (
                 <MatchRow
                   key={m.id}
                   code={m.code}
@@ -195,6 +200,7 @@ export default async function CompetitionDetail({ params }: { params: Promise<{ 
                   homeSlug={m.homeTeam?.slug}
                   awaySlug={m.awayTeam?.slug}
                   round={cup ? m.cupRound ?? undefined : undefined}
+                  scheduledAt={m.scheduledAt ? m.scheduledAt.toISOString() : null}
                 />
               ))
             )}
@@ -215,6 +221,7 @@ function MatchRow({
   homeSlug,
   awaySlug,
   round,
+  scheduledAt,
 }: {
   code: string;
   home: string;
@@ -225,30 +232,38 @@ function MatchRow({
   homeSlug?: string;
   awaySlug?: string;
   round?: number;
+  scheduledAt?: string | null;
 }) {
   const finished = status === "FINISHED";
   const live = status === "LIVE";
   return (
-    <div className="flex items-center gap-3 rounded-xl border border-line bg-white px-4 py-3 shadow-sm transition-colors hover:border-brand/40">
-      <div className="min-w-0 flex-1">
-        {round ? <p className="text-[10px] font-bold uppercase tracking-widest text-subtle">Round {round}</p> : null}
-        <p className="flex items-center justify-between gap-2 text-sm font-semibold text-fg">
-          <span className="flex min-w-0 flex-1 justify-end truncate">
-            {homeSlug ? <Link href={`/teams/${homeSlug}`} className="hover:text-brand">{home}</Link> : home}
-          </span>
-          <span className="mx-2 rounded-lg bg-surface px-2.5 py-1 font-black tabular-nums text-fg">
-            {finished || live ? `${hs} – ${as}` : "vs"}
-          </span>
-          <span className="flex min-w-0 flex-1 truncate">
-            {awaySlug ? <Link href={`/teams/${awaySlug}`} className="hover:text-brand">{away}</Link> : away}
-          </span>
-        </p>
-      </div>
-      <div className="flex shrink-0 items-center gap-2">
-        <Badge tone={finished ? "neutral" : live ? "success" : "warning"}>{finished ? "FT" : live ? "Live" : "Scheduled"}</Badge>
-        <Link href={`/match/${code}`} className="rounded-lg bg-surface px-3 py-1.5 text-xs font-semibold text-fg hover:bg-line">
-          Open
-        </Link>
+    <div className="rounded-xl border border-line bg-white px-4 py-3 shadow-sm transition-colors hover:border-brand/40">
+      <div className="flex items-center gap-3">
+        <div className="min-w-0 flex-1">
+          {round ? <p className="text-[10px] font-bold uppercase tracking-widest text-subtle">Round {round}</p> : null}
+          <p className="flex items-center justify-between gap-2 text-sm font-semibold text-fg">
+            <span className="flex min-w-0 flex-1 justify-end truncate">
+              {homeSlug ? <Link href={`/teams/${homeSlug}`} className="hover:text-brand">{home}</Link> : home}
+            </span>
+            <span className="mx-2 shrink-0 rounded-lg bg-surface px-2.5 py-1 font-black tabular-nums text-fg">
+              {finished || live ? `${hs} – ${as}` : "vs"}
+            </span>
+            <span className="flex min-w-0 flex-1 truncate">
+              {awaySlug ? <Link href={`/teams/${awaySlug}`} className="hover:text-brand">{away}</Link> : away}
+            </span>
+          </p>
+          {scheduledAt && !finished ? (
+            <p className="mt-1.5 flex items-center gap-1.5 truncate text-[11px] font-medium text-muted">
+              <span aria-hidden>🗓️</span> {formatKickoffWat(scheduledAt)}
+            </p>
+          ) : null}
+        </div>
+        <div className="flex shrink-0 flex-col items-end gap-2 sm:flex-row sm:items-center">
+          <Badge tone={finished ? "neutral" : live ? "success" : "warning"}>{finished ? "FT" : live ? "Live" : "Scheduled"}</Badge>
+          <Link href={`/match/${code}`} className="rounded-lg bg-surface px-3 py-1.5 text-xs font-semibold text-fg hover:bg-line">
+            Open
+          </Link>
+        </div>
       </div>
     </div>
   );

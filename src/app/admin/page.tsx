@@ -68,6 +68,9 @@ export default async function AdminHome() {
                         </span>
                         <span className="text-xs text-subtle">
                           Code {m.code} · {m.referee?.name ?? "Unassigned"}
+                          {m.scheduledAt
+                            ? ` · 🗓️ ${new Date(m.scheduledAt.getTime() + 3600_000).toLocaleString("en-GB", { timeZone: "UTC", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })} WAT`
+                            : ""}
                         </span>
                       </span>
                       <StatusBadge status={m.status} />
@@ -81,6 +84,7 @@ export default async function AdminHome() {
           <Card>
             <CardHeader title="Quick actions" />
             <div className="flex flex-col gap-2 p-3 text-sm">
+              <ActionLink href="/admin/data" label="View the database" hint="Users, teams, matches, goals — simple read-only view" />
               <ActionLink href="/admin/users" label="Manage accounts" hint="Create referee & player logins" />
               <ActionLink href="/admin/imports" label="Import centre" hint="Bulk-load accounts, squads, questions and fixtures" />
               <ActionLink href="/admin/teams" label="Teams" hint="Create clubs and add their 8 players" />

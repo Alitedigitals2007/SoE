@@ -1209,7 +1209,7 @@ function TimelineCard({ snapshot }: { snapshot: MatchSnapshot }) {
 function TimelineRow({ t }: { t: TimelineItemView }) {
   const clock = t.elapsedSec == null ? "--:--" : fmtClock(t.elapsedSec);
   const icon =
-    t.type === "GOAL" ? "⚽" : t.type === "NO_GOAL" ? "❌" : t.type === "KICKOFF" ? "🏟️" : t.type === "FULL_TIME" ? "🏁" : t.type === "CARD" ? "🟨" : t.type === "SUBSTITUTION" ? "🔄" : t.type === "QUESTION_OPEN" ? "❓" : t.type === "PENALTY_SCORED" ? "⚽" : t.type === "PENALTY_MISS" ? "❌" : t.type === "PENALTY_SAVED" ? "🧤" : t.type === "PENALTY_SHOOTOUT_START" ? "🎯" : t.type === "PENALTY_SHOOTOUT_END" ? "🏆" : "🔒";
+    t.type === "GOAL" ? "⚽" : t.type === "NO_GOAL" ? "❌" : t.type === "KICKOFF" ? "🏟️" : t.type === "FULL_TIME" ? "🏁" : t.type === "CARD" ? "🟨" : t.type === "SUBSTITUTION" ? "🔄" : t.type === "QUESTION_OPEN" ? "❓" : t.type === "PENALTY_SCORED" ? "⚽" : t.type === "PENALTY_MISS" ? "❌" : t.type === "PENALTY_SAVED" ? "🧤" : t.type === "PENALTY_SHOOTOUT_START" ? "🎯" : t.type === "PENALTY_SHOOTOUT_END" ? "🏆" : t.type === "ADMIN_OVERRIDE" ? "✏️" : "🔒";
   return (
     <li className="flex items-start gap-3 py-1.5 text-sm">
       <span className="w-14 shrink-0 pt-0.5 text-xs font-semibold tabular-nums text-subtle">{clock}</span>

@@ -224,6 +224,78 @@ export async function scheduleAllFixtures(
 
 export type CompetitionType = "LEAGUE" | "CUP" | "LEAGUE_CUP" | "CUSTOM";
 
+/**
+ * Schedule the next `count` unscheduled fixtures of a competition without team
+ * clashes, spacing kickoffs 2 hours apart (one wave).
+ */
+export async function scheduleLeagueWave(
+  actor: Actor,
+  input: { competitionId: string; count: number; firstKickAt?: Date },
+) {
+  const blocked = await requireAdmin(actor);
+  if (blocked) return blocked;
+  const comp = await prisma.competition.findUnique({
+    where: { id: input.competitionId },
+    include: {
+      matches: {
+        select: { id: true, status: true, scheduledAt: true, homeTeamId: true, awayTeamId: true },
+      },
+    },
+  });
+  if (!comp) return err("Competition not found.");
+  const unscheduled = comp.matches.filter((m) => m.status === "DRAFT" && !m.scheduledAt);
+  if (unscheduled.length === 0) return ok({ scheduled: 0 });
+
+  const count = Math.max(1, Math.min(input.count || 5, unscheduled.length));
+
+  // Per-team load heuristic (same as scheduleAllFixtures) keeps a fair
+  // round-robin feel instead of "just the earliest rows".
+  const load = new Map<string, number>();
+  const bump = (id: string | null, amount: number) => {
+    if (!id) return;
+    load.set(id, (load.get(id) ?? 0) + amount);
+  };
+  for (const m of comp.matches) {
+    if (m.status === "FINISHED" || m.scheduledAt) {
+      bump(m.homeTeamId, 1);
+      bump(m.awayTeamId, 1);
+    }
+  }
+  const getLoad = (id: string | null) => (id ? load.get(id) ?? 0 : 0);
+
+  const candidates = [...unscheduled].sort((a, b) => {
+    const al = Math.min(getLoad(a.homeTeamId), getLoad(a.awayTeamId));
+    const ah = Math.max(getLoad(a.homeTeamId), getLoad(a.awayTeamId));
+    const bl = Math.min(getLoad(b.homeTeamId), getLoad(b.awayTeamId));
+    const bh = Math.max(getLoad(b.homeTeamId), getLoad(b.awayTeamId));
+    return al - bl || ah - bh || 0;
+  });
+
+  const busy = new Set<string>();
+  const picks: typeof unscheduled = [];
+  for (const m of candidates) {
+    if (picks.length >= count) break;
+    if ((m.homeTeamId && busy.has(m.homeTeamId)) || (m.awayTeamId && busy.has(m.awayTeamId))) continue;
+    picks.push(m);
+    if (m.homeTeamId) busy.add(m.homeTeamId);
+    if (m.awayTeamId) busy.add(m.awayTeamId);
+  }
+
+  const matchGapMs = 2 * 60 * 60 * 1000; // 2h between kickoffs inside the wave
+  const kickoff = input.firstKickAt ?? new Date(Date.now() + 90 * 60 * 1000);
+
+  await prisma.$transaction(
+    picks.map((m, i) =>
+      prisma.match.update({
+        where: { id: m.id },
+        data: { scheduledAt: new Date(kickoff.getTime() + i * matchGapMs) },
+      }),
+    ),
+  );
+
+  return ok({ scheduled: picks.length });
+}
+
 export async function setCompetitionStatus(
   actor: Actor,
   input: { competitionId: string; status: "ACTIVE" | "FINISHED" },

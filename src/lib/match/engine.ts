@@ -31,7 +31,14 @@ async function loadMatchFor(code: string, tx: PrismaClient | Tx = prisma) {
       referee: { select: { id: true, name: true } },
       competition: { select: { type: true } },
       roster: { include: { user: { select: { id: true, name: true } } }, orderBy: [{ team: "asc" }, { number: "asc" }] },
-      rounds: { include: { question: { select: { id: true, text: true, referenceAnswer: true } }, submissions: { include: { player: { include: { user: { select: { id: true, name: true } } } } } } } },
+      rounds: {
+        include: {
+          question: { select: { id: true, text: true, referenceAnswer: true } },
+          submissions: { include: { player: { include: { user: { select: { id: true, name: true } } } } } },
+          goalSubmission: { include: { player: { include: { user: { select: { id: true, name: true } } } } } },
+          assistPlayer: { include: { user: { select: { id: true, name: true } } } },
+        },
+      },
       timeline: true,
       questions: { orderBy: { order: "asc" } },
       penaltyShootout: {
@@ -301,6 +308,156 @@ export async function adminRemovePlayer(
   if (played) return err("Cannot remove a player after questions have been played.");
   await prisma.matchPlayer.delete({ where: { id: slot.id } });
   await prisma.match.update({ where: { id: match.id }, data: { version: { increment: 1 } } });
+  await publishMatchUpdate(match.code);
+  return ok(undefined);
+}
+
+/* --------------------------- admin: manual overrides ------------------------ */
+
+/**
+ * Manual score overwrite: the admin sets the scoreline directly (e.g. after a
+ * correction). Recorded on the timeline so viewers can see the change.
+ */
+export async function adminOverrideScore(
+  actor: Actor,
+  input: { code: string; homeScore: number; awayScore: number; note?: string },
+): Promise<ActionResult> {
+  if (actor.role !== "ADMIN") return err("Only an admin can override the score.");
+  const match = await loadMatchFor(input.code);
+  if (!match) return err("Match not found.");
+  if (match.status === "DRAFT") return err("The score can only be set after kick-off.");
+  const homeScore = Math.max(0, Math.floor(input.homeScore));
+  const awayScore = Math.max(0, Math.floor(input.awayScore));
+  if (homeScore > 99 || awayScore > 99) return err("Scores must be 99 or fewer.");
+  const note = input.note?.trim() || null;
+
+  await prisma.$transaction(async (tx) => {
+    await tx.match.update({
+      where: { id: match.id },
+      data: { homeScore, awayScore, version: { increment: 1 } },
+    });
+    await appendTimeline(
+      tx,
+      match.id,
+      "ADMIN_OVERRIDE",
+      `Score manually set to ${homeScore}–${awayScore}`,
+      note ?? "Manual score override by admin",
+      actor.userId,
+    );
+  });
+  await publishMatchUpdate(match.code);
+  return ok(undefined);
+}
+
+/**
+ * Edit a decided round: change the decision (goal / no goal), pick a different
+ * scorer from that round's submissions, or change the assist. The score is
+ * adjusted by the delta so a manual score override is never silently clobbered.
+ */
+export async function adminEditGoalRound(
+  actor: Actor,
+  input: {
+    code: string;
+    roundId: string;
+    decision: "GOAL" | "NO_GOAL";
+    scorerSubmissionId?: string | null;
+    assistPlayerId?: string | null;
+  },
+): Promise<ActionResult> {
+  if (actor.role !== "ADMIN") return err("Only an admin can edit a decided round.");
+  const match = await loadMatchFor(input.code);
+  if (!match) return err("Match not found.");
+  if (match.status === "DRAFT") return err("Decided rounds only exist after kick-off.");
+  const round = match.rounds.find((r) => r.id === input.roundId);
+  if (!round) return err("Round not found in this match.");
+  if (round.status !== "DECIDED") return err("Only decided rounds can be edited here.");
+
+  const wasGoal = round.decision === "GOAL";
+  const oldScorer = wasGoal && round.goalSubmission
+    ? match.roster.find((r) => r.id === round.goalSubmission!.playerId) ?? null
+    : null;
+
+  const saveScoreDelta = async (
+    tx: Tx,
+    opts: { before: "HOME" | "AWAY" | null; after: "HOME" | "AWAY" | null },
+  ) => {
+    if (opts.before === opts.after) return;
+    await tx.match.update({
+      where: { id: match.id },
+      data: {
+        homeScore:
+          opts.before === "HOME" ? { decrement: 1 } : opts.after === "HOME" ? { increment: 1 } : undefined,
+        awayScore:
+          opts.before === "AWAY" ? { decrement: 1 } : opts.after === "AWAY" ? { increment: 1 } : undefined,
+      },
+    });
+  };
+
+  if (input.decision === "NO_GOAL") {
+    await prisma.$transaction(async (tx) => {
+      await tx.round.update({
+        where: { id: round.id },
+        data: { decision: "NO_GOAL", decidedAt: new Date(), goalSubmissionId: null, assistPlayerId: null },
+      });
+      await saveScoreDelta(tx, { before: oldScorer?.team ?? null, after: null });
+      await appendTimeline(
+        tx,
+        match.id,
+        "ADMIN_OVERRIDE",
+        `Admin edit — Question ${round.number} set to no goal`,
+        "Manual goal override by admin",
+        actor.userId,
+      );
+      await bumpVersion(tx, match.id);
+    });
+    await publishMatchUpdate(match.code);
+    return ok(undefined);
+  }
+
+  // GOAL: pick the scoring answer from this round's submissions.
+  if (!input.scorerSubmissionId) return err("Pick the answer that scores.");
+  const sub = round.submissions.find((s) => s.id === input.scorerSubmissionId);
+  if (!sub) return err("That answer does not belong to this question.");
+  const scorerSlot = match.roster.find((r) => r.id === sub.playerId);
+  if (!scorerSlot) return err("Could not find the scoring player.");
+
+  // Optional assist: another player on the SAME team as the scorer.
+  let assistSlotId: string | null = null;
+  if (input.assistPlayerId && input.assistPlayerId !== scorerSlot.id) {
+    const assistSlot = match.roster.find((r) => r.id === input.assistPlayerId);
+    if (!assistSlot || assistSlot.team !== scorerSlot.team)
+      return err("The assist must go to a player on the same team as the scorer.");
+    assistSlotId = assistSlot.id;
+  }
+
+  const scorerName = rosterNameOf(match, scorerSlot.id);
+  const assistName = assistSlotId ? rosterNameOf(match, assistSlotId) : null;
+  const teamName = teamNameOf(match, scorerSlot.team);
+
+  await prisma.$transaction(async (tx) => {
+    await tx.round.update({
+      where: { id: round.id },
+      data: {
+        decision: "GOAL",
+        decidedAt: new Date(),
+        goalSubmissionId: sub.id,
+        assistPlayerId: assistSlotId,
+      },
+    });
+    await saveScoreDelta(tx, { before: oldScorer?.team ?? null, after: scorerSlot.team });
+    const goalDetail = assistName
+      ? `${scorerName} scores for ${teamName}, assisted by ${assistName}`
+      : `${scorerName} scores for ${teamName}`;
+    await appendTimeline(
+      tx,
+      match.id,
+      "ADMIN_OVERRIDE",
+      `Admin edit — Question ${round.number}: ${goalDetail}`,
+      `Answer: ${sub.answer} · Manual goal override by admin`,
+      actor.userId,
+    );
+    await bumpVersion(tx, match.id);
+  });
   await publishMatchUpdate(match.code);
   return ok(undefined);
 }

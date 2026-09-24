@@ -357,6 +357,7 @@ enum TimelineType {
   PENALTY_MISS
   PENALTY_SHOOTOUT_START
   PENALTY_SHOOTOUT_END
+  ADMIN_OVERRIDE // admin manually fixed the score or a goal record
 }
 
 model TimelineEvent {

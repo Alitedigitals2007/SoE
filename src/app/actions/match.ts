@@ -4,6 +4,8 @@ import { Prisma } from "@prisma/client";
 import {
   adminAddPlayer,
   adminCreateMatch,
+  adminEditGoalRound,
+  adminOverrideScore,
   adminRemovePlayer,
   addQuestion,
   decideRound,
@@ -112,6 +114,25 @@ export async function removePlayerAction(input: {
   userId: string;
 }): Promise<ActionResult> {
   return runEngine((actor) => adminRemovePlayer(actor, input));
+}
+
+export async function adminOverrideScoreAction(input: {
+  code: string;
+  homeScore: number;
+  awayScore: number;
+  note?: string;
+}): Promise<ActionResult> {
+  return runEngine((actor) => adminOverrideScore(actor, input));
+}
+
+export async function adminEditGoalRoundAction(input: {
+  code: string;
+  roundId: string;
+  decision: "GOAL" | "NO_GOAL";
+  scorerSubmissionId?: string | null;
+  assistPlayerId?: string | null;
+}): Promise<ActionResult> {
+  return runEngine((actor) => adminEditGoalRound(actor, input));
 }
 
 /* --------------------------- referee: questions ---------------------------- */
