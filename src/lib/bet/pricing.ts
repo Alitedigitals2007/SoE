@@ -12,6 +12,8 @@
 
 /** Bookmaker margin baked into every price (odds = 0.94 / probability). */
 export const MARGIN = 0.94;
+/** Long-shot ceiling — matches the Bet.odds Decimal(5,2) column (999.99). */
+export const MAX_ODDS = 999.99;
 export const DEFAULT_XG_HOME = 1.45;
 export const DEFAULT_XG_AWAY = 1.25;
 /** Default 1X2 split when a competition has no table to read. */
@@ -36,8 +38,8 @@ export function poisson(k: number, lambda: number): number {
 
 /** Convert a probability into decimal odds (with margin), sensibly clamped. */
 export function price(prob: number): number {
-  if (!(prob > 0)) return 80;
-  return round2(Math.min(80, Math.max(1.1, MARGIN / prob)));
+  if (!(prob > 0)) return MAX_ODDS;
+  return round2(Math.min(MAX_ODDS, Math.max(1.1, MARGIN / prob)));
 }
 
 /** Logistic curve over the points-per-game gap: a diff of ~0 → even game. */

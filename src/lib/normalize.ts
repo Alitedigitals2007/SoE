@@ -36,9 +36,27 @@ const DIVIDES = /[÷∕⁄]/g;
 /** Reaction/equality arrows — all fold to a bare separator. */
 const ARROWS = /(<->|<=>|→|⇒|⟶|➜|➔|⇾|↦|➜)|[-–—]>|=/g;
 
+/**
+ * LaTeX sources → plain text before folding, so an answer typed as
+ * `$\frac{3}{4}$` matches "3/4" and `\times` behaves like ×. One brace level
+ * is unwrapped (quiz answers rarely nest deeper); any other macro name is
+ * dropped so `\left(`, `\mathrm{...}` etc. leave only their payload.
+ */
+function stripLatex(raw: string): string {
+  return raw
+    .replace(/\$\$?/g, "") // $ and $$ math delimiters
+    .replace(/\\[()[\]]/g, "") // \( \) \[ \]
+    .replace(/\\[dt]?frac\s*\{([^{}]*)\}\s*\{([^{}]*)\}/g, "$1/$2")
+    .replace(/\\sqrt\s*\{([^{}]*)\}/g, "$1")
+    .replace(/\\(?:times|cdot)\b/g, "*")
+    .replace(/\\div\b/g, "/")
+    .replace(/\\(?:left|right|displaystyle|limits|mathrm|text|mathbf|mathit)\b/g, " ")
+    .replace(/\\[a-zA-Z]+\*?/g, " "); // any other macro → bare separator
+}
+
 export function normalizeAnswer(raw: string): string {
   return (
-    raw
+    stripLatex(raw)
       // NFKD folds ²→2, ₂→2, ⁻→-, ₊→+, full-width forms, ½→1⁄2, ﬁ→fi …
       .normalize("NFKD")
       .replace(DIACRITICS, "")

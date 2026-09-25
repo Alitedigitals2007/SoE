@@ -1,10 +1,11 @@
-import { prisma } from "@/lib/prisma";
-import { applyWalletTxn, ensureWallet } from "@/lib/bet/wallet";
+import { prisma, TX_OPTS } from "@/lib/prisma";
+import { applyWalletChanges, applyWalletTxn, ensureWallet } from "@/lib/bet/wallet";
 import { doubleChanceOdds, drawNoBetOdds, exactScoreOdds, goalsOdds, halfFullOdds, halfResultOdds, oddsForMatch, teamTotalsOdds } from "@/lib/bet/odds";
+import { MAX_ODDS } from "@/lib/bet/pricing";
 import type { ActionResult, ErrResult } from "@/lib/domain";
 import { HALFTIME_AFTER_QUESTION } from "@/lib/domain";
 import { generateShareCode } from "@/lib/matchCode";
-import type { Prisma, PrismaClient, Bet, BetMarket } from "@prisma/client";
+import type { Prisma, PrismaClient, Bet, BetMarket, WalletTxnKind } from "@prisma/client";
 
 const ok = <T>(data: T): { ok: true; data: T } => ({ ok: true, data });
 const err = (error: string): ErrResult => ({ ok: false, error });
@@ -350,7 +351,7 @@ export async function placeBet(
       });
       const after = await tx.user.findUnique({ where: { id: actor.userId }, select: { virtualPoints: true } });
       return ok({ balance: after?.virtualPoints ?? balance - stake, potentialReturn });
-    });
+    }, TX_OPTS);
   } catch (e) {
     console.error("placeBet failed:", e);
     return err("Could not place the bet, please try again.");
@@ -393,8 +394,9 @@ export async function placeAcca(
     });
   }
 
-  const accaOdds = Math.min(999.99, Math.round(product * 100) / 100);
-  const potentialReturn = Math.floor(stake * product);
+  const accaOdds = Math.min(MAX_ODDS, Math.round(product * 100) / 100);
+  // Capped odds — matches the slip the user saw and keeps the return inside Int.
+  const potentialReturn = Math.floor(stake * accaOdds);
 
   const openAccas = await prisma.bet.count({ where: { userId: actor.userId, market: "ACCA", status: "PENDING" } });
   if (openAccas >= MAX_PENDING_ACCAS) return err(`You already have ${MAX_PENDING_ACCAS} open accumulators.`);
@@ -432,7 +434,7 @@ export async function placeAcca(
       });
       const after = await tx.user.findUnique({ where: { id: actor.userId }, select: { virtualPoints: true } });
       return ok({ balance: after?.virtualPoints ?? balance - stake, potentialReturn, odds: accaOdds });
-    });
+    }, TX_OPTS);
   } catch (e) {
     console.error("placeAcca failed:", e);
     return err("Could not place the accumulator, please try again.");
@@ -476,20 +478,36 @@ function notice(userId: string, won: boolean, pts: number, body: string): Settle
 /**
  * Settle every bet touching a finished match. Idempotent: re-running adjusts
  * wallets when an admin corrected the score after the original settlement.
+ * Every bet is judged BEFORE anything is written (consistent reads), the wallet
+ * movements are applied in one batch, then the bet rows are flipped — so the
+ * round-trip count stays flat and the caller's transaction cannot time out.
  * Returns in-app notifications for the caller to emit after the transaction
  * commits (notifications must not roll back with the data).
  */
 export async function settleMatchBets(db: Prisma.TransactionClient, matchId: string): Promise<SettleNotice[]> {
-  const notices: SettleNotice[] = [];
   const match = await db.match.findUnique({
     where: { id: matchId },
     select: { id: true, status: true, homeName: true, awayName: true, homeScore: true, awayScore: true },
   });
-  if (!match || match.status !== "FINISHED") return notices;
+  if (!match || match.status !== "FINISHED") return [];
   const score = `${match.homeName} ${match.homeScore}–${match.awayScore} ${match.awayName}`;
   const finalScore = { home: match.homeScore, away: match.awayScore };
   const ht = await halfTimeScore(db, matchId);
   const fixture = `${match.homeName} v ${match.awayName}`;
+  const settledAt = new Date();
+
+  /** One settled bet: the row flip, its wallet movement and the user notice. */
+  type SettleAction = {
+    betId: string;
+    userId: string;
+    outcome: BetOutcome;
+    payout: number;
+    amount: number;
+    kind: WalletTxnKind;
+    note: string;
+    notice: SettleNotice;
+  };
+  const actions: SettleAction[] = [];
 
   // --- singles & goals markets on this match ---
   const singles = await db.bet.findMany({
@@ -514,17 +532,19 @@ export async function settleMatchBets(db: Prisma.TransactionClient, matchId: str
           : bet.status === "WON"
             ? `Corrected: ${label} lost — ${score}`
             : `Lost: ${label} @ ${odds} — ${score}`;
-
-    await applyWalletTxn(db, bet.userId, delta, kind, note, { matchId, betId: bet.id });
-    await db.bet.update({
-      where: { id: bet.id },
-      data: { status: outcome, payout: nextPayout, settledAt: new Date() },
+    actions.push({
+      betId: bet.id,
+      userId: bet.userId,
+      outcome,
+      payout: nextPayout,
+      amount: delta,
+      kind,
+      note,
+      notice:
+        outcome === "VOID"
+          ? { userId: bet.userId, title: `Bet void +${bet.stake} pts`, body: `${label} — ${score}`, link: "/bet" }
+          : notice(bet.userId, outcome === "WON", nextPayout, `${label} @ ${odds} — ${score}`),
     });
-    notices.push(
-      outcome === "VOID"
-        ? { userId: bet.userId, title: `Bet void +${bet.stake} pts`, body: `${label} — ${score}`, link: "/bet" }
-        : notice(bet.userId, outcome === "WON", nextPayout, `${label} @ ${odds} — ${score}`),
-    );
   }
 
   // --- accumulators that include this match ---
@@ -567,28 +587,37 @@ export async function settleMatchBets(db: Prisma.TransactionClient, matchId: str
     const delta = nextPayout - prevPayout;
     const label = `accumulator (${legs.length} legs @ ${Number(bet.odds)})`;
     const kind = delta > 0 ? (outcome === "VOID" ? "BET_VOID" : "BET_WON") : "BET_LOST";
-    await applyWalletTxn(
-      db,
-      bet.userId,
-      delta,
+    actions.push({
+      betId: bet.id,
+      userId: bet.userId,
+      outcome,
+      payout: nextPayout,
+      amount: delta,
       kind,
-      outcome === "VOID" ? `Void: ${label} — stake refunded` : outcome === "WON" ? `Won: ${label}` : `Lost: ${label}`,
-      { matchId, betId: bet.id },
-    );
-    await db.bet.update({
-      where: { id: bet.id },
-      data: { status: outcome, payout: nextPayout, settledAt: new Date() },
+      note:
+        outcome === "VOID" ? `Void: ${label} — stake refunded` : outcome === "WON" ? `Won: ${label}` : `Lost: ${label}`,
+      notice:
+        outcome === "VOID"
+          ? { userId: bet.userId, title: `Acca void +${bet.stake} pts`, body: `${label} — a leg was voided.`, link: "/bet" }
+          : outcome === "WON"
+            ? notice(bet.userId, true, nextPayout, `${label} — every leg landed!`)
+            : notice(bet.userId, false, 0, `${label} — a leg let you down.`),
     });
-    notices.push(
-      outcome === "VOID"
-        ? { userId: bet.userId, title: `Acca void +${bet.stake} pts`, body: `${label} — a leg was voided.`, link: "/bet" }
-        : outcome === "WON"
-          ? notice(bet.userId, true, nextPayout, `${label} — every leg landed!`)
-          : notice(bet.userId, false, 0, `${label} — a leg let you down.`),
-    );
   }
+  if (actions.length === 0) return [];
 
-  return notices;
+  // --- wallets in one batch, then flip the bet rows ---
+  await applyWalletChanges(
+    db,
+    actions.map((a) => ({ userId: a.userId, amount: a.amount, kind: a.kind, note: a.note, matchId, betId: a.betId })),
+  );
+  for (const a of actions) {
+    await db.bet.update({
+      where: { id: a.betId },
+      data: { status: a.outcome, payout: a.payout, settledAt },
+    });
+  }
+  return actions.map((a) => a.notice);
 }
 
 /**

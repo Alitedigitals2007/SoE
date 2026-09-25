@@ -70,3 +70,68 @@ export async function applyWalletTxn(
   });
   return balanceAfter;
 }
+
+export type WalletChange = {
+  userId: string;
+  amount: number;
+  kind: WalletTxnKind;
+  note: string;
+  matchId?: string | null;
+  betId?: string | null;
+};
+
+/**
+ * Apply many wallet changes in one batch: ONE balance read for all users, ONE
+ * ledger insert, one balance write per user. Used by the settlement and
+ * fantasy-credit paths, where per-change round-trips (three per entry) would
+ * blow the interactive-transaction timeout and roll the whole match update back.
+ * Same rules as applyWalletTxn: credits are fully applied; oversized debits
+ * clamp at zero.
+ */
+export async function applyWalletChanges(db: Db, changes: WalletChange[]): Promise<void> {
+  if (changes.length === 0) return;
+  const userIds = [...new Set(changes.map((c) => c.userId))];
+  const users = await db.user.findMany({
+    where: { id: { in: userIds } },
+    select: { id: true, virtualPoints: true },
+  });
+  const startOf = new Map<string, number>();
+  for (const u of users) startOf.set(u.id, u.virtualPoints ?? 0);
+
+  // Open any wallet not opened yet (rare here) so its WELCOME entry is kept.
+  for (const id of userIds) {
+    if (!users.some((u) => u.id === id && u.virtualPoints !== null)) {
+      const { balance } = await ensureWallet(db, id);
+      startOf.set(id, balance);
+    }
+  }
+
+  // Explicit per-entry timestamps keep the ledger order stable — createMany
+  // writes one statement, so the default now() would give identical stamps.
+  const base = Date.now();
+  const runningOf = new Map(startOf);
+  await db.walletTransaction.createMany({
+    data: changes.map((c, i) => {
+      const start = runningOf.get(c.userId) ?? 0;
+      const applied = c.amount < 0 ? -Math.min(-c.amount, start) : c.amount;
+      const balanceAfter = start + applied;
+      runningOf.set(c.userId, balanceAfter);
+      return {
+        userId: c.userId,
+        amount: applied,
+        balanceAfter,
+        kind: c.kind,
+        note: c.note,
+        matchId: c.matchId ?? null,
+        betId: c.betId ?? null,
+        createdAt: new Date(base + i),
+      };
+    }),
+  });
+
+  for (const id of userIds) {
+    const end = runningOf.get(id) ?? 0;
+    if (end === startOf.get(id)) continue;
+    await db.user.update({ where: { id }, data: { virtualPoints: end } });
+  }
+}

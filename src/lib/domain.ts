@@ -44,8 +44,8 @@ export const INCIDENT_ACTIONS: Record<IncidentAction, string> = {
 
 /** The break kicks in automatically as soon as the fifth question is decided. */
 export const HALFTIME_AFTER_QUESTION = 5;
-/** Automatic break length, in seconds — an admin/referee can cut it short. */
-export const HALFTIME_SECONDS = 20;
+/** Automatic break length, in seconds (two minutes) — an admin/referee can cut it short. */
+export const HALFTIME_SECONDS = 120;
 /** Questions played per match (the bank prepares more; rounds 1..10 are played). */
 export const MATCH_ROUNDS = 10;
 

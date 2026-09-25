@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 vi.mock("@/lib/prisma", () => ({
+  TX_OPTS: { timeout: 30_000, maxWait: 10_000 },
   prisma: {
     match: {
       findUnique: vi.fn(),

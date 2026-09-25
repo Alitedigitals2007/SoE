@@ -34,6 +34,15 @@ describe("normalizeAnswer", () => {
     expect(sameAnswer("π ≈ 3.14", "pi = 3.14")).toBe(false);
   });
 
+  it("reads LaTeX-typed maths the same as plain notation", () => {
+    expect(sameAnswer("$\\frac{3}{4}$", "3/4")).toBe(true);
+    expect(sameAnswer("\\frac{a}{b}", "a / b")).toBe(true);
+    expect(sameAnswer("\\dfrac{x^2}{2}", "x^2 / 2")).toBe(true);
+    expect(sameAnswer("$x^2 + 5x + 6 = 0$", "x^2+5x+6=0")).toBe(true);
+    expect(sameAnswer("\\(2 \\times 3\\)", "2*3")).toBe(true);
+    expect(sameAnswer("\\sqrt{2}", "√2")).toBe(true);
+  });
+
   it("keeps genuinely different answers apart", () => {
     expect(sameAnswer("6/2", "6-2")).toBe(false);
     expect(sameAnswer("H2O", "H2O2")).toBe(false);

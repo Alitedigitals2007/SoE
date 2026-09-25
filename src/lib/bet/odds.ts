@@ -33,16 +33,21 @@ export type MatchOdds = {
   source: "table" | "default";
 };
 
-type MatchTeams = {
+export type MatchTeams = {
   competitionId: string | null;
   homeTeamId: string | null;
   awayTeamId: string | null;
 };
 
-type Strength = { ppg: number } | null;
+/** Points-per-game per team, read from one competition's finished league fixtures. */
+type LeagueTable = Map<string, number>;
 
-async function teamStrengths(competitionId: string, homeTeamId: string, awayTeamId: string): Promise<[Strength, Strength]> {
-  // League/group fixtures only (cupRound null) — knockouts skew the table.
+/**
+ * The league/group standings behind every market. Read ONCE per competition and
+ * shared by all of that competition's matches — cup fixtures (cupRound set) are
+ * excluded because knockouts skew the table.
+ */
+async function leagueTable(competitionId: string): Promise<LeagueTable> {
   const finished = await prisma.match.findMany({
     where: { competitionId, status: "FINISHED", cupRound: null, homeTeamId: { not: null }, awayTeamId: { not: null } },
     select: { homeTeamId: true, awayTeamId: true, homeScore: true, awayScore: true },
@@ -67,39 +72,81 @@ async function teamStrengths(competitionId: string, homeTeamId: string, awayTeam
       bump(m.awayTeamId, 1);
     }
   }
-  const toPpg = (id: string | null): Strength => {
-    if (!id) return null;
-    const s = stats.get(id);
-    if (!s || s.played === 0) return null;
-    return { ppg: s.pts / s.played };
-  };
-  return [toPpg(homeTeamId), toPpg(awayTeamId)];
+  const table: LeagueTable = new Map();
+  for (const [id, s] of stats) {
+    if (s.played > 0) table.set(id, s.pts / s.played);
+  }
+  return table;
+}
+
+type Model = {
+  pHome: number;
+  pDraw: number;
+  pAway: number;
+  xgHome: number;
+  xgAway: number;
+  source: MatchOdds["source"];
+};
+
+const DEFAULT_MODEL: Model = {
+  ...DEFAULT_PROBS,
+  xgHome: DEFAULT_XG_HOME,
+  xgAway: DEFAULT_XG_AWAY,
+  source: "default",
+};
+
+/**
+ * The one outcome/goals model behind every market. `table` may be passed in
+ * (batched page loads) to skip the standings query; otherwise it is read once.
+ */
+async function matchModel(match: MatchTeams, table?: LeagueTable): Promise<Model> {
+  if (match.competitionId && match.homeTeamId && match.awayTeamId) {
+    const t = table ?? (await leagueTable(match.competitionId));
+    const homePpg = t.get(match.homeTeamId);
+    const awayPpg = t.get(match.awayTeamId);
+    if (homePpg !== undefined && awayPpg !== undefined) {
+      const p = ppgWinProbability(homePpg, awayPpg);
+      return {
+        ...outcomeProbsFromWinProb(p),
+        ...expectedGoalsFromWinProb(p),
+        source: "table",
+      };
+    }
+  }
+  return { ...DEFAULT_MODEL };
 }
 
 /** Win/draw/win probabilities: standings-based when a table exists, standard otherwise. */
-async function outcomeProbs(match: MatchTeams): Promise<{ pHome: number; pDraw: number; pAway: number; source: MatchOdds["source"] }> {
-  if (match.competitionId && match.homeTeamId && match.awayTeamId) {
-    const [home, away] = await teamStrengths(match.competitionId, match.homeTeamId, match.awayTeamId);
-    if (home && away) {
-      const probs = outcomeProbsFromWinProb(ppgWinProbability(home.ppg, away.ppg));
-      return { ...probs, source: "table" };
-    }
-  }
-  return { ...DEFAULT_PROBS, source: "default" };
+export async function outcomeProbs(match: MatchTeams): Promise<{ pHome: number; pDraw: number; pAway: number; source: MatchOdds["source"] }> {
+  const { pHome, pDraw, pAway, source } = await matchModel(match);
+  return { pHome, pDraw, pAway, source };
 }
 
 /** Expected goals for both sides, split by relative strength (≈2.7-goal game). */
 export async function expectedGoals(match: MatchTeams): Promise<{ xgHome: number; xgAway: number }> {
-  if (match.competitionId && match.homeTeamId && match.awayTeamId) {
-    const [home, away] = await teamStrengths(match.competitionId, match.homeTeamId, match.awayTeamId);
-    if (home && away) return expectedGoalsFromWinProb(ppgWinProbability(home.ppg, away.ppg));
-  }
-  return { xgHome: DEFAULT_XG_HOME, xgAway: DEFAULT_XG_AWAY };
+  const { xgHome, xgAway } = await matchModel(match);
+  return { xgHome, xgAway };
 }
 
 /** Auto odds for a match: 1X2 + exact-score matrix (0–10 per side). */
 export async function oddsForMatch(match: MatchTeams): Promise<MatchOdds> {
   return (await allOdds(match)).match;
+}
+
+/**
+ * Auto odds for many matches with ONE standings read per distinct competition
+ * (and none at all for friendlies) — keeps page loads to a couple of queries.
+ */
+export async function oddsForMatches(matches: MatchTeams[]): Promise<AllOdds[]> {
+  const comps = [...new Set(matches.map((m) => m.competitionId).filter((c): c is string => !!c))];
+  const tables = new Map<string, LeagueTable>();
+  await Promise.all(comps.map(async (c) => tables.set(c, await leagueTable(c))));
+  return Promise.all(
+    matches.map(async (m) => {
+      const model = await matchModel(m, m.competitionId ? tables.get(m.competitionId) : undefined);
+      return priceAll(model);
+    }),
+  );
 }
 
 /** Odds for a single exact scoreline (0–10 goals per side), e.g. when placing a bet. */
@@ -211,36 +258,48 @@ export function priceAll(input: {
 
 /** One round-trip (outcome + expected goals) priced into every market. */
 export async function allOdds(match: MatchTeams): Promise<AllOdds> {
-  const [{ pHome, pDraw, pAway, source }, { xgHome, xgAway }] = await Promise.all([
-    outcomeProbs(match),
-    expectedGoals(match),
-  ]);
-  return priceAll({ pHome, pDraw, pAway, source, xgHome, xgAway });
+  return priceAll(await matchModel(match));
 }
 
 /* -------------------------------- form guide ------------------------------- */
 
 export type FormGuide = { home: ("W" | "D" | "L")[]; away: ("W" | "D" | "L")[] };
 
-async function lastFive(teamId: string): Promise<("W" | "D" | "L")[]> {
-  const rows = await prisma.match.findMany({
-    where: { status: "FINISHED", OR: [{ homeTeamId: teamId }, { awayTeamId: teamId }] },
-    orderBy: { finishedAt: "desc" },
-    take: 5,
-    select: { homeTeamId: true, homeScore: true, awayScore: true },
-  });
-  return rows.map((m) => {
-    const gf = m.homeTeamId === teamId ? m.homeScore : m.awayScore;
-    const ga = m.homeTeamId === teamId ? m.awayScore : m.homeScore;
-    return gf > ga ? "W" : gf < ga ? "L" : "D";
-  });
+function resultChip(gf: number, ga: number): "W" | "D" | "L" {
+  return gf > ga ? "W" : gf < ga ? "L" : "D";
 }
 
 /** Last-five form for both sides (empty arrays when a side has no team record). */
 export async function formGuide(homeTeamId: string | null, awayTeamId: string | null): Promise<FormGuide> {
-  const [home, away] = await Promise.all([
-    homeTeamId ? lastFive(homeTeamId) : Promise.resolve([]),
-    awayTeamId ? lastFive(awayTeamId) : Promise.resolve([]),
-  ]);
-  return { home, away };
+  const [guide] = await formGuides([{ homeTeamId, awayTeamId }]);
+  return guide;
+}
+
+/**
+ * Last-five form for many matches in ONE query (was two per match) — every
+ * finished fixture involving the listed teams, newest first.
+ */
+export async function formGuides(matches: { homeTeamId: string | null; awayTeamId: string | null }[]): Promise<FormGuide[]> {
+  const teamIds = [...new Set(matches.flatMap((m) => [m.homeTeamId, m.awayTeamId]).filter((t): t is string => !!t))];
+  if (teamIds.length === 0) return matches.map(() => ({ home: [], away: [] }));
+
+  const rows = await prisma.match.findMany({
+    where: { status: "FINISHED", OR: teamIds.map((id) => ({ OR: [{ homeTeamId: id }, { awayTeamId: id }] })) },
+    orderBy: { finishedAt: "desc" },
+    take: 500,
+    select: { homeTeamId: true, awayTeamId: true, homeScore: true, awayScore: true },
+  });
+
+  const last5 = new Map<string, ("W" | "D" | "L")[]>(teamIds.map((id) => [id, []]));
+  for (const m of rows) {
+    const home = m.homeTeamId ? last5.get(m.homeTeamId) : undefined;
+    if (home && home.length < 5) home.push(resultChip(m.homeScore, m.awayScore));
+    const away = m.awayTeamId ? last5.get(m.awayTeamId) : undefined;
+    if (away && away.length < 5) away.push(resultChip(m.awayScore, m.homeScore));
+  }
+
+  return matches.map((m) => ({
+    home: (m.homeTeamId && last5.get(m.homeTeamId)) || [],
+    away: (m.awayTeamId && last5.get(m.awayTeamId)) || [],
+  }));
 }

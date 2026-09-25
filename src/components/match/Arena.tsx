@@ -24,6 +24,7 @@ import type { LiveOdds } from "@/lib/bet/liveOdds";
 import { useMatchState, type LiveMode } from "@/components/match/useMatchState";
 import { Badge, Button, Card, CardHeader, EmptyState, Select, Spinner, cn } from "@/components/ui";
 import { matchesReference, normalizeAnswer } from "@/lib/normalize";
+import { MathText } from "@/components/MathText";
 import { PotmVote } from "@/components/match/PotmVote";
 import {
   HALFTIME_SECONDS,
@@ -650,7 +651,9 @@ function OpenStage({
 
         <div>
           <p className="text-xs font-semibold uppercase tracking-widest text-gold">Question {round.number} / 10</p>
-          <h2 className="mt-1 text-xl font-bold leading-snug text-fg sm:text-2xl">{round.questionText}</h2>
+          <h2 className="mt-1 text-xl font-bold leading-snug text-fg sm:text-2xl">
+            <MathText>{round.questionText}</MathText>
+          </h2>
         </div>
 
         {my ? (
@@ -661,7 +664,7 @@ function OpenStage({
               <div className="rounded-lg border border-line bg-bg-raised px-4 py-3 text-sm">
                 {didAnswer ? (
                   <p className="text-success">
-                    Answer locked in — <span className="font-semibold">{my.myAnswerThisRound}</span>
+                    Answer locked in — <span className="font-semibold"><MathText>{my.myAnswerThisRound}</MathText></span>
                   </p>
                 ) : (
                   <p className="text-muted">This question is no longer open for answers.</p>
@@ -711,11 +714,13 @@ function LockedStage({
       />
       <div className="p-5">
         <p className="text-xs font-semibold uppercase tracking-widest text-gold">Question {round.number} / 10</p>
-        <h2 className="mt-1 text-lg font-bold text-fg">{round.questionText}</h2>
+        <h2 className="mt-1 text-lg font-bold text-fg">
+          <MathText>{round.questionText}</MathText>
+        </h2>
 
         {isReferee ? (
           <p className="mt-3 text-xs text-muted">
-            Reference answer: <span className="font-semibold text-fg">{round.correctAnswer}</span>
+            Reference answer: <span className="font-semibold text-fg"><MathText>{round.correctAnswer}</MathText></span>
           </p>
         ) : null}
 
@@ -752,7 +757,7 @@ function LockedStage({
                   >
                     <span className="flex min-w-0 items-baseline gap-2">
                       <span className="text-xs font-semibold text-subtle">#{i + 1}</span>
-                      <span className="truncate font-medium text-fg">{a.answer}</span>
+                      <span className="truncate font-medium text-fg"><MathText>{a.answer}</MathText></span>
                       {isReferee && round.correctAnswer && matchesReference(a.answer, round.correctAnswer) ? (
                         <span
                           className="shrink-0 rounded bg-success/15 px-1.5 py-0.5 text-[10px] font-bold text-success"
@@ -852,7 +857,7 @@ function DecidedStage({
             <p className="mt-1 text-xl font-bold text-fg">{round.winnerName}</p>
             <p className="text-sm text-muted">
               {round.winnerTeam === "HOME" ? snapshot.homeName : snapshot.awayName} · Answer:{" "}
-              <span className="font-semibold text-fg">{round.winnerAnswer}</span>
+              <span className="font-semibold text-fg"><MathText>{round.winnerAnswer}</MathText></span>
             </p>
           </div>
         ) : (
@@ -860,7 +865,7 @@ function DecidedStage({
             <p className="text-4xl">❌</p>
             <h2 className="mt-1 text-2xl font-black uppercase tracking-wide text-danger">No goal</h2>
             <p className="mt-1 text-sm text-muted">
-              Correct answer: <span className="font-semibold text-fg">{round.correctAnswer}</span>
+              Correct answer: <span className="font-semibold text-fg"><MathText>{round.correctAnswer}</MathText></span>
             </p>
           </div>
         )}

@@ -6,6 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { addPlayerAction, createMatchAction, postponeMatchAction, removePlayerAction, setMatchScheduleAction, adminEditGoalRoundAction, adminOverrideScoreAction } from "@/app/actions/match";
 import { createUserAction, updateUserAction } from "@/app/actions/admin";
 import { Badge, Button, Card, CardHeader, cn, Field, Input, Select } from "@/components/ui";
+import { MathText } from "@/components/MathText";
 import type { Role, TeamSide } from "@/lib/domain";
 
 type Notice = { kind: "ok" | "err"; text: string } | null;
@@ -927,7 +928,7 @@ function GoalRoundRowItem({
                 : "No scorer"}
             </span>
           </span>
-          <span className="mt-0.5 block truncate text-xs text-subtle">{round.questionText}</span>
+          <span className="mt-0.5 block truncate text-xs text-subtle"><MathText>{round.questionText}</MathText></span>
         </span>
         <span className="shrink-0 text-xs font-semibold text-brand">{open ? "Close" : "Edit"}</span>
       </button>

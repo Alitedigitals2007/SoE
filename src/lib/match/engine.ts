@@ -5,13 +5,13 @@ import {
   Prisma,
   type PrismaClient,
 } from "@prisma/client";
-import { prisma } from "@/lib/prisma";
+import { prisma, TX_OPTS } from "@/lib/prisma";
 import { generateMatchCode } from "@/lib/matchCode";
 import { publishMatchUpdate } from "@/lib/realtime/server";
 import { notifyAllUsers, notifyUsers } from "@/lib/notify";
 import { GOAL_POINTS } from "@/lib/platform/engine";
 import { emitSettleNotices, settleMatchBets, type SettleNotice } from "@/lib/bet/engine";
-import { applyWalletTxn } from "@/lib/bet/wallet";
+import { applyWalletChanges } from "@/lib/bet/wallet";
 import type { ActionResult, ErrResult, Role, TeamSide as TeamSideView } from "@/lib/domain";
 import { HALFTIME_AFTER_QUESTION, HALFTIME_SECONDS } from "@/lib/domain";
 
@@ -382,38 +382,41 @@ export async function adminOverrideScore(
   const finishing = !!input.finish && match.status !== "FINISHED";
 
   let settleNotices: SettleNotice[] = [];
-  await prisma.$transaction(async (tx) => {
-    await tx.match.update({
-      where: { id: match.id },
-      data: {
-        homeScore,
-        awayScore,
-        ...(finishing
-          ? {
-              status: "FINISHED" as const,
-              finishedAt: match.finishedAt ?? new Date(),
-              startedAt: match.startedAt ?? new Date(),
-              pausedAt: null,
-            }
-          : {}),
-        version: { increment: 1 },
-      },
-    });
-    await appendTimeline(
-      tx,
-      match.id,
-      "ADMIN_OVERRIDE",
-      wasDraft && finishing
-        ? `Result recorded ${homeScore}–${awayScore} (match not played)`
-        : `Score manually set to ${homeScore}–${awayScore}`,
-      note ??
-        (wasDraft
-          ? "Recorded from the admin panel — the match never kicked off."
-          : "Manual score override by admin"),
-      actor.userId,
-    );
-    settleNotices = await settleMatchBets(tx, match.id);
-  });
+  await prisma.$transaction(
+    async (tx) => {
+      await tx.match.update({
+        where: { id: match.id },
+        data: {
+          homeScore,
+          awayScore,
+          ...(finishing
+            ? {
+                status: "FINISHED" as const,
+                finishedAt: match.finishedAt ?? new Date(),
+                startedAt: match.startedAt ?? new Date(),
+                pausedAt: null,
+              }
+            : {}),
+          version: { increment: 1 },
+        },
+      });
+      await appendTimeline(
+        tx,
+        match.id,
+        "ADMIN_OVERRIDE",
+        wasDraft && finishing
+          ? `Result recorded ${homeScore}–${awayScore} (match not played)`
+          : `Score manually set to ${homeScore}–${awayScore}`,
+        note ??
+          (wasDraft
+            ? "Recorded from the admin panel — the match never kicked off."
+            : "Manual score override by admin"),
+        actor.userId,
+      );
+      settleNotices = await settleMatchBets(tx, match.id);
+    },
+    TX_OPTS,
+  );
   await emitSettleNotices(settleNotices);
   await publishMatchUpdate(match.code);
   return ok(undefined);
@@ -465,23 +468,26 @@ export async function adminEditGoalRound(
 
   if (input.decision === "NO_GOAL") {
     let settleNotices: SettleNotice[] = [];
-    await prisma.$transaction(async (tx) => {
-      await tx.round.update({
-        where: { id: round.id },
-        data: { decision: "NO_GOAL", decidedAt: new Date(), goalSubmissionId: null, assistPlayerId: null },
-      });
-      await saveScoreDelta(tx, { before: oldScorer?.team ?? null, after: null });
-      await appendTimeline(
-        tx,
-        match.id,
-        "ADMIN_OVERRIDE",
-        `Admin edit — Question ${round.number} set to no goal`,
-        "Manual goal override by admin",
-        actor.userId,
-      );
-      await bumpVersion(tx, match.id);
-      settleNotices = await settleMatchBets(tx, match.id);
-    });
+    await prisma.$transaction(
+      async (tx) => {
+        await tx.round.update({
+          where: { id: round.id },
+          data: { decision: "NO_GOAL", decidedAt: new Date(), goalSubmissionId: null, assistPlayerId: null },
+        });
+        await saveScoreDelta(tx, { before: oldScorer?.team ?? null, after: null });
+        await appendTimeline(
+          tx,
+          match.id,
+          "ADMIN_OVERRIDE",
+          `Admin edit — Question ${round.number} set to no goal`,
+          "Manual goal override by admin",
+          actor.userId,
+        );
+        await bumpVersion(tx, match.id);
+        settleNotices = await settleMatchBets(tx, match.id);
+      },
+      TX_OPTS,
+    );
     await emitSettleNotices(settleNotices);
     await publishMatchUpdate(match.code);
     return ok(undefined);
@@ -508,31 +514,34 @@ export async function adminEditGoalRound(
   const teamName = teamNameOf(match, scorerSlot.team);
 
   let goalNotices: SettleNotice[] = [];
-  await prisma.$transaction(async (tx) => {
-    await tx.round.update({
-      where: { id: round.id },
-      data: {
-        decision: "GOAL",
-        decidedAt: new Date(),
-        goalSubmissionId: sub.id,
-        assistPlayerId: assistSlotId,
-      },
-    });
-    await saveScoreDelta(tx, { before: oldScorer?.team ?? null, after: scorerSlot.team });
-    const goalDetail = assistName
-      ? `${scorerName} scores for ${teamName}, assisted by ${assistName}`
-      : `${scorerName} scores for ${teamName}`;
-    await appendTimeline(
-      tx,
-      match.id,
-      "ADMIN_OVERRIDE",
-      `Admin edit — Question ${round.number}: ${goalDetail}`,
-      `Answer: ${sub.answer} · Manual goal override by admin`,
-      actor.userId,
-    );
-    await bumpVersion(tx, match.id);
-    goalNotices = await settleMatchBets(tx, match.id);
-  });
+  await prisma.$transaction(
+    async (tx) => {
+      await tx.round.update({
+        where: { id: round.id },
+        data: {
+          decision: "GOAL",
+          decidedAt: new Date(),
+          goalSubmissionId: sub.id,
+          assistPlayerId: assistSlotId,
+        },
+      });
+      await saveScoreDelta(tx, { before: oldScorer?.team ?? null, after: scorerSlot.team });
+      const goalDetail = assistName
+        ? `${scorerName} scores for ${teamName}, assisted by ${assistName}`
+        : `${scorerName} scores for ${teamName}`;
+      await appendTimeline(
+        tx,
+        match.id,
+        "ADMIN_OVERRIDE",
+        `Admin edit — Question ${round.number}: ${goalDetail}`,
+        `Answer: ${sub.answer} · Manual goal override by admin`,
+        actor.userId,
+      );
+      await bumpVersion(tx, match.id);
+      goalNotices = await settleMatchBets(tx, match.id);
+    },
+    TX_OPTS,
+  );
   await emitSettleNotices(goalNotices);
   await publishMatchUpdate(match.code);
   return ok(undefined);
@@ -882,26 +891,29 @@ export async function decideRound(
   if (!locked) return err("No locked question is waiting for a decision.");
 
   if (input.decision === "NO_GOAL") {
-    await prisma.$transaction(async (tx) => {
-      await tx.round.update({
-        where: { id: locked.id },
-        data: { status: "DECIDED", decision: "NO_GOAL", decidedAt: new Date(), goalSubmissionId: null, assistPlayerId: null },
-      });
-      await tx.match.update({
-        where: { id: match.id },
-        data: { currentRound: { increment: 1 } },
-      });
-      await appendTimeline(
-        tx,
-        match.id,
-        "NO_GOAL",
-        `No goal — Question ${locked.number}`,
-        `Correct answer: ${locked.question.referenceAnswer}`,
-        actor.userId,
-      );
-      await bumpVersion(tx, match.id);
-      if (match.currentRound + 1 >= HALFTIME_AFTER_QUESTION) await beginHalftime(tx, match.id, actor.userId);
-    });
+    await prisma.$transaction(
+      async (tx) => {
+        await tx.round.update({
+          where: { id: locked.id },
+          data: { status: "DECIDED", decision: "NO_GOAL", decidedAt: new Date(), goalSubmissionId: null, assistPlayerId: null },
+        });
+        await tx.match.update({
+          where: { id: match.id },
+          data: { currentRound: { increment: 1 } },
+        });
+        await appendTimeline(
+          tx,
+          match.id,
+          "NO_GOAL",
+          `No goal — Question ${locked.number}`,
+          `Correct answer: ${locked.question.referenceAnswer}`,
+          actor.userId,
+        );
+        await bumpVersion(tx, match.id);
+        if (match.currentRound + 1 >= HALFTIME_AFTER_QUESTION) await beginHalftime(tx, match.id, actor.userId);
+      },
+      TX_OPTS,
+    );
     await publishMatchUpdate(match.code);
     return ok(undefined);
   }
@@ -927,67 +939,73 @@ export async function decideRound(
     assistSlotId = assistSlot.id;
   }
 
-  await prisma.$transaction(async (tx) => {
-    await tx.round.update({
-      where: { id: locked.id },
-      data: {
-        status: "DECIDED",
-        decision: "GOAL",
-        decidedAt: new Date(),
-        goalSubmissionId: sub.id,
-        assistPlayerId: assistSlotId,
-      },
-    });
-    const scorerName = rosterNameOf(match, sub.playerId);
-    const assistName = assistSlotId ? rosterNameOf(match, assistSlotId) : null;
-    await tx.match.update({
-      where: { id: match.id },
-      data: {
-        currentRound: { increment: 1 },
-        homeScore: scorerTeam === "HOME" ? { increment: 1 } : undefined,
-        awayScore: scorerTeam === "AWAY" ? { increment: 1 } : undefined,
-      },
-    });
-    // Fantasy: every manager in this competition who picked the scorer earns
-    // points — and those points are credited to their virtual-points wallet.
-    if (match.competitionId) {
-      const holders = await tx.fantasyEntry.findMany({
-        where: { competitionId: match.competitionId, picks: { some: { playerUserId: sub.player.userId } } },
-        select: { id: true, userId: true },
+  await prisma.$transaction(
+    async (tx) => {
+      await tx.round.update({
+        where: { id: locked.id },
+        data: {
+          status: "DECIDED",
+          decision: "GOAL",
+          decidedAt: new Date(),
+          goalSubmissionId: sub.id,
+          assistPlayerId: assistSlotId,
+        },
       });
-      for (const holder of holders) {
-        await tx.fantasyEntry.update({
-          where: { id: holder.id },
-          data: { points: { increment: GOAL_POINTS } },
+      const scorerName = rosterNameOf(match, sub.playerId);
+      const assistName = assistSlotId ? rosterNameOf(match, assistSlotId) : null;
+      await tx.match.update({
+        where: { id: match.id },
+        data: {
+          currentRound: { increment: 1 },
+          homeScore: scorerTeam === "HOME" ? { increment: 1 } : undefined,
+          awayScore: scorerTeam === "AWAY" ? { increment: 1 } : undefined,
+        },
+      });
+      // Fantasy: every manager in this competition who picked the scorer earns
+      // points — credited in ONE batch (one balance read, one ledger insert,
+      // one points bump) so a big competition cannot time the transaction out.
+      if (match.competitionId) {
+        const holders = await tx.fantasyEntry.findMany({
+          where: { competitionId: match.competitionId, picks: { some: { playerUserId: sub.player.userId } } },
+          select: { id: true, userId: true },
         });
-        await applyWalletTxn(
-          tx,
-          holder.userId,
-          GOAL_POINTS,
-          "FANTASY_GOAL",
-          `Fantasy: ${rosterNameOf(match, sub.playerId)} scored — +${GOAL_POINTS} points`,
-          { matchId: match.id },
-        );
-        fantasyNotifyIds.push(holder.userId);
+        if (holders.length > 0) {
+          await tx.fantasyEntry.updateMany({
+            where: { id: { in: holders.map((h) => h.id) } },
+            data: { points: { increment: GOAL_POINTS } },
+          });
+          await applyWalletChanges(
+            tx,
+            holders.map((h) => ({
+              userId: h.userId,
+              amount: GOAL_POINTS,
+              kind: "FANTASY_GOAL" as const,
+              note: `Fantasy: ${scorerName} scored — +${GOAL_POINTS} points`,
+              matchId: match.id,
+            })),
+          );
+          fantasyNotifyIds.push(...holders.map((h) => h.userId));
+        }
       }
-    }
-    const teamName = teamNameOf(match, scorerTeam);
-    const goalDetail = assistName ? `${scorerName} scores for ${teamName}, assisted by ${assistName}` : `${scorerName} scores for ${teamName}`;
-    const scoreLine =
-      scorerTeam === "HOME"
-        ? `${match.homeScore + 1}–${match.awayScore}`
-        : `${match.homeScore}–${match.awayScore + 1}`;
-    await appendTimeline(
-      tx,
-      match.id,
-      "GOAL",
-      `Goal — ${goalDetail}`,
-      `Answer: ${sub.answer} · ${teamName} lead ${scoreLine}`,
-      actor.userId,
-    );
-    await bumpVersion(tx, match.id);
-    if (match.currentRound + 1 >= HALFTIME_AFTER_QUESTION) await beginHalftime(tx, match.id, actor.userId);
-  });
+      const teamName = teamNameOf(match, scorerTeam);
+      const goalDetail = assistName ? `${scorerName} scores for ${teamName}, assisted by ${assistName}` : `${scorerName} scores for ${teamName}`;
+      const scoreLine =
+        scorerTeam === "HOME"
+          ? `${match.homeScore + 1}–${match.awayScore}`
+          : `${match.homeScore}–${match.awayScore + 1}`;
+      await appendTimeline(
+        tx,
+        match.id,
+        "GOAL",
+        `Goal — ${goalDetail}`,
+        `Answer: ${sub.answer} · ${teamName} lead ${scoreLine}`,
+        actor.userId,
+      );
+      await bumpVersion(tx, match.id);
+      if (match.currentRound + 1 >= HALFTIME_AFTER_QUESTION) await beginHalftime(tx, match.id, actor.userId);
+    },
+    TX_OPTS,
+  );
   await publishMatchUpdate(match.code);
   if (fantasyNotifyIds.length) {
     const scorerName = rosterNameOf(match, sub.playerId);
@@ -1202,15 +1220,18 @@ export async function endMatch(actor: Actor, input: { code: string }): Promise<A
   if (match.currentRound < 10) return err("All ten questions must be played before full time.");
 
   let settleNotices: SettleNotice[] = [];
-  await prisma.$transaction(async (tx) => {
-    await tx.match.update({
-      where: { id: match.id },
-      data: { status: "FINISHED", finishedAt: new Date() },
-    });
-    await appendTimeline(tx, match.id, "FULL_TIME", "Full-time", `${match.homeScore}–${match.awayScore}`, actor.userId);
-    await bumpVersion(tx, match.id);
-    settleNotices = await settleMatchBets(tx, match.id);
-  });
+  await prisma.$transaction(
+    async (tx) => {
+      await tx.match.update({
+        where: { id: match.id },
+        data: { status: "FINISHED", finishedAt: new Date() },
+      });
+      await appendTimeline(tx, match.id, "FULL_TIME", "Full-time", `${match.homeScore}–${match.awayScore}`, actor.userId);
+      await bumpVersion(tx, match.id);
+      settleNotices = await settleMatchBets(tx, match.id);
+    },
+    TX_OPTS,
+  );
   await emitSettleNotices(settleNotices);
   await publishMatchUpdate(match.code);
   const decided = match.rounds.filter((r) => r.status === "DECIDED").length;

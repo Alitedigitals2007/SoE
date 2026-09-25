@@ -1,12 +1,13 @@
 import Link from "next/link";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { allOdds, formGuide } from "@/lib/bet/odds";
+import { formGuides, oddsForMatches } from "@/lib/bet/odds";
 import { ensureWallet } from "@/lib/bet/wallet";
 import { PublicShell } from "@/components/site";
 import { Badge } from "@/components/ui";
 import { BetTerminal, type BetMatch, type BetRow, type LeaderRow, type TxnRow } from "@/components/bet";
 import { selectionLabel } from "@/lib/bet/labels";
+import { MathBlock } from "@/components/MathText";
 
 export const dynamic = "force-dynamic";
 
@@ -31,27 +32,29 @@ export default async function BetPage() {
     },
   });
 
-  const matches: BetMatch[] = await Promise.all(
-    rawMatches.map(async (m) => {
-      const [all, form] = await Promise.all([allOdds(m), formGuide(m.homeTeamId, m.awayTeamId)]);
-      return {
-        id: m.id,
-        fixture: `${m.homeName} v ${m.awayName}`,
-        homeName: m.homeName,
-        awayName: m.awayName,
-        competition: m.competition?.name ?? null,
-        kickoff: m.scheduledAt!.toISOString(),
-        odds: all.match,
-        goals: all.goals,
-        doubleChance: all.doubleChance,
-        drawNoBet: all.drawNoBet,
-        halfResult: all.halfResult,
-        halfFull: all.halfFull,
-        teamTotals: all.teamTotals,
-        form,
-      };
-    }),
-  );
+  // ONE standings read per competition + ONE form query for the whole page —
+  // pricing itself is pure maths, so page loads stay to a couple of queries.
+  const [allOddsList, forms] = await Promise.all([
+    oddsForMatches(rawMatches),
+    formGuides(rawMatches),
+  ]);
+
+  const matches: BetMatch[] = rawMatches.map((m, i) => ({
+    id: m.id,
+    fixture: `${m.homeName} v ${m.awayName}`,
+    homeName: m.homeName,
+    awayName: m.awayName,
+    competition: m.competition?.name ?? null,
+    kickoff: m.scheduledAt!.toISOString(),
+    odds: allOddsList[i].match,
+    goals: allOddsList[i].goals,
+    doubleChance: allOddsList[i].doubleChance,
+    drawNoBet: allOddsList[i].drawNoBet,
+    halfResult: allOddsList[i].halfResult,
+    halfFull: allOddsList[i].halfFull,
+    teamTotals: allOddsList[i].teamTotals,
+    form: forms[i],
+  }));
 
   // Public leaderboard: top virtual-point balances.
   const topUsers = await prisma.user.findMany({
@@ -175,6 +178,26 @@ export default async function BetPage() {
         </div>
 
         <section className="mt-10 rounded-2xl border border-line bg-white p-5">
+          <h2 className="text-sm font-black uppercase tracking-wider text-fg">How the odds are priced</h2>
+          <p className="mt-1 text-sm text-muted">
+            Every market comes from one expected-goals model — the maths, rendered properly:
+          </p>
+          <MathBlock
+            className="mt-3 overflow-x-auto text-fg"
+            tex={String.raw`P(k) = \frac{e^{-\lambda}\lambda^{k}}{k!}, \qquad \lambda_{\text{home}} = 1.35\sqrt{\frac{p}{1-p}}, \qquad \lambda_{\text{away}} = \frac{1.35}{\sqrt{p/(1-p)}}`}
+          />
+          <MathBlock
+            className="mt-1 overflow-x-auto text-fg"
+            tex={String.raw`\text{odds} = \frac{0.94}{P}, \qquad p_{\text{home}} + p_{\text{draw}} + p_{\text{away}} = 1`}
+          />
+          <p className="mt-3 text-xs text-muted">
+            <strong className="text-fg">P(k)</strong> is the Poisson chance of exactly k goals at expected goals
+            λ; the 1X2 split comes from the standings gap (points per game) with the draw fixed at 0.27; every
+            price is the probability inverted and scaled by the 0.94 bookmaker margin, capped at 999.99.
+          </p>
+        </section>
+
+        <section className="mt-4 rounded-2xl border border-line bg-white p-5">
           <h2 className="text-sm font-black uppercase tracking-wider text-fg">How it works</h2>
           <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-muted">
             <li>Every new account gets <strong className="text-fg">100 virtual points</strong> — these are not real money.</li>

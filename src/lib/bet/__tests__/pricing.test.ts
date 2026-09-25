@@ -41,10 +41,18 @@ describe("price", () => {
     expect(price(0.27)).toBeCloseTo(MARGIN / 0.27, 2);
   });
 
-  it("keeps every price above 1 and capped at 80", () => {
+  it("keeps every price above 1 and capped at 999.99", () => {
     expect(price(0.999)).toBeGreaterThanOrEqual(1.1);
-    expect(price(0.0001)).toBeLessThanOrEqual(80);
-    expect(price(0)).toBe(80);
+    expect(price(0.0001)).toBeLessThanOrEqual(999.99);
+    expect(price(0.0000001)).toBe(999.99);
+    expect(price(0)).toBe(999.99);
+  });
+
+  it("prices long shots above the old fake 80 ceiling, graded by probability", () => {
+    const likely = price(0.3);
+    const longShot = price(0.001);
+    expect(longShot).toBeGreaterThan(80);
+    expect(longShot).toBeGreaterThan(likely);
   });
 
   it("holds a positive overround — the sum of implied probs exceeds 1", () => {

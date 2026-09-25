@@ -157,7 +157,8 @@ export function BetTerminal({
   const stake = Math.floor(Number(stakeStr)) || 0;
   const oddsProduct = legs.reduce((p, l) => p * l.odds, 1);
   const combinedOdds = Math.min(999.99, Math.round(oddsProduct * 100) / 100);
-  const potential = legs.length > 0 ? Math.floor(stake * oddsProduct) : 0;
+  // Capped odds — mirrors the server, so the slip shows what it actually pays.
+  const potential = legs.length > 0 ? Math.floor(stake * combinedOdds) : 0;
   const pendingCount = bets.filter((b) => b.status === "PENDING").length;
 
   function pick(l: SlipLeg) {
