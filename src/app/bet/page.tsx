@@ -5,7 +5,8 @@ import { allOdds, formGuide } from "@/lib/bet/odds";
 import { ensureWallet } from "@/lib/bet/wallet";
 import { PublicShell } from "@/components/site";
 import { Badge } from "@/components/ui";
-import { BetTerminal, selectionLabel, type BetMatch, type BetRow, type LeaderRow, type TxnRow } from "@/components/bet";
+import { BetTerminal, type BetMatch, type BetRow, type LeaderRow, type TxnRow } from "@/components/bet";
+import { selectionLabel } from "@/lib/bet/labels";
 
 export const dynamic = "force-dynamic";
 

@@ -1,7 +1,7 @@
 import Link from "next/link";
 import type { Metadata } from "next";
 import { prisma } from "@/lib/prisma";
-import { marketTitle, selectionLabel } from "@/components/bet";
+import { marketTitle, selectionLabel } from "@/lib/bet/labels";
 import { PublicShell } from "@/components/site";
 import { Badge } from "@/components/ui";
 
