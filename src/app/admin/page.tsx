@@ -1,13 +1,10 @@
 import Link from "next/link";
-import { requireRole } from "@/lib/authz";
 import { prisma } from "@/lib/prisma";
-import { TopBar } from "@/components/app";
 import { Badge, Card, CardHeader } from "@/components/ui";
 
 export const dynamic = "force-dynamic";
 
 export default async function AdminHome() {
-  const user = await requireRole(["ADMIN"]);
   const [userCounts, matchCounts, recent] = await Promise.all([
     prisma.user.groupBy({ by: ["role"], _count: { _all: true } }),
     prisma.match.groupBy({ by: ["status"], _count: { _all: true } }),
@@ -26,7 +23,6 @@ export default async function AdminHome() {
 
   return (
     <>
-      <TopBar name={user.name} role={user.role} />
       <main className="mx-auto w-full max-w-6xl px-4 py-6">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
@@ -82,16 +78,31 @@ export default async function AdminHome() {
           </Card>
 
           <Card>
-            <CardHeader title="Quick actions" />
-            <div className="flex flex-col gap-2 p-3 text-sm">
-              <ActionLink href="/admin/data" label="View the database" hint="Users, teams, matches, goals — simple read-only view" />
-              <ActionLink href="/admin/users" label="Manage accounts" hint="Create referee & player logins" />
-              <ActionLink href="/admin/imports" label="Import centre" hint="Bulk-load accounts, squads, questions and fixtures" />
-              <ActionLink href="/admin/teams" label="Teams" hint="Create clubs and add their 8 players" />
-              <ActionLink href="/admin/competitions" label="Competitions" hint="Leagues, cups, fixtures & referees" />
-              <ActionLink href="/admin/news" label="Newsroom" hint="Write and publish public posts" />
-              <ActionLink href="/admin/matches/new" label="Create a friendly" hint="A one-off match with teams of your choice" />
-              <ActionLink href="/admin/matches" label="Open a roster" hint="Assign players to a match's teams" />
+            <CardHeader title="Quick actions" description="Grouped by what you are working on" />
+            <div className="space-y-4 p-3 text-sm">
+              <section>
+                <p className="px-1 pb-1 text-[10px] font-black uppercase tracking-widest text-subtle">Matches &amp; fixtures</p>
+                <div className="flex flex-col gap-2">
+                  <ActionLink href="/admin/matches/new" label="Create a match" hint="A friendly with teams of your choice" />
+                  <ActionLink href="/admin/matches" label="Matches &amp; rosters" hint="Assign players, schedule and open setup" />
+                  <ActionLink href="/admin/competitions" label="Competitions" hint="Leagues, cups, fixtures &amp; referees" />
+                </div>
+              </section>
+              <section>
+                <p className="px-1 pb-1 text-[10px] font-black uppercase tracking-widest text-subtle">People &amp; clubs</p>
+                <div className="flex flex-col gap-2">
+                  <ActionLink href="/admin/users" label="Accounts" hint="Create referee &amp; player logins" />
+                  <ActionLink href="/admin/teams" label="Teams" hint="Create clubs and add their 8 players" />
+                  <ActionLink href="/admin/imports" label="Import centre" hint="Bulk-load accounts, squads, questions and fixtures" />
+                </div>
+              </section>
+              <section>
+                <p className="px-1 pb-1 text-[10px] font-black uppercase tracking-widest text-subtle">Site</p>
+                <div className="flex flex-col gap-2">
+                  <ActionLink href="/admin/news" label="Newsroom" hint="Write and publish public posts" />
+                  <ActionLink href="/admin/data" label="Data browser" hint="Users, teams, matches, goals — read-only" />
+                </div>
+              </section>
             </div>
           </Card>
         </div>

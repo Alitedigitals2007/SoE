@@ -13,6 +13,7 @@ import { GOAL_POINTS } from "@/lib/platform/engine";
 import { emitSettleNotices, settleMatchBets, type SettleNotice } from "@/lib/bet/engine";
 import { applyWalletTxn } from "@/lib/bet/wallet";
 import type { ActionResult, ErrResult, Role, TeamSide as TeamSideView } from "@/lib/domain";
+import { HALFTIME_AFTER_QUESTION, HALFTIME_SECONDS } from "@/lib/domain";
 
 type Tx = Prisma.TransactionClient;
 
@@ -73,6 +74,54 @@ async function appendTimeline(
   return tx.timelineEvent.create({
     data: { matchId, type: type as never, label, detail, authoredById, seq: count + 1 },
   });
+}
+
+/* ------------------------------- half-time --------------------------------- */
+// Tuning lives in @/lib/domain so client components (the Arena break banner)
+// can read it without pulling Prisma into the browser bundle.
+export { HALFTIME_AFTER_QUESTION, HALFTIME_SECONDS } from "@/lib/domain";
+
+/**
+ * Put a live match into half-time. Idempotent: the HALF_TIME timeline event is
+ * the "already taken the break" marker, so a manual start, an automatic start
+ * and a replayed action can never double-pause a match.
+ * Runs inside the caller's transaction.
+ */
+async function beginHalftime(tx: Tx, matchId: string, authoredById: string | null): Promise<boolean> {
+  const taken = await tx.timelineEvent.findFirst({
+    where: { matchId, type: "HALF_TIME" },
+    select: { id: true },
+  });
+  if (taken) return false;
+  await tx.match.update({
+    where: { id: matchId },
+    data: { pausedAt: new Date(), statusNote: "Half-time", version: { increment: 1 } },
+  });
+  await appendTimeline(
+    tx,
+    matchId,
+    "HALF_TIME",
+    "Half-time",
+    `Five questions played — the second half resumes in ${HALFTIME_SECONDS}s.`,
+    authoredById,
+  );
+  return true;
+}
+
+/**
+ * Auto-resume a half-time break whose window has elapsed. Called from the
+ * polling/snapshot path, so every viewer converges without a cron job.
+ * Returns true when this call released the pause.
+ */
+export async function autoResumeHalftime(match: { id: string; code: string; pausedAt: Date | null; statusNote: string | null }): Promise<boolean> {
+  if (!match.pausedAt || match.statusNote !== "Half-time") return false;
+  if (Date.now() - match.pausedAt.getTime() < HALFTIME_SECONDS * 1000) return false;
+  await prisma.match.update({
+    where: { id: match.id },
+    data: { pausedAt: null, statusNote: null, version: { increment: 1 } },
+  });
+  await publishMatchUpdate(match.code);
+  return true;
 }
 
 function teamNameOf(match: NonNullable<Awaited<ReturnType<typeof loadMatchFor>>>, team: TeamSide) {
@@ -250,20 +299,15 @@ export async function resumeMatch(actor: Actor, input: { code: string }): Promis
 export async function startHalftime(actor: Actor, input: { code: string }): Promise<ActionResult> {
   const match = await assertReferee(actor, input.code);
   if (match.status !== "LIVE") return err("Halftime only happens during a live match.");
+  // Already on the break — idempotent so a double-click is not an error.
+  if (match.pausedAt && match.statusNote === "Half-time") return ok(undefined);
   if (match.pausedAt) return err("The match is already paused.");
   const decided = match.rounds.filter((r) => r.status === "DECIDED").length;
-  if (decided !== 5) return err("Halftime comes after the fifth question is decided.");
+  if (decided < HALFTIME_AFTER_QUESTION) return err("Halftime comes after the fifth question is decided.");
   if (match.rounds.some((r) => r.status === "OPEN" || r.status === "LOCKED"))
     return err("Wait for the current question to finish first.");
-  await prisma.match.update({
-    where: { id: match.id },
-    data: { pausedAt: new Date(), statusNote: "Half-time", version: { increment: 1 } },
-  });
   await prisma.$transaction(async (tx) => {
-    const count = await tx.timelineEvent.count({ where: { matchId: match.id } });
-    await tx.timelineEvent.create({
-      data: { matchId: match.id, type: "HALF_TIME", label: "Half-time", detail: "Five questions played — second half next.", authoredById: actor.userId, seq: count + 1 },
-    });
+    await beginHalftime(tx, match.id, actor.userId);
   });
   await publishMatchUpdate(match.code);
   return ok(undefined);
@@ -322,29 +366,50 @@ export async function adminRemovePlayer(
  */
 export async function adminOverrideScore(
   actor: Actor,
-  input: { code: string; homeScore: number; awayScore: number; note?: string },
+  input: { code: string; homeScore: number; awayScore: number; note?: string; finish?: boolean },
 ): Promise<ActionResult> {
   if (actor.role !== "ADMIN") return err("Only an admin can override the score.");
   const match = await loadMatchFor(input.code);
   if (!match) return err("Match not found.");
-  if (match.status === "DRAFT") return err("The score can only be set after kick-off.");
+  const wasDraft = match.status === "DRAFT";
+  if (wasDraft && !input.finish)
+    return err('This match never kicked off — switch on "Record result" to save the score and close it.');
   const homeScore = Math.max(0, Math.floor(input.homeScore));
   const awayScore = Math.max(0, Math.floor(input.awayScore));
   if (homeScore > 99 || awayScore > 99) return err("Scores must be 99 or fewer.");
   const note = input.note?.trim() || null;
+  /** Close the match as well as setting the score (walkover / final result). */
+  const finishing = !!input.finish && match.status !== "FINISHED";
 
   let settleNotices: SettleNotice[] = [];
   await prisma.$transaction(async (tx) => {
     await tx.match.update({
       where: { id: match.id },
-      data: { homeScore, awayScore, version: { increment: 1 } },
+      data: {
+        homeScore,
+        awayScore,
+        ...(finishing
+          ? {
+              status: "FINISHED" as const,
+              finishedAt: match.finishedAt ?? new Date(),
+              startedAt: match.startedAt ?? new Date(),
+              pausedAt: null,
+            }
+          : {}),
+        version: { increment: 1 },
+      },
     });
     await appendTimeline(
       tx,
       match.id,
       "ADMIN_OVERRIDE",
-      `Score manually set to ${homeScore}–${awayScore}`,
-      note ?? "Manual score override by admin",
+      wasDraft && finishing
+        ? `Result recorded ${homeScore}–${awayScore} (match not played)`
+        : `Score manually set to ${homeScore}–${awayScore}`,
+      note ??
+        (wasDraft
+          ? "Recorded from the admin panel — the match never kicked off."
+          : "Manual score override by admin"),
       actor.userId,
     );
     settleNotices = await settleMatchBets(tx, match.id);
@@ -835,6 +900,7 @@ export async function decideRound(
         actor.userId,
       );
       await bumpVersion(tx, match.id);
+      if (match.currentRound + 1 >= HALFTIME_AFTER_QUESTION) await beginHalftime(tx, match.id, actor.userId);
     });
     await publishMatchUpdate(match.code);
     return ok(undefined);
@@ -920,6 +986,7 @@ export async function decideRound(
       actor.userId,
     );
     await bumpVersion(tx, match.id);
+    if (match.currentRound + 1 >= HALFTIME_AFTER_QUESTION) await beginHalftime(tx, match.id, actor.userId);
   });
   await publishMatchUpdate(match.code);
   if (fantasyNotifyIds.length) {
@@ -990,6 +1057,47 @@ export async function transferCaptaincy(
     await tx.matchPlayer.updateMany({ where: { matchId: match.id, team: target.team }, data: { isCaptain: false } });
     await tx.matchPlayer.update({ where: { id: target.id }, data: { isCaptain: true } });
     await syncClubCaptain(tx, match, target.team, target.userId);
+    await bumpVersion(tx, match.id);
+  });
+  await publishMatchUpdate(match.code);
+  return ok(undefined);
+}
+
+/**
+ * Substitution made directly by an official — no captain request needed.
+ * Used by admins and referees when the game needs to move (and at half-time).
+ */
+export async function adminSubstitute(
+  actor: Actor,
+  input: { code: string; playerOutUserId: string; playerInUserId: string },
+): Promise<ActionResult> {
+  const match = await assertReferee(actor, input.code);
+  if (match.status !== "LIVE") return err("Substitutions only happen during a live match.");
+  if (match.rounds.some((r) => r.status === "OPEN" || r.status === "LOCKED"))
+    return err("Wait for the current question to finish before substituting.");
+
+  const out = match.roster.find((r) => r.userId === input.playerOutUserId);
+  const inn = match.roster.find((r) => r.userId === input.playerInUserId);
+  if (!out || !inn) return err("Both players must be on this match's roster.");
+  if (out.team !== inn.team) return err("A substitution has to be within one team.");
+  if (out.userId === inn.userId) return err("Pick two different players.");
+  if (out.role !== "STARTER") return err("The player leaving the field must be an active starter.");
+  if (inn.role !== "SUB") return err("The player coming on must be on the bench.");
+
+  await prisma.$transaction(async (tx) => {
+    await tx.matchPlayer.update({ where: { id: out.id }, data: { role: "SUB" } });
+    await tx.matchPlayer.update({ where: { id: inn.id }, data: { role: "STARTER" } });
+    await tx.substitution.create({
+      data: { matchId: match.id, team: out.team, playerInId: inn.id, playerOutId: out.id },
+    });
+    await appendTimeline(
+      tx,
+      match.id,
+      "SUBSTITUTION",
+      "Substitution",
+      `${rosterNameOf(match, inn.id)} IN · ${rosterNameOf(match, out.id)} OUT · made by ${actor.role === "ADMIN" ? "admin" : "referee"}`,
+      actor.userId,
+    );
     await bumpVersion(tx, match.id);
   });
   await publishMatchUpdate(match.code);
@@ -1266,6 +1374,9 @@ export async function syncMatchState(code: string): Promise<number | null> {
   if (open && open.closesAt && Date.now() >= open.closesAt.getTime()) {
     await finalizeCurrentRound(code, match);
   }
+  // Half-time runs on a timer: whoever syncs next after the break elapses
+  // releases the pause for every viewer (idempotent, safe under concurrency).
+  await autoResumeHalftime(match);
   const fresh = await prisma.match.findUnique({
     where: { code: match.code },
     select: { version: true },

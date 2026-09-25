@@ -1,15 +1,11 @@
 import Link from "next/link";
-import { requireRole } from "@/lib/authz";
-import { TopBar } from "@/components/app";
 import { ImportCenter } from "@/components/ImportCenter";
 
 export const dynamic = "force-dynamic";
 
 export default async function AdminImportsPage() {
-  const user = await requireRole(["ADMIN"]);
   return (
     <>
-      <TopBar name={user.name} role={user.role} />
       <main className="mx-auto w-full max-w-7xl px-4 py-7">
         <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
           <div>

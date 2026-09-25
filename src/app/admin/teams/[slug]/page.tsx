@@ -1,8 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { requireRole } from "@/lib/authz";
 import { prisma } from "@/lib/prisma";
-import { TopBar } from "@/components/app";
 import { Badge } from "@/components/ui";
 import {
   TeamCrestEditor,
@@ -15,7 +13,6 @@ import { TeamImport } from "@/components/TeamImport";
 export const dynamic = "force-dynamic";
 
 export default async function AdminTeamDetail({ params }: { params: Promise<{ slug: string }> }) {
-  const user = await requireRole(["ADMIN"]);
   const { slug } = await params;
   const team = await prisma.team.findUnique({
     where: { slug },
@@ -43,7 +40,6 @@ export default async function AdminTeamDetail({ params }: { params: Promise<{ sl
 
   return (
     <>
-      <TopBar name={user.name} role={user.role} />
       <main className="mx-auto w-full max-w-5xl px-4 py-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>

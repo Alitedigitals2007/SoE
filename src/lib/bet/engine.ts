@@ -1,8 +1,10 @@
 import { prisma } from "@/lib/prisma";
 import { applyWalletTxn, ensureWallet } from "@/lib/bet/wallet";
-import { exactScoreOdds, goalsOdds, oddsForMatch } from "@/lib/bet/odds";
+import { doubleChanceOdds, drawNoBetOdds, exactScoreOdds, goalsOdds, halfFullOdds, halfResultOdds, oddsForMatch, teamTotalsOdds } from "@/lib/bet/odds";
 import type { ActionResult, ErrResult } from "@/lib/domain";
-import type { Prisma, Bet, BetMarket } from "@prisma/client";
+import { HALFTIME_AFTER_QUESTION } from "@/lib/domain";
+import { generateShareCode } from "@/lib/matchCode";
+import type { Prisma, PrismaClient, Bet, BetMarket } from "@prisma/client";
 
 const ok = <T>(data: T): { ok: true; data: T } => ({ ok: true, data });
 const err = (error: string): ErrResult => ({ ok: false, error });
@@ -18,7 +20,17 @@ export const DAILY_CLAIM_POINTS = 20;
 /* --------------------------------- helpers --------------------------------- */
 
 const SCORE_RE = /^(\d{1,2})-(\d{1,2})$/;
-export const TOTAL_SELECTIONS = ["O1.5", "U1.5", "O2.5", "U2.5", "O3.5", "U3.5"] as const;
+export const TOTAL_SELECTIONS = ["O0.5", "U0.5", "O1.5", "U1.5", "O2.5", "U2.5", "O3.5", "U3.5", "O4.5", "U4.5"] as const;
+export const DOUBLE_CHANCE_SELECTIONS = ["1X", "X2", "12"] as const;
+export const DRAW_NO_BET_SELECTIONS = ["HOME", "AWAY"] as const;
+export const HALF_RESULT_SELECTIONS = ["HOME", "DRAW", "AWAY"] as const;
+export const HALF_FULL_SELECTIONS = ["HH", "HD", "HA", "DH", "DD", "DA", "AH", "AD", "AA"] as const;
+/** Per-team goal lines, e.g. "H_O2.5" (home scores 3+) or "A_U1.5" (away 0–1). */
+export const TEAM_TOTAL_LINES_VIEW = [0.5, 1.5, 2.5, 3.5] as const;
+export const TEAM_TOTAL_SELECTIONS = [
+  ...TEAM_TOTAL_LINES_VIEW.flatMap((l) => [`H_O${l}`, `H_U${l}`]),
+  ...TEAM_TOTAL_LINES_VIEW.flatMap((l) => [`A_O${l}`, `A_U${l}`]),
+] as const;
 
 type MatchRow = {
   id: string;
@@ -66,6 +78,31 @@ function validateSelection(market: BetMarket, selection: string): string | null 
   if (market === "BOTH_TEAMS_TO_SCORE") {
     return selection === "YES" || selection === "NO" ? null : "Pick yes or no.";
   }
+  if (market === "DOUBLE_CHANCE") {
+    return (DOUBLE_CHANCE_SELECTIONS as readonly string[]).includes(selection)
+      ? null
+      : "Pick 1X, X2 or 12.";
+  }
+  if (market === "DRAW_NO_BET") {
+    return (DRAW_NO_BET_SELECTIONS as readonly string[]).includes(selection)
+      ? null
+      : "Pick home or away — a draw refunds your stake.";
+  }
+  if (market === "HALF_RESULT") {
+    return (HALF_RESULT_SELECTIONS as readonly string[]).includes(selection)
+      ? null
+      : "Pick the half-time result.";
+  }
+  if (market === "HALF_FULL") {
+    return (HALF_FULL_SELECTIONS as readonly string[]).includes(selection)
+      ? null
+      : "Pick a half-time/full-time combo like HD (draw at half, home win at full).";
+  }
+  if (market === "TEAM_TOTALS") {
+    return (TEAM_TOTAL_SELECTIONS as readonly string[]).includes(selection)
+      ? null
+      : "Pick a team total, e.g. H_O2.5 or A_U1.5.";
+  }
   if (market === "ACCA") return null;
   return "Unknown market.";
 }
@@ -79,6 +116,30 @@ async function priceFor(match: MatchRow, market: BetMarket, selection: string): 
   if (market === "EXACT_SCORE") {
     const m = SCORE_RE.exec(selection)!;
     return exactScoreOdds(match, Number(m[1]), Number(m[2]));
+  }
+  if (market === "DOUBLE_CHANCE") {
+    const o = await doubleChanceOdds(match);
+    return o[selection as "1X" | "X2" | "12"];
+  }
+  if (market === "DRAW_NO_BET") {
+    const o = await drawNoBetOdds(match);
+    return o[selection as "HOME" | "AWAY"];
+  }
+  if (market === "HALF_RESULT") {
+    const o = await halfResultOdds(match);
+    return o[selection as "HOME" | "DRAW" | "AWAY"];
+  }
+  if (market === "HALF_FULL") {
+    const o = await halfFullOdds(match);
+    return o[selection];
+  }
+  if (market === "TEAM_TOTALS") {
+    const totals = await teamTotalsOdds(match);
+    const side = selection.startsWith("H_") ? "HOME" : "AWAY";
+    const line = Number(selection.slice(3));
+    const row = totals[side].find((l) => l.line === line);
+    if (!row) throw new Error("Unknown team total line.");
+    return selection.includes("_O") ? row.over : row.under;
   }
   const g = await goalsOdds(match);
   if (market === "BOTH_TEAMS_TO_SCORE") return selection === "YES" ? g.btts.yes : g.btts.no;
@@ -98,6 +159,29 @@ function betLabel(market: BetMarket, selection: string, fixture: string): string
     return `${word} · ${fixture}`;
   }
   if (market === "BOTH_TEAMS_TO_SCORE") return `both teams to score ${selection === "YES" ? "(yes)" : "(no)"} · ${fixture}`;
+  if (market === "DOUBLE_CHANCE") {
+    const word = { "1X": "home or draw", X2: "draw or away", "12": "either team to win" }[selection as "1X" | "X2" | "12"] ?? selection;
+    return `double chance ${selection} (${word}) · ${fixture}`;
+  }
+  if (market === "DRAW_NO_BET") {
+    const word = selection === "HOME" ? "home win" : "away win";
+    return `draw no bet — ${word} · ${fixture}`;
+  }
+  if (market === "HALF_RESULT") {
+    const word = { HOME: "home lead", DRAW: "scores level", AWAY: "away lead" }[selection as "HOME" | "DRAW" | "AWAY"] ?? selection;
+    return `half-time ${word} · ${fixture}`;
+  }
+  if (market === "HALF_FULL") {
+    const [ht, ft] = selection.split("");
+    const word = (r: string) => (r === "H" ? "home" : r === "A" ? "away" : "draw");
+    return `half-time ${word(ht)} / full-time ${word(ft)} · ${fixture}`;
+  }
+  if (market === "TEAM_TOTALS") {
+    const side = selection.startsWith("H_") ? "home" : "away";
+    const over = selection.includes("_O");
+    const line = selection.slice(3);
+    return `${side} team ${over ? "over" : "under"} ${line} goals · ${fixture}`;
+  }
   return `accumulator · ${fixture}`;
 }
 
@@ -121,7 +205,89 @@ export function selectionWins(market: BetMarket, selection: string, homeScore: n
     const both = homeScore >= 1 && awayScore >= 1;
     return selection === "YES" ? both : !both;
   }
+  if (market === "DOUBLE_CHANCE") {
+    const homeWin = homeScore > awayScore;
+    const awayWin = awayScore > homeScore;
+    const draw = homeScore === awayScore;
+    if (selection === "1X") return homeWin || draw;
+    if (selection === "X2") return draw || awayWin;
+    return homeWin || awayWin; // "12" — either team to win
+  }
+  if (market === "TEAM_TOTALS") {
+    // Selections look like "H_O2.5" (home scores 3+) or "A_U1.5" (away 0-1).
+    const scored = selection.startsWith("H") ? homeScore : awayScore;
+    const line = Number(selection.slice(3));
+    if (!Number.isFinite(line)) return false;
+    return selection.includes("_O") ? scored > line : scored < line;
+  }
   return false;
+}
+
+/* ------------------------------ outcome logic ------------------------------ */
+
+export type BetOutcome = "WON" | "LOST" | "VOID";
+
+const resultKeyOf = (home: number, away: number): "H" | "D" | "A" =>
+  home > away ? "H" : home < away ? "A" : "D";
+
+/**
+ * Half-time scoreline, derived from the first five decided rounds (the break
+ * always lands after question five). Returns null when those rounds do not
+ * exist — e.g. a walkover that was recorded without playing — in which case
+ * half-time markets are voided rather than guessed.
+ */
+export async function halfTimeScore(
+  db: Prisma.TransactionClient | PrismaClient,
+  matchId: string,
+): Promise<{ home: number; away: number } | null> {
+  const rounds = await db.round.findMany({
+    where: { matchId, status: "DECIDED", number: { lte: HALFTIME_AFTER_QUESTION } },
+    select: { decision: true, goalSubmission: { select: { player: { select: { team: true } } } } },
+  });
+  if (rounds.length === 0) return null;
+  let home = 0;
+  let away = 0;
+  for (const r of rounds) {
+    if (r.decision !== "GOAL" || !r.goalSubmission) continue;
+    if (r.goalSubmission.player.team === "HOME") home++;
+    else away++;
+  }
+  return { home, away };
+}
+
+/**
+ * Judge a selection against a finished scoreline.
+ * Draw-no-bet returns VOID on a draw (stake refunded); half-time markets are
+ * VOID when the break never produced a scoreline to judge them on.
+ */
+export function selectionOutcome(
+  market: BetMarket,
+  selection: string,
+  score: { home: number; away: number; ht: { home: number; away: number } | null },
+): BetOutcome {
+  if (market === "DRAW_NO_BET") {
+    if (score.home === score.away) return "VOID";
+    const homeWon = score.home > score.away;
+    return (selection === "HOME") === homeWon ? "WON" : "LOST";
+  }
+  if (market === "HALF_RESULT" || market === "HALF_FULL") {
+    if (!score.ht) return "VOID";
+    const htKey = resultKeyOf(score.ht.home, score.ht.away);
+    if (market === "HALF_RESULT") {
+      const want = selection === "HOME" ? "H" : selection === "AWAY" ? "A" : "D";
+      return htKey === want ? "WON" : "LOST";
+    }
+    const ftKey = resultKeyOf(score.home, score.away);
+    return selection === `${htKey}${ftKey}` ? "WON" : "LOST";
+  }
+  return selectionWins(market, selection, score.home, score.away) ? "WON" : "LOST";
+}
+
+/** What a settled bet pays out: winnings, a refunded stake, or nothing. */
+export function payoutFor(outcome: BetOutcome | "PENDING", stake: number, potentialReturn: number): number {
+  if (outcome === "WON") return potentialReturn;
+  if (outcome === "VOID") return stake;
+  return 0;
 }
 
 /* -------------------------------- placement -------------------------------- */
@@ -167,6 +333,7 @@ export async function placeBet(
 
       const bet = await tx.bet.create({
         data: {
+          code: generateShareCode(),
           userId: actor.userId,
           matchId: match!.id,
           market: input.market,
@@ -215,6 +382,8 @@ export async function placeAcca(
     if (notBetable) return notBetable;
     const selectionError = validateSelection(leg.market, leg.selection);
     if (selectionError) return err(selectionError);
+    if (leg.market === "DRAW_NO_BET")
+      return err("Draw-no-bet can't go in an accumulator — a draw would void the whole slip. Place it as a single bet.");
     const legOdds = await priceFor(match!, leg.market, leg.selection);
     product *= legOdds;
     legViews.push({
@@ -243,6 +412,7 @@ export async function placeAcca(
       const anchor = legViews[0];
       const bet = await tx.bet.create({
         data: {
+          code: generateShareCode(),
           userId: actor.userId,
           matchId: anchor.matchId,
           market: "ACCA",
@@ -317,49 +487,49 @@ export async function settleMatchBets(db: Prisma.TransactionClient, matchId: str
   });
   if (!match || match.status !== "FINISHED") return notices;
   const score = `${match.homeName} ${match.homeScore}–${match.awayScore} ${match.awayName}`;
+  const finalScore = { home: match.homeScore, away: match.awayScore };
+  const ht = await halfTimeScore(db, matchId);
+  const fixture = `${match.homeName} v ${match.awayName}`;
 
   // --- singles & goals markets on this match ---
   const singles = await db.bet.findMany({
-    where: { matchId, status: { in: ["PENDING", "WON", "LOST"] }, market: { not: "ACCA" } },
+    where: { matchId, status: { in: ["PENDING", "WON", "LOST", "VOID"] }, market: { not: "ACCA" } },
   });
   for (const bet of singles) {
-    const won = selectionWins(bet.market, bet.selection, match.homeScore, match.awayScore);
-    const outcome = won ? "WON" : "LOST";
-    if (bet.status === outcome) continue;
+    const outcome = selectionOutcome(bet.market, bet.selection, { ...finalScore, ht });
+    const nextPayout = payoutFor(outcome, bet.stake, bet.potentialReturn);
+    const prevPayout = payoutFor(bet.status as BetOutcome, bet.stake, bet.potentialReturn);
+    // Already settled correctly — and the payout agrees (idempotent re-runs).
+    if (bet.status === outcome && bet.payout === nextPayout) continue;
 
+    const delta = nextPayout - prevPayout;
     const odds = Number(bet.odds);
-    const label = betLabel(bet.market, bet.selection, `${match.homeName} v ${match.awayName}`);
+    const label = betLabel(bet.market, bet.selection, fixture);
+    const kind = delta > 0 ? (outcome === "VOID" ? "BET_VOID" : "BET_WON") : "BET_LOST";
+    const note =
+      outcome === "WON"
+        ? `Won: ${label} @ ${odds} — ${score}`
+        : outcome === "VOID"
+          ? `Void: ${label} — stake refunded — ${score}`
+          : bet.status === "WON"
+            ? `Corrected: ${label} lost — ${score}`
+            : `Lost: ${label} @ ${odds} — ${score}`;
 
-    if (won) {
-      await applyWalletTxn(db, bet.userId, bet.potentialReturn, "BET_WON", `Won: ${label} @ ${odds} — ${score}`, {
-        matchId,
-        betId: bet.id,
-      });
-      await db.bet.update({
-        where: { id: bet.id },
-        data: { status: "WON", payout: bet.potentialReturn, settledAt: new Date() },
-      });
-      notices.push(notice(bet.userId, true, bet.potentialReturn, `${label} @ ${odds} — ${score}`));
-    } else {
-      if (bet.status === "WON") {
-        await applyWalletTxn(db, bet.userId, -bet.payout, "BET_LOST", `Corrected: ${label} lost — ${score}`, {
-          matchId,
-          betId: bet.id,
-        });
-      } else {
-        await applyWalletTxn(db, bet.userId, 0, "BET_LOST", `Lost: ${label} @ ${odds} — ${score}`, {
-          matchId,
-          betId: bet.id,
-        });
-      }
-      await db.bet.update({ where: { id: bet.id }, data: { status: "LOST", payout: 0, settledAt: new Date() } });
-      notices.push(notice(bet.userId, false, 0, `${label} @ ${odds} — ${score}`));
-    }
+    await applyWalletTxn(db, bet.userId, delta, kind, note, { matchId, betId: bet.id });
+    await db.bet.update({
+      where: { id: bet.id },
+      data: { status: outcome, payout: nextPayout, settledAt: new Date() },
+    });
+    notices.push(
+      outcome === "VOID"
+        ? { userId: bet.userId, title: `Bet void +${bet.stake} pts`, body: `${label} — ${score}`, link: "/bet" }
+        : notice(bet.userId, outcome === "WON", nextPayout, `${label} @ ${odds} — ${score}`),
+    );
   }
 
   // --- accumulators that include this match ---
   const accas = await db.bet.findMany({
-    where: { market: "ACCA", status: "PENDING", legMatchIds: { has: matchId } },
+    where: { market: "ACCA", status: { in: ["PENDING", "WON", "LOST", "VOID"] }, legMatchIds: { has: matchId } },
   });
   for (const bet of accas) {
     const legs = (bet.legs ?? []) as AccaLegView[];
@@ -369,40 +539,81 @@ export async function settleMatchBets(db: Prisma.TransactionClient, matchId: str
     });
     const legById = new Map(legMatches.map((m) => [m.id, m]));
 
-    let anyLost = false;
-    let allDone = true;
+    const legOutcomes: (BetOutcome | null)[] = [];
     for (const leg of legs) {
       const lm = legById.get(leg.matchId);
       // Only finished matches can judge a leg — never a live scoreline.
       if (!lm || lm.status !== "FINISHED") {
-        allDone = false;
+        legOutcomes.push(null);
         continue;
       }
-      if (!selectionWins(leg.market, leg.selection, lm.homeScore, lm.awayScore)) anyLost = true;
+      const legHt = needsHalfTime(leg.market) ? await halfTimeScore(db, leg.matchId) : null;
+      legOutcomes.push(
+        selectionOutcome(leg.market, leg.selection, {
+          home: lm.homeScore,
+          away: lm.awayScore,
+          ht: legHt,
+        }),
+      );
     }
 
-    if (!anyLost && !allDone) continue; // still alive, wait for the remaining legs
-    const won = !anyLost && allDone;
+    const aggregated = accaOutcome(legOutcomes);
+    if (aggregated === "PENDING") continue; // still alive, wait for the remaining legs
+    const outcome: BetOutcome = aggregated;
+    const nextPayout = payoutFor(outcome, bet.stake, bet.potentialReturn);
+    const prevPayout = payoutFor(bet.status as BetOutcome, bet.stake, bet.potentialReturn);
+    if (bet.status === outcome && bet.payout === nextPayout) continue;
+
+    const delta = nextPayout - prevPayout;
     const label = `accumulator (${legs.length} legs @ ${Number(bet.odds)})`;
-
-    if (won) {
-      await applyWalletTxn(db, bet.userId, bet.potentialReturn, "BET_WON", `Won: ${label}`, {
-        matchId,
-        betId: bet.id,
-      });
-      await db.bet.update({
-        where: { id: bet.id },
-        data: { status: "WON", payout: bet.potentialReturn, settledAt: new Date() },
-      });
-      notices.push(notice(bet.userId, true, bet.potentialReturn, `${label} — every leg landed!`));
-    } else {
-      await applyWalletTxn(db, bet.userId, 0, "BET_LOST", `Lost: ${label}`, { matchId, betId: bet.id });
-      await db.bet.update({ where: { id: bet.id }, data: { status: "LOST", payout: 0, settledAt: new Date() } });
-      notices.push(notice(bet.userId, false, 0, `${label} — a leg let you down.`));
-    }
+    const kind = delta > 0 ? (outcome === "VOID" ? "BET_VOID" : "BET_WON") : "BET_LOST";
+    await applyWalletTxn(
+      db,
+      bet.userId,
+      delta,
+      kind,
+      outcome === "VOID" ? `Void: ${label} — stake refunded` : outcome === "WON" ? `Won: ${label}` : `Lost: ${label}`,
+      { matchId, betId: bet.id },
+    );
+    await db.bet.update({
+      where: { id: bet.id },
+      data: { status: outcome, payout: nextPayout, settledAt: new Date() },
+    });
+    notices.push(
+      outcome === "VOID"
+        ? { userId: bet.userId, title: `Acca void +${bet.stake} pts`, body: `${label} — a leg was voided.`, link: "/bet" }
+        : outcome === "WON"
+          ? notice(bet.userId, true, nextPayout, `${label} — every leg landed!`)
+          : notice(bet.userId, false, 0, `${label} — a leg let you down.`),
+    );
   }
 
   return notices;
+}
+
+/**
+ * Aggregate leg results into an accumulator's outcome.
+ * `null` = the leg's match hasn't finished yet. A single losing leg kills the
+ * acca even if other legs are still open; otherwise the slip waits until every
+ * leg is decided, and is voided (stake refunded) when a leg was voided.
+ */
+export function accaOutcome(legOutcomes: (BetOutcome | null)[]): BetOutcome | "PENDING" {
+  let anyLost = false;
+  let anyVoid = false;
+  let allDone = true;
+  for (const o of legOutcomes) {
+    if (o === null) allDone = false;
+    else if (o === "LOST") anyLost = true;
+    else if (o === "VOID") anyVoid = true;
+  }
+  if (anyLost) return "LOST";
+  if (!allDone) return "PENDING";
+  return anyVoid ? "VOID" : "WON";
+}
+
+/** Markets that need a half-time scoreline to be judged. */
+function needsHalfTime(market: BetMarket): boolean {
+  return market === "HALF_RESULT" || market === "HALF_FULL";
 }
 
 /** Fire settlement notifications (call AFTER the settlement transaction commits). */

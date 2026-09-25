@@ -10,6 +10,11 @@ export function generateMatchCode(length = 6): string {
   return code;
 }
 
+/** Public share code for a betting slip — 8 unambiguous characters. */
+export function generateShareCode(length = 8): string {
+  return generateMatchCode(length);
+}
+
 export function elapsedSecondsSince(startedAt: Date | null, now: Date): number | null {
   if (!startedAt) return null;
   return Math.max(0, Math.floor((now.getTime() - startedAt.getTime()) / 1000));

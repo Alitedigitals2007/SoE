@@ -1,14 +1,11 @@
 import Link from "next/link";
-import { requireRole } from "@/lib/authz";
 import { prisma } from "@/lib/prisma";
-import { TopBar } from "@/components/app";
 import { CreateTeamForm } from "@/components/platformAdmin";
 import { Badge } from "@/components/ui";
 
 export const dynamic = "force-dynamic";
 
 export default async function AdminTeams() {
-  const user = await requireRole(["ADMIN"]);
   const teams = await prisma.team.findMany({
     orderBy: { name: "asc" },
     include: { _count: { select: { members: true } } },
@@ -16,7 +13,6 @@ export default async function AdminTeams() {
 
   return (
     <>
-      <TopBar name={user.name} role={user.role} />
       <main className="mx-auto w-full max-w-6xl px-4 py-6">
         <h1 className="text-2xl font-bold text-fg">Teams</h1>
         <p className="mb-5 text-sm text-muted">Clubs of up to eight players. Competitions and league fixtures are built from these.</p>

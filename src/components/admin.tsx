@@ -1,13 +1,56 @@
 "use client";
 
 import * as React from "react";
-import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { usePathname, useRouter } from "next/navigation";
 import { addPlayerAction, createMatchAction, postponeMatchAction, removePlayerAction, setMatchScheduleAction, adminEditGoalRoundAction, adminOverrideScoreAction } from "@/app/actions/match";
 import { createUserAction, updateUserAction } from "@/app/actions/admin";
 import { Badge, Button, Card, CardHeader, cn, Field, Input, Select } from "@/components/ui";
 import type { Role, TeamSide } from "@/lib/domain";
 
 type Notice = { kind: "ok" | "err"; text: string } | null;
+
+/* ------------------------------ section nav -------------------------------- */
+
+const ADMIN_SECTIONS = [
+  { href: "/admin", label: "Overview" },
+  { href: "/admin/matches", label: "Matches" },
+  { href: "/admin/teams", label: "Teams" },
+  { href: "/admin/competitions", label: "Competitions" },
+  { href: "/admin/users", label: "Accounts" },
+  { href: "/admin/news", label: "News" },
+  { href: "/admin/imports", label: "Imports" },
+  { href: "/admin/data", label: "Data" },
+] as const;
+
+/** Section tabs shared by every admin page (rendered once from the layout). */
+export function AdminNav() {
+  const pathname = usePathname() ?? "/admin";
+  const isActive = (href: string) =>
+    href === "/admin" ? pathname === "/admin" : pathname === href || pathname.startsWith(`${href}/`);
+
+  return (
+    <nav aria-label="Admin sections" className="border-b-2 border-line bg-bg-elevated">
+      <div className="mx-auto flex w-full max-w-6xl gap-1 overflow-x-auto px-4 py-2">
+        {ADMIN_SECTIONS.map((s) => (
+          <Link
+            key={s.href}
+            href={s.href}
+            aria-current={isActive(s.href) ? "page" : undefined}
+            className={cn(
+              "shrink-0 rounded-md px-3 py-1.5 text-xs font-semibold transition-colors",
+              isActive(s.href)
+                ? "bg-gold text-gold-ink shadow-[2px_2px_0_rgba(11,32,48,.15)]"
+                : "text-muted hover:bg-surface hover:text-fg",
+            )}
+          >
+            {s.label}
+          </Link>
+        ))}
+      </div>
+    </nav>
+  );
+}
 
 /* ------------------------------ user management ---------------------------- */
 
@@ -635,40 +678,56 @@ export function ScoreOverrideEditor({
   awayName,
   homeScore,
   awayScore,
+  prematch = false,
 }: {
   code: string;
   homeName: string;
   awayName: string;
   homeScore: number;
   awayScore: number;
+  /** Match never kicked off — the only way to save is to also finish it. */
+  prematch?: boolean;
 }) {
   const [home, setHome] = React.useState(homeScore);
   const [away, setAway] = React.useState(awayScore);
   const [note, setNote] = React.useState("");
+  const [finish, setFinish] = React.useState(false);
   const [notice, setNotice] = React.useState<Notice>(null);
   const [busy, setBusy] = React.useState(false);
   const router = useRouter();
-  const dirty = home !== homeScore || away !== awayScore || note.trim() !== "";
+  const changed = home !== homeScore || away !== awayScore || note.trim() !== "";
+  const canSave = prematch ? finish : changed;
 
   return (
     <Card>
       <CardHeader
-        title="Manual score override"
-        description="Set the scoreline directly — it is recorded on the match timeline as an admin correction."
-        aside={dirty ? <Badge tone="warning">Unsaved</Badge> : <Badge tone="neutral">Saved</Badge>}
+        title={prematch ? "Record result" : "Manual score override"}
+        description={
+          prematch
+            ? "This match never kicked off — enter the final scoreline (a walkover or an unplayed fixture) and close it."
+            : "Set the scoreline directly — it is recorded on the match timeline as an admin correction."
+        }
+        aside={canSave ? <Badge tone="warning">Unsaved</Badge> : <Badge tone="neutral">Saved</Badge>}
       />
       <form
         className="space-y-4 p-4"
         onSubmit={(e) => {
           e.preventDefault();
-          if (busy) return;
+          if (busy || !canSave) return;
           setBusy(true);
           setNotice(null);
-          void adminOverrideScoreAction({ code, homeScore: home, awayScore: away, note: note.trim() || undefined }).then((r) => {
+          void adminOverrideScoreAction({
+            code,
+            homeScore: home,
+            awayScore: away,
+            note: note.trim() || undefined,
+            finish: prematch ? finish : undefined,
+          }).then((r) => {
             setBusy(false);
             if (r.ok) {
               setNote("");
-              setNotice({ kind: "ok", text: "Score overridden." });
+              setFinish(false);
+              setNotice({ kind: "ok", text: prematch ? "Result recorded — match closed." : "Score overridden." });
               router.refresh();
             } else {
               setNotice({ kind: "err", text: r.error ?? "Could not override the score." });
@@ -699,9 +758,25 @@ export function ScoreOverrideEditor({
             <Input value={note} onChange={(e) => setNote(e.target.value)} placeholder="e.g. Typo corrected" maxLength={200} />
           </Field>
         </div>
+        {prematch ? (
+          <label className="flex cursor-pointer items-start gap-2 rounded-lg border border-line bg-bg-raised px-3 py-2.5 text-sm">
+            <input
+              type="checkbox"
+              className="mt-0.5 size-4 accent-[var(--color-gold,#d4a72c)]"
+              checked={finish}
+              onChange={(e) => setFinish(e.target.checked)}
+            />
+            <span>
+              <span className="font-semibold text-fg">Finish the match now</span>
+              <span className="block text-xs text-muted">
+                Sets the status to full-time, settles every bet on this fixture and publishes the result.
+              </span>
+            </span>
+          </label>
+        ) : null}
         {notice ? <NoticeLine notice={notice} /> : null}
-        <Button type="submit" variant="secondary" loading={busy} disabled={!dirty}>
-          Save score
+        <Button type="submit" variant="secondary" loading={busy} disabled={!canSave}>
+          {prematch ? "Record result & finish" : "Save score"}
         </Button>
       </form>
     </Card>

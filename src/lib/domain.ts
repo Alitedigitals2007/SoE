@@ -40,6 +40,15 @@ export const INCIDENT_ACTIONS: Record<IncidentAction, string> = {
   RED_CARD: "Red Card",
 };
 
+/* -------------------------------- half-time -------------------------------- */
+
+/** The break kicks in automatically as soon as the fifth question is decided. */
+export const HALFTIME_AFTER_QUESTION = 5;
+/** Automatic break length, in seconds — an admin/referee can cut it short. */
+export const HALFTIME_SECONDS = 20;
+/** Questions played per match (the bank prepares more; rounds 1..10 are played). */
+export const MATCH_ROUNDS = 10;
+
 /* ------------------------------ Public views ------------------------------ */
 
 export interface RosterSlotView {
@@ -173,6 +182,8 @@ export interface MatchSnapshot {
   finishedAt: string | null;
   paused: boolean;
   pauseNote: string | null;
+  /** When the current pause began (ISO) — drives the half-time countdown. */
+  pausedAt: string | null;
   roster: RosterSlotView[];
   timeline: TimelineItemView[];
   round: RoundView | null; // the round in flight (OPEN/LOCKED) or null

@@ -253,6 +253,7 @@ export function buildSnapshot(
     finishedAt: match.finishedAt?.toISOString() ?? null,
     paused: !!match.pausedAt,
     pauseNote: match.statusNote ?? null,
+    pausedAt: match.pausedAt?.toISOString() ?? null,
     roster,
     timeline,
     round,

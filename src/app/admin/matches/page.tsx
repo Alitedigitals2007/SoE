@@ -1,8 +1,6 @@
 import Link from "next/link";
 import { Suspense } from "react";
-import { requireRole } from "@/lib/authz";
 import { prisma } from "@/lib/prisma";
-import { TopBar } from "@/components/app";
 import { Badge, Card, CardHeader } from "@/components/ui";
 import { StatusBadge } from "../page";
 import { UrlPagination } from "@/components/UrlPagination";
@@ -16,7 +14,6 @@ export default async function AdminMatchesPage({
 }: {
   searchParams: Promise<{ page?: string }>;
 }) {
-  const user = await requireRole(["ADMIN"]);
   const sp = await searchParams;
   const page = Math.max(1, Number(sp.page) || 1);
 
@@ -37,7 +34,6 @@ export default async function AdminMatchesPage({
 
   return (
     <>
-      <TopBar name={user.name} role={user.role} />
       <main className="mx-auto w-full max-w-6xl px-4 py-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>

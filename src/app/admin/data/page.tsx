@@ -1,7 +1,5 @@
 import Link from "next/link";
-import { requireRole } from "@/lib/authz";
 import { prisma } from "@/lib/prisma";
-import { TopBar } from "@/components/app";
 import { Badge, Card, cn } from "@/components/ui";
 import { AdminTabs, type AdminTab } from "@/components/admin";
 import { WalletAdjust, type WalletUser } from "@/components/wallet-admin";
@@ -13,7 +11,6 @@ export const dynamic = "force-dynamic";
 const TAKE = 40;
 
 export default async function AdminDataPage() {
-  const user = await requireRole(["ADMIN"]);
 
   const [
     users, teams, matches, goals, timeline, competitions, counts, wallets,
@@ -233,7 +230,6 @@ export default async function AdminDataPage() {
 
   return (
     <>
-      <TopBar name={user.name} role={user.role} />
       <main className="mx-auto w-full max-w-6xl px-4 py-6">
         <div className="mb-5">
           <h1 className="text-2xl font-bold text-fg">Database</h1>

@@ -1,9 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { requireRole } from "@/lib/authz";
 import { prisma } from "@/lib/prisma";
-import { TopBar } from "@/components/app";
-import { Badge } from "@/components/ui";
+import { Badge, Card, CardHeader } from "@/components/ui";
 import {
   AdminTabs,
   GoalRoundsEditor,
@@ -21,7 +19,6 @@ import { StatusBadge } from "../../page";
 export const dynamic = "force-dynamic";
 
 export default async function AdminMatchPage({ params }: { params: Promise<{ code: string }> }) {
-  const user = await requireRole(["ADMIN"]);
   const { code } = await params;
   const match = await prisma.match.findUnique({
     where: { code: code.toUpperCase() },
@@ -80,33 +77,41 @@ export default async function AdminMatchPage({ params }: { params: Promise<{ cod
   });
 
   const tabs = [
-    ...(started
+    {
+      key: "scores",
+      label: started ? "Scores & goals" : "Record result",
+      badge: goalRounds.length || undefined,
+      content: (
+        <div className="space-y-4">
+          <ScoreOverrideEditor
+            code={match.code}
+            homeName={match.homeName}
+            awayName={match.awayName}
+            homeScore={match.homeScore}
+            awayScore={match.awayScore}
+            prematch={!started}
+          />
+          {started ? (
+            <GoalRoundsEditor
+              code={match.code}
+              homeName={match.homeName}
+              awayName={match.awayName}
+              rounds={goalRounds}
+              roster={roster}
+            />
+          ) : (
+            <Card>
+              <CardHeader
+                title="Goal-by-goal edits"
+                description="Round-by-round corrections appear here once the match has kicked off."
+              />
+            </Card>
+          )}
+        </div>
+      ),
+    },
+    ...(match.status !== "FINISHED"
       ? [
-          {
-            key: "scores",
-            label: "Scores & goals",
-            badge: goalRounds.length,
-            content: (
-              <div className="space-y-4">
-                <ScoreOverrideEditor
-                  code={match.code}
-                  homeName={match.homeName}
-                  awayName={match.awayName}
-                  homeScore={match.homeScore}
-                  awayScore={match.awayScore}
-                />
-                <GoalRoundsEditor
-                  code={match.code}
-                  homeName={match.homeName}
-                  awayName={match.awayName}
-                  rounds={goalRounds}
-                  roster={roster}
-                />
-              </div>
-            ),
-          },
-        ]
-      : [
           {
             key: "schedule",
             label: "Schedule & prep",
@@ -117,7 +122,8 @@ export default async function AdminMatchPage({ params }: { params: Promise<{ cod
               </div>
             ),
           },
-        ]),
+        ]
+      : []),
     {
       key: "roster",
       label: "Roster",
@@ -137,7 +143,6 @@ export default async function AdminMatchPage({ params }: { params: Promise<{ cod
 
   return (
     <>
-      <TopBar name={user.name} role={user.role} />
       <main className="mx-auto w-full max-w-6xl px-4 py-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="min-w-0">

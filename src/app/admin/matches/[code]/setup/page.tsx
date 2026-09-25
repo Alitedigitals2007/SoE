@@ -1,8 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { requireRole } from "@/lib/authz";
 import { prisma } from "@/lib/prisma";
-import { TopBar } from "@/components/app";
 import { Badge } from "@/components/ui";
 import { StatusBadge } from "../../../page";
 import { RosterManager, ScheduleEditor, type AvailablePlayer, type RosterPlayer } from "@/components/admin";
@@ -12,7 +10,6 @@ import type { TeamSide } from "@/lib/domain";
 export const dynamic = "force-dynamic";
 
 export default async function AdminMatchSetupPage({ params }: { params: Promise<{ code: string }> }) {
-  const user = await requireRole(["ADMIN"]);
   const { code } = await params;
   const match = await prisma.match.findUnique({
     where: { code: code.toUpperCase() },
@@ -29,7 +26,6 @@ export default async function AdminMatchSetupPage({ params }: { params: Promise<
   if (match.status !== "DRAFT")
     return (
       <LockedView
-        name={user.name}
         code={match.code}
         status={match.status}
         homeName={match.homeName}
@@ -76,7 +72,6 @@ export default async function AdminMatchSetupPage({ params }: { params: Promise<
 
   return (
     <>
-      <TopBar name={user.name} role={user.role} />
       <main className="mx-auto w-full max-w-6xl px-4 py-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
@@ -204,13 +199,11 @@ function rosterCountReady(roster: { role: string; isCaptain: boolean }[]) {
 }
 
 function LockedView({
-  name,
   code,
   status,
   homeName,
   awayName,
 }: {
-  name: string;
   code: string;
   status: string;
   homeName: string;
@@ -218,7 +211,6 @@ function LockedView({
 }) {
   return (
     <>
-      <TopBar name={name} role="ADMIN" />
       <main className="mx-auto max-w-lg px-4 py-10 text-center">
         <Badge tone={status === "LIVE" ? "success" : "neutral"}>{status === "LIVE" ? "Match is live" : "Match finished"}</Badge>
         <h1 className="mt-3 text-xl font-black text-fg">

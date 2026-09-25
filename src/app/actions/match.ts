@@ -7,6 +7,7 @@ import {
   adminEditGoalRound,
   adminOverrideScore,
   adminRemovePlayer,
+  adminSubstitute,
   addQuestion,
   decideRound,
   decideSubstitution,
@@ -46,11 +47,22 @@ async function runEngine<T>(
     return await fn(actor);
   } catch (e) {
     if (e instanceof MatchGuardError) return { ok: false, error: e.message };
-    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002")
-      return { ok: false, error: "That change conflicts with existing data — please refresh." };
+    if (e instanceof Prisma.PrismaClientKnownRequestError) {
+      if (e.code === "P2002") return { ok: false, error: "That change conflicts with existing data — please refresh." };
+      if (e.code === "P2025") return { ok: false, error: "That record no longer exists — please refresh." };
+      return { ok: false, error: `Database error ${e.code}: ${e.message.split("\n")[0]}` };
+    }
+    if (e instanceof Prisma.PrismaClientValidationError)
+      return { ok: false, error: `Invalid data: ${e.message.split("\n").filter(Boolean)[0]}` };
     console.error("Server action failure:", e);
-    return { ok: false, error: "Something went wrong, please try again." };
+    return { ok: false, error: describe(e) };
   }
+}
+
+/** Keep the real cause visible to admins instead of a silent generic toast. */
+function describe(e: unknown): string {
+  const msg = e instanceof Error ? e.message.split("\n")[0] : String(e);
+  return msg.length > 220 ? `${msg.slice(0, 220)}…` : msg;
 }
 
 /* ------------------------- admin: match + roster --------------------------- */
@@ -121,6 +133,8 @@ export async function adminOverrideScoreAction(input: {
   homeScore: number;
   awayScore: number;
   note?: string;
+  /** Also close the match — used for walkovers that never kicked off. */
+  finish?: boolean;
 }): Promise<ActionResult> {
   return runEngine((actor) => adminOverrideScore(actor, input));
 }
@@ -229,6 +243,15 @@ export async function requestSubstitutionAction(input: {
   playerInUserId: string;
 }): Promise<ActionResult> {
   return runEngine((actor) => requestSubstitution(actor, input));
+}
+
+/** Official-made substitution — no captain request involved. */
+export async function adminSubstituteAction(input: {
+  code: string;
+  playerOutUserId: string;
+  playerInUserId: string;
+}): Promise<ActionResult> {
+  return runEngine((actor) => adminSubstitute(actor, input));
 }
 
 export async function transferCaptaincyAction(input: {

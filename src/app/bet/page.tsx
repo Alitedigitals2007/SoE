@@ -1,30 +1,13 @@
 import Link from "next/link";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { formGuide, goalsOdds, oddsForMatch } from "@/lib/bet/odds";
+import { allOdds, formGuide } from "@/lib/bet/odds";
 import { ensureWallet } from "@/lib/bet/wallet";
 import { PublicShell } from "@/components/site";
 import { Badge } from "@/components/ui";
-import { BetTerminal, type BetMatch, type BetRow, type LeaderRow, type TxnRow } from "@/components/bet";
+import { BetTerminal, selectionLabel, type BetMatch, type BetRow, type LeaderRow, type TxnRow } from "@/components/bet";
 
 export const dynamic = "force-dynamic";
-
-function selectionLabel(market: string, selection: string, legCount?: number): string {
-  switch (market) {
-    case "MATCH_RESULT":
-      return { HOME: "Home win", DRAW: "Draw", AWAY: "Away win" }[selection] ?? selection;
-    case "EXACT_SCORE":
-      return `Score ${selection}`;
-    case "TOTAL_GOALS":
-      return selection.startsWith("O") ? `Over ${selection.slice(1)} goals` : `Under ${selection.slice(1)} goals`;
-    case "BOTH_TEAMS_TO_SCORE":
-      return selection === "YES" ? "Yes" : "No";
-    case "ACCA":
-      return `${legCount ?? 0} legs`;
-    default:
-      return selection;
-  }
-}
 
 export default async function BetPage() {
   const session = await auth();
@@ -48,17 +31,25 @@ export default async function BetPage() {
   });
 
   const matches: BetMatch[] = await Promise.all(
-    rawMatches.map(async (m) => ({
-      id: m.id,
-      fixture: `${m.homeName} v ${m.awayName}`,
-      homeName: m.homeName,
-      awayName: m.awayName,
-      competition: m.competition?.name ?? null,
-      kickoff: m.scheduledAt!.toISOString(),
-      odds: await oddsForMatch(m),
-      goals: await goalsOdds(m),
-      form: await formGuide(m.homeTeamId, m.awayTeamId),
-    })),
+    rawMatches.map(async (m) => {
+      const [all, form] = await Promise.all([allOdds(m), formGuide(m.homeTeamId, m.awayTeamId)]);
+      return {
+        id: m.id,
+        fixture: `${m.homeName} v ${m.awayName}`,
+        homeName: m.homeName,
+        awayName: m.awayName,
+        competition: m.competition?.name ?? null,
+        kickoff: m.scheduledAt!.toISOString(),
+        odds: all.match,
+        goals: all.goals,
+        doubleChance: all.doubleChance,
+        drawNoBet: all.drawNoBet,
+        halfResult: all.halfResult,
+        halfFull: all.halfFull,
+        teamTotals: all.teamTotals,
+        form,
+      };
+    }),
   );
 
   // Public leaderboard: top virtual-point balances.
@@ -116,6 +107,7 @@ export default async function BetPage() {
         : undefined;
       return {
         id: b.id,
+        code: b.code,
         fixture: `${b.match.homeName} v ${b.match.awayName}`,
         market: b.market,
         selectionLabel: selectionLabel(b.market, b.selection, legs?.length),
@@ -185,7 +177,7 @@ export default async function BetPage() {
           <h2 className="text-sm font-black uppercase tracking-wider text-fg">How it works</h2>
           <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-muted">
             <li>Every new account gets <strong className="text-fg">100 virtual points</strong> — these are not real money.</li>
-            <li>Markets open on every scheduled match: <strong className="text-fg">home win / draw / away win</strong>, <strong className="text-fg">exact scores (0–0 up to 10–0)</strong>, <strong className="text-fg">over/under totals</strong> and <strong className="text-fg">both-teams-to-score</strong>.</li>
+            <li>Markets open on every scheduled match: <strong className="text-fg">home win / draw / away win</strong>, <strong className="text-fg">exact scores (0–0 up to 10–0)</strong>, <strong className="text-fg">over/under totals</strong> and <strong className="text-fg">both-teams-to-score</strong> — plus <strong className="text-fg">double chance</strong>, <strong className="text-fg">draw-no-bet</strong>, <strong className="text-fg">half-time result</strong>, <strong className="text-fg">half-time / full-time</strong> and <strong className="text-fg">team goal totals</strong>.</li>
             <li>Add 2–6 selections from different matches for an <strong className="text-fg">accumulator</strong> — the odds multiply.</li>
             <li>Stake up to <strong className="text-fg">500 points</strong> per bet (max 5 open bets per match, 10 open accumulators).</li>
             <li>Odds are automatic — league matches use the standings, other matches standard prices; exact scores and totals run on an expected-goals model. Each card shows both teams&apos; recent form.</li>

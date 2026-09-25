@@ -154,7 +154,7 @@ export async function eligiblePlayersAction(competitionId: string) {
 
 export async function standingsAction(competitionId: string) {
   try {
-    const rows = await leagueStandings(competitionId);
+    const rows = await leagueStandings(competitionId, { live: true });
     return { ok: true as const, data: rows };
   } catch (e) {
     console.error(e);

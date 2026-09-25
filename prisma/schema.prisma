@@ -600,6 +600,11 @@ enum BetMarket {
   EXACT_SCORE // e.g. "2-1"
   TOTAL_GOALS // over/under a line, e.g. "O2.5"
   BOTH_TEAMS_TO_SCORE // "YES" | "NO"
+  DOUBLE_CHANCE // "1X" | "X2" | "12"
+  DRAW_NO_BET // "HOME" | "AWAY" — a draw refunds the stake (VOID)
+  HALF_RESULT // half-time result: "HOME" | "DRAW" | "AWAY"
+  HALF_FULL // half-time/full-time, e.g. "HD" (H/D/A at half, then at full)
+  TEAM_TOTALS // per-team goals: "H_O2.5" | "A_U1.5" …
   ACCA // accumulator across matches (legs in `legs`)
 }
 
@@ -612,6 +617,7 @@ enum BetStatus {
 
 model Bet {
   id              String      @id @default(cuid())
+  code            String      @unique // public share code for the slip: /bet/slip/[code]
   userId          String
   user            User        @relation(fields: [userId], references: [id], onDelete: Cascade)
   matchId         String

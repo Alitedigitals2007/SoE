@@ -895,18 +895,62 @@ export async function setFantasyPicks(actor: Actor, input: { competitionId: stri
 
 /* ------------------------------- standings -------------------------------- */
 
-export async function leagueStandings(competitionId: string) {
+export type StandingRow = {
+  id: string;
+  name: string;
+  slug: string;
+  code: string;
+  p: number;
+  w: number;
+  d: number;
+  l: number;
+  gf: number;
+  ga: number;
+  pts: number;
+  /** This team has a match in progress right now (drives the live table). */
+  playing: boolean;
+};
+
+/** How many matches of this competition are being played right now. */
+export async function liveMatchCount(competitionId: string): Promise<number> {
+  return prisma.match.count({ where: { competitionId, status: "LIVE" } });
+}
+
+/**
+ * League table. `live: true` also counts matches that are still being played,
+ * so goals scored mid-matchday move the rows immediately — exactly like a
+ * Premier League table on a Saturday. Finished matches replace those numbers
+ * as soon as the whistle goes.
+ */
+export async function leagueStandings(
+  competitionId: string,
+  opts: { live?: boolean } = {},
+): Promise<StandingRow[]> {
+  const statuses = opts.live ? (["FINISHED", "LIVE"] as const) : (["FINISHED"] as const);
   const teams = await prisma.competitionTeam.findMany({
     where: { competitionId },
     include: { team: { select: { id: true, name: true, slug: true, code: true } } },
     orderBy: { seed: "asc" },
   });
   const matches = await prisma.match.findMany({
-    where: { competitionId, status: "FINISHED", homeTeamId: { not: null }, awayTeamId: { not: null } },
-    select: { homeTeamId: true, awayTeamId: true, homeScore: true, awayScore: true },
+    where: {
+      competitionId,
+      status: { in: [...statuses] },
+      homeTeamId: { not: null },
+      awayTeamId: { not: null },
+    },
+    select: { homeTeamId: true, awayTeamId: true, homeScore: true, awayScore: true, status: true },
   });
 
-  type Row = { id: string; name: string; slug: string; code: string; p: number; w: number; d: number; l: number; gf: number; ga: number; pts: number };
+  const playing = new Set<string>();
+  for (const m of matches) {
+    if (m.status === "LIVE") {
+      if (m.homeTeamId) playing.add(m.homeTeamId);
+      if (m.awayTeamId) playing.add(m.awayTeamId);
+    }
+  }
+
+  type Row = Omit<StandingRow, "playing">;
   const rows = new Map<string, Row>();
   for (const t of teams) {
     rows.set(t.team.id, { id: t.team.id, name: t.team.name, slug: t.team.slug, code: t.team.code, p: 0, w: 0, d: 0, l: 0, gf: 0, ga: 0, pts: 0 });
@@ -922,7 +966,9 @@ export async function leagueStandings(competitionId: string) {
     else if (m.homeScore < m.awayScore) { a.w++; a.pts += 3; h.l++; }
     else { h.d++; a.d++; h.pts++; a.pts++; }
   }
-  return [...rows.values()].sort((x, y) => y.pts - x.pts || y.gf - y.ga - (x.gf - x.ga) || y.gf - x.gf || x.name.localeCompare(y.name));
+  return [...rows.values()]
+    .map((r) => ({ ...r, playing: playing.has(r.id) }))
+    .sort((x, y) => y.pts - x.pts || y.gf - y.ga - (x.gf - x.ga) || y.gf - x.gf || x.name.localeCompare(y.name));
 }
 
 /* ----------------------------- public stat cards --------------------------- */

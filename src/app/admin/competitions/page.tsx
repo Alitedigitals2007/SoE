@@ -1,13 +1,10 @@
 import Link from "next/link";
-import { requireRole } from "@/lib/authz";
 import { prisma } from "@/lib/prisma";
-import { TopBar } from "@/components/app";
 import { Badge } from "@/components/ui";
 
 export const dynamic = "force-dynamic";
 
 export default async function AdminCompetitions() {
-  const user = await requireRole(["ADMIN"]);
   const comps = await prisma.competition.findMany({
     orderBy: { createdAt: "desc" },
     include: { _count: { select: { teams: true, matches: true } } },
@@ -15,7 +12,6 @@ export default async function AdminCompetitions() {
 
   return (
     <>
-      <TopBar name={user.name} role={user.role} />
       <main className="mx-auto w-full max-w-6xl px-4 py-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>

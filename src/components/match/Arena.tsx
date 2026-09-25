@@ -3,6 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import {
+  adminSubstituteAction,
   decideRoundAction,
   decideSubstitutionAction,
   endMatchAction,
@@ -18,11 +19,14 @@ import {
   takePenaltyKickAction,
   transferCaptaincyAction,
 } from "@/app/actions/match";
+import { getLiveOddsAction } from "@/app/actions/bet";
+import type { LiveOdds } from "@/lib/bet/liveOdds";
 import { useMatchState, type LiveMode } from "@/components/match/useMatchState";
 import { Badge, Button, Card, CardHeader, EmptyState, Select, Spinner, cn } from "@/components/ui";
-import { normalizeAnswer } from "@/lib/normalize";
+import { matchesReference, normalizeAnswer } from "@/lib/normalize";
 import { PotmVote } from "@/components/match/PotmVote";
 import {
+  HALFTIME_SECONDS,
   INCIDENT_ACTIONS,
   INCIDENT_LABELS,
   type IncidentAction,
@@ -195,11 +199,7 @@ function ArenaInner({
     <div className="mx-auto w-full max-w-7xl px-4 py-6">
       <MatchHeader snapshot={snapshot} mode={mode} />
 
-      {snapshot.paused && snapshot.status === "LIVE" ? (
-        <div className="mt-4 rounded-xl border-2 border-warning/50 bg-warning/10 px-4 py-3 text-center text-sm font-semibold text-warning">
-          ⏸ Match paused{snapshot.pauseNote ? ` — ${snapshot.pauseNote}` : ""}
-        </div>
-      ) : null}
+      <PauseBanner snapshot={snapshot} onError={onError} />
 
       <div className="mt-4 grid gap-4 lg:grid-cols-3">
         <div className="lg:col-span-2 space-y-4">
@@ -230,22 +230,170 @@ function ArenaInner({
         </div>
 
         <aside className="space-y-4">
+          {snapshot.status !== "FINISHED" ? <LiveOddsPanel snapshot={snapshot} /> : null}
           {snapshot.viewer.isReferee && snapshot.status !== "FINISHED" ? (
             <RefereeQuickActions snapshot={snapshot} onError={onError} />
           ) : null}
           {matchLive ? <CommentaryCard snapshot={snapshot} /> : null}
           <LineupCard snapshot={snapshot} />
           <TimelineCard snapshot={snapshot} />
-          {snapshot.status !== "DRAFT" && (
+          {snapshot.status !== "DRAFT" && !matchLive ? (
             <ChatBox matchId={snapshot.matchId} matchCode={snapshot.code} />
-          )}
+          ) : null}
         </aside>
       </div>
+
+      {/* During gameplay the chat floats bottom-right with an unread counter,
+          so it stays reachable without scrolling away from the action. */}
+      {matchLive ? <ChatBox matchId={snapshot.matchId} matchCode={snapshot.code} docked /> : null}
     </div>
   );
 }
 
+/* ---------------------------------- odds ----------------------------------- */
+
+/** Odds panel for the sidebar — display only; betting closes at kick-off. */
+function LiveOddsPanel({ snapshot }: { snapshot: MatchSnapshot }) {
+  const [odds, setOdds] = React.useState<LiveOdds | null>(null);
+  const [failed, setFailed] = React.useState(false);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const res = await getLiveOddsAction([snapshot.matchId]);
+        if (cancelled) return;
+        if (res.ok) {
+          setOdds(res.data[0] ?? null);
+          setFailed(false);
+        } else {
+          setFailed(true);
+        }
+      } catch {
+        if (!cancelled) setFailed(true);
+      }
+    };
+    void load();
+    const t = window.setInterval(() => void load(), 15000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(t);
+    };
+  }, [snapshot.matchId, snapshot.version]);
+
+  if (failed && !odds) return null;
+
+  const cells = odds
+    ? [
+        { label: snapshot.homeName, short: "1", value: odds.home },
+        { label: "Draw", short: "X", value: odds.draw },
+        { label: snapshot.awayName, short: "2", value: odds.away },
+      ]
+    : [];
+
+  return (
+    <Card>
+      <CardHeader
+        title="Odds"
+        description={odds?.phase === "PRE" ? "Pre-match prices" : "In-play prices"}
+        aside={<Badge tone="info">display only</Badge>}
+      />
+      <div className="px-5 py-4">
+        {odds ? (
+          <>
+            <div className="grid grid-cols-3 gap-1.5 text-center">
+              {cells.map((c) => (
+                <span key={c.short} className="rounded-lg border border-line bg-surface px-1.5 py-1" title={c.label}>
+                  <span className="block text-[9px] font-black uppercase tracking-widest text-subtle">{c.short}</span>
+                  <span className="block text-base font-black tabular-nums text-fg">{c.value}</span>
+                </span>
+              ))}
+            </div>
+            <div className="mt-1.5 flex justify-center gap-1.5 text-center">
+              <span className="rounded-lg border border-line bg-surface px-2 py-1">
+                <span className="block text-[9px] font-black uppercase tracking-widest text-subtle">Over 2.5</span>
+                <span className="block text-sm font-black tabular-nums text-fg">{odds.over25}</span>
+              </span>
+              <span className="rounded-lg border border-line bg-surface px-2 py-1">
+                <span className="block text-[9px] font-black uppercase tracking-widest text-subtle">Under 2.5</span>
+                <span className="block text-sm font-black tabular-nums text-fg">{odds.under25}</span>
+              </span>
+              <span className="rounded-lg border border-line bg-surface px-2 py-1">
+                <span className="block text-[9px] font-black uppercase tracking-widest text-subtle">BTTS</span>
+                <span className="block text-sm font-black tabular-nums text-fg">{odds.bttsYes}</span>
+              </span>
+            </div>
+            <p className="mt-2 text-center text-[10px] text-subtle">
+              Prices refresh automatically — bets closed at kick-off.
+            </p>
+          </>
+        ) : (
+          <Spinner className="mx-auto" />
+        )}
+      </div>
+    </Card>
+  );
+}
+
 /* --------------------------------- header ---------------------------------- */
+
+function PauseBanner({ snapshot, onError }: { snapshot: MatchSnapshot; onError: (e: string | null) => void }) {
+  const [now, setNow] = React.useState(() => Date.now());
+  const [busy, setBusy] = React.useState(false);
+  React.useEffect(() => {
+    if (!snapshot.paused) return;
+    const t = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(t);
+  }, [snapshot.paused]);
+
+  if (!snapshot.paused || snapshot.status !== "LIVE") return null;
+
+  const isHalfTime = snapshot.pauseNote === "Half-time";
+  const official = snapshot.viewer.isReferee || snapshot.viewer.isAdmin;
+  const endsAt = snapshot.pausedAt ? new Date(snapshot.pausedAt).getTime() + HALFTIME_SECONDS * 1000 : null;
+  const left = endsAt ? Math.max(0, Math.ceil((endsAt - now) / 1000)) : null;
+
+  const resume = async () => {
+    setBusy(true);
+    try {
+      const res = await resumeMatchAction(snapshot.code);
+      onError(res.ok ? null : res.error);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (isHalfTime) {
+    return (
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border-2 border-gold/50 bg-gold/10 px-4 py-3">
+        <div className="text-sm font-semibold text-gold">🥤 Half-time — the second half kicks off in a moment</div>
+        <div className="flex items-center gap-3">
+          {left !== null ? (
+            <span className="font-display text-lg font-black tabular-nums text-gold">0:{String(left).padStart(2, "0")}</span>
+          ) : null}
+          {official ? (
+            <Button size="sm" variant="primary" loading={busy} onClick={resume}>
+              ▶ Resume match
+            </Button>
+          ) : (
+            <span className="text-xs font-medium uppercase tracking-widest text-gold/80">Second half coming up</span>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-4 rounded-xl border-2 border-warning/50 bg-warning/10 px-4 py-3 text-center text-sm font-semibold text-warning">
+      ⏸ Match paused{snapshot.pauseNote ? ` — ${snapshot.pauseNote}` : ""}
+      {official ? (
+        <button className="ml-3 underline underline-offset-2" disabled={busy} onClick={resume}>
+          Resume
+        </button>
+      ) : null}
+    </div>
+  );
+}
 
 function MatchHeader({ snapshot, mode }: { snapshot: MatchSnapshot; mode: LiveMode }) {
   const live = snapshot.status === "LIVE";
@@ -299,7 +447,7 @@ function MatchHeader({ snapshot, mode }: { snapshot: MatchSnapshot; mode: LiveMo
 
 function LiveClock({ startedAt, paused }: { startedAt: string; paused: boolean }) {
   const start = new Date(startedAt).getTime();
-  const [now, setNow] = React.useState(Date.now());
+  const [now, setNow] = React.useState(() => Date.now());
   React.useEffect(() => {
     const t = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(t);
@@ -420,7 +568,6 @@ function PreMatch({ snapshot }: { snapshot: MatchSnapshot }) {
 function Stage({ snapshot, onError }: { snapshot: MatchSnapshot; onError: (e: string | null) => void }) {
   const round = snapshot.round;
   const isReferee = snapshot.viewer.isReferee;
-  const isCup = snapshot.competitionType === "CUP";
   const isDraw = snapshot.homeScore === snapshot.awayScore;
 
   if (!round) {
@@ -606,6 +753,14 @@ function LockedStage({
                     <span className="flex min-w-0 items-baseline gap-2">
                       <span className="text-xs font-semibold text-subtle">#{i + 1}</span>
                       <span className="truncate font-medium text-fg">{a.answer}</span>
+                      {isReferee && round.correctAnswer && matchesReference(a.answer, round.correctAnswer) ? (
+                        <span
+                          className="shrink-0 rounded bg-success/15 px-1.5 py-0.5 text-[10px] font-bold text-success"
+                          title={`Matches the answer key (${round.correctAnswer}) once chemistry/maths notation is normalised`}
+                        >
+                          ✓ answer key
+                        </span>
+                      ) : null}
                       {isReferee && normalizeAnswer(a.answer) !== a.answer.trim() ? (
                         <span className="shrink-0 rounded bg-surface px-1.5 py-0.5 text-[10px] text-subtle" title="Normalised form used for matching">
                           ≈ {normalizeAnswer(a.answer)}
@@ -892,6 +1047,7 @@ function RefereeTools({ snapshot, onError }: { snapshot: MatchSnapshot; onError:
     <>
       <CaptainHandoffCard snapshot={snapshot} onError={onError} />
       <SubRequestsCard snapshot={snapshot} requests={requests} onError={onError} />
+      <ManualSubCard snapshot={snapshot} onError={onError} />
       <ConductCard snapshot={snapshot} onError={onError} />
     </>
   );
@@ -936,6 +1092,74 @@ function SubRequestsCard({
           ))
         )}
       </div>
+    </Card>
+  );
+}
+
+/** Direct substitution by an official — skips the captain request entirely. */
+function ManualSubCard({ snapshot, onError }: { snapshot: MatchSnapshot; onError: (e: string | null) => void }) {
+  const [team, setTeam] = React.useState<TeamSide>(snapshot.viewer.player?.team ?? "HOME");
+  const [outId, setOutId] = React.useState("");
+  const [inId, setInId] = React.useState("");
+  const [busy, setBusy] = React.useState(false);
+
+  const starters = snapshot.roster.filter((r) => r.team === team && r.role === "STARTER");
+  const bench = snapshot.roster.filter((r) => r.team === team && r.role === "SUB");
+  const ready = !!outId && !!inId && outId !== inId && !busy;
+
+  return (
+    <Card>
+      <CardHeader title="Make a substitution" description="Official override — no captain request needed." />
+      <form
+        className="space-y-3 p-3"
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (!ready) return;
+          setBusy(true);
+          void submit(adminSubstituteAction({ code: snapshot.code, playerOutUserId: outId, playerInUserId: inId }), onError).finally(() => {
+            setBusy(false);
+            setOutId("");
+            setInId("");
+          });
+        }}
+      >
+        <div className="grid gap-2 sm:grid-cols-3">
+          <label className="text-xs font-semibold text-muted">
+            Team
+            <Select value={team} onChange={(e) => { setTeam(e.target.value as TeamSide); setOutId(""); setInId(""); }} className="mt-1 w-full py-1 text-sm">
+              <option value="HOME">{snapshot.homeName}</option>
+              <option value="AWAY">{snapshot.awayName}</option>
+            </Select>
+          </label>
+          <label className="text-xs font-semibold text-muted">
+            Player off
+            <Select value={outId} onChange={(e) => setOutId(e.target.value)} className="mt-1 w-full py-1 text-sm">
+              <option value="">Choose…</option>
+              {starters.map((p) => (
+                <option key={p.userId} value={p.userId}>
+                  #{p.number} {p.name}{p.isCaptain ? " (C)" : ""}
+                </option>
+              ))}
+            </Select>
+          </label>
+          <label className="text-xs font-semibold text-muted">
+            Player on
+            <Select value={inId} onChange={(e) => setInId(e.target.value)} className="mt-1 w-full py-1 text-sm">
+              <option value="">Choose…</option>
+              {bench.map((p) => (
+                <option key={p.userId} value={p.userId}>
+                  #{p.number} {p.name}
+                </option>
+              ))}
+            </Select>
+          </label>
+        </div>
+        <Button type="submit" variant="pitch" loading={busy} disabled={!ready}>
+          Confirm substitution
+        </Button>
+        {starters.length === 0 ? <p className="text-xs text-subtle">No starters on this team&apos;s sheet.</p> : null}
+        {bench.length === 0 ? <p className="text-xs text-subtle">This team has no bench players available.</p> : null}
+      </form>
     </Card>
   );
 }
@@ -1023,11 +1247,11 @@ function CaptainHandoffCard({
 }) {
   const my = snapshot.viewer.player;
   const isOfficial = snapshot.viewer.isReferee || snapshot.viewer.role === "ADMIN";
-  if (!ownSideOnly && !isOfficial) return null;
-  if (ownSideOnly && !my?.isCaptain) return null;
-
   const [teamSel, setTeamSel] = React.useState<"HOME" | "AWAY">(my?.team ?? "HOME");
   const [toId, setToId] = React.useState("");
+
+  if (!ownSideOnly && !isOfficial) return null;
+  if (ownSideOnly && !my?.isCaptain) return null;
 
   const teamStarters = snapshot.roster.filter((r) => r.team === teamSel && r.role === "STARTER");
   const captain = teamStarters.find((r) => r.isCaptain);
@@ -1231,13 +1455,11 @@ function PenaltyShootoutCard({ snapshot, onError }: { snapshot: MatchSnapshot; o
     () => (ps ? snapshot.roster.filter((r) => r.team === side && r.role === "STARTER") : []),
     [snapshot.roster, side, ps],
   );
-  const [taker, setTaker] = React.useState("");
-  React.useEffect(() => {
-    if (!ps) return;
-    const captain = sideStarters.find((r) => r.isCaptain);
-    const fallback = captain?.userId ?? sideStarters[0]?.userId ?? "";
-    setTaker((prev) => (prev && sideStarters.some((s) => s.userId === prev) ? prev : fallback));
-  }, [side, sideStarters, ps]);
+  // The taker is derived: keep whatever the referee picked while it is still
+  // a valid starter for the kicking side, otherwise fall back to the captain.
+  const [picked, setPicked] = React.useState<string | null>(null);
+  const defaultTaker = (sideStarters.find((r) => r.isCaptain) ?? sideStarters[0])?.userId ?? "";
+  const taker = picked && sideStarters.some((s) => s.userId === picked) ? picked : defaultTaker;
 
   if (!ps) return null;
   const isReferee = snapshot.viewer.isReferee;
@@ -1280,7 +1502,7 @@ function PenaltyShootoutCard({ snapshot, onError }: { snapshot: MatchSnapshot; o
             <div className="mt-2 flex flex-wrap items-center gap-3">
               <label className="flex items-center gap-2 text-xs font-semibold text-muted">
                 Who takes it?
-                <Select value={taker} onChange={(e) => setTaker(e.target.value)} className="w-44 py-1 text-xs">
+                <Select value={taker} onChange={(e) => setPicked(e.target.value)} className="w-44 py-1 text-xs">
                   {sideStarters.map((p) => (
                     <option key={p.userId} value={p.userId}>
                       {p.isCaptain ? `${p.name} (C)` : p.name}
@@ -1393,7 +1615,7 @@ function FullTime({
       <Card className="mb-4">
         <div className="flex flex-wrap items-center justify-between gap-3 p-4">
           <p className="text-sm font-semibold text-fg">
-            It's level at full time — decide a winner with a penalty shootout.
+            It&apos;s level at full time — decide a winner with a penalty shootout.
           </p>
           <Button variant="pitch" onClick={() => submit(startPenaltiesAction(snapshot.code), onError)}>
             ⚽ Start penalties

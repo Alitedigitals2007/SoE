@@ -33,10 +33,18 @@ export type BetMatch = {
   odds: MarketOdds;
   goals: GoalsOddsUI;
   form: FormGuideUI;
+  doubleChance: { "1X": number; X2: number; "12": number };
+  drawNoBet: { HOME: number; AWAY: number };
+  halfResult: { HOME: number; DRAW: number; AWAY: number };
+  /** HT/FT cells keyed HH, HD, HA, DH, DD, DA, AH, AD, AA. */
+  halfFull: Record<string, number>;
+  teamTotals: { HOME: { line: number; over: number; under: number }[]; AWAY: { line: number; over: number; under: number }[] };
 };
 
 export type BetRow = {
   id: string;
+  /** Public share code → /bet/slip/[code]. */
+  code: string;
   fixture: string;
   market: string;
   selectionLabel: string;
@@ -98,16 +106,52 @@ const TXN_ICON: Record<string, string> = {
   ADMIN_ADJUST: "🛠️",
 };
 
-function marketTitle(market: string): string {
+export function marketTitle(market: string): string {
   return (
     {
       MATCH_RESULT: "Match result",
       EXACT_SCORE: "Exact score",
       TOTAL_GOALS: "Goals total",
       BOTH_TEAMS_TO_SCORE: "Both teams to score",
+      DOUBLE_CHANCE: "Double chance",
+      DRAW_NO_BET: "Draw no bet",
+      HALF_RESULT: "Half-time result",
+      HALF_FULL: "Half-time / full-time",
+      TEAM_TOTALS: "Team goals",
       ACCA: "Accumulator",
     } as Record<string, string>
   )[market] ?? market;
+}
+
+/** Human label for a stored bet selection (used by My bets and the public slip page). */
+export function selectionLabel(market: string, selection: string, legCount?: number): string {
+  switch (market) {
+    case "MATCH_RESULT":
+      return { HOME: "Home win", DRAW: "Draw", AWAY: "Away win" }[selection] ?? selection;
+    case "EXACT_SCORE":
+      return `Score ${selection}`;
+    case "TOTAL_GOALS":
+      return selection.startsWith("O") ? `Over ${selection.slice(1)} goals` : `Under ${selection.slice(1)} goals`;
+    case "BOTH_TEAMS_TO_SCORE":
+      return selection === "YES" ? "Yes" : "No";
+    case "DOUBLE_CHANCE":
+      return { "1X": "Home or draw", X2: "Draw or away", "12": "Either team to win" }[selection] ?? selection;
+    case "DRAW_NO_BET":
+      return selection === "HOME" ? "Home win (draw refunds)" : "Away win (draw refunds)";
+    case "HALF_RESULT":
+      return { HOME: "Home at half-time", DRAW: "Draw at half-time", AWAY: "Away at half-time" }[selection] ?? selection;
+    case "HALF_FULL":
+      return `HT/FT ${selection}`;
+    case "TEAM_TOTALS": {
+      const team = selection.startsWith("H") ? "home" : "away";
+      const over = selection.includes("_O");
+      return `${over ? "Over" : "Under"} ${selection.slice(3)} (${team})`;
+    }
+    case "ACCA":
+      return `${legCount ?? 0} legs`;
+    default:
+      return selection;
+  }
 }
 
 /** Same WAT convention as formatKickoffWat, for plain timestamps. */
@@ -456,6 +500,7 @@ export function BetTerminal({
 function MarketCard({ match, legs, onPick }: { match: BetMatch; legs: SlipLeg[]; onPick: (l: SlipLeg) => void }) {
   const [openScores, setOpenScores] = React.useState(false);
   const [openGoals, setOpenGoals] = React.useState(false);
+  const [openHalf, setOpenHalf] = React.useState(false);
   const [customH, setCustomH] = React.useState(0);
   const [customA, setCustomA] = React.useState(0);
 
@@ -520,6 +565,140 @@ function MarketCard({ match, legs, onPick }: { match: BetMatch; legs: SlipLeg[];
           );
         })}
       </div>
+
+      {/* -------- double chance -------- */}
+      <div className="mt-3 grid grid-cols-3 gap-2">
+        {[
+          { sel: "1X", label: "1X", sub: "home or draw", odds: match.doubleChance["1X"] },
+          { sel: "X2", label: "X2", sub: "draw or away", odds: match.doubleChance.X2 },
+          { sel: "12", label: "12", sub: "either wins", odds: match.doubleChance["12"] },
+        ].map((o) => {
+          const on = isSelected("DOUBLE_CHANCE", o.sel);
+          return (
+            <button
+              key={o.sel}
+              type="button"
+              onClick={() => onPick({ ...base, market: "DOUBLE_CHANCE", selection: o.sel, label: `Double chance ${o.label}`, odds: o.odds })}
+              aria-pressed={on}
+              className={cn(
+                "rounded-xl border-2 px-2 py-2 text-center transition-all",
+                on ? "border-brand bg-brand text-white shadow-[2px_2px_0_rgba(11,32,48,.15)]" : "border-line bg-surface hover:-translate-y-0.5 hover:border-brand/50",
+              )}
+            >
+              <span className={cn("block text-sm font-black", on ? "text-white" : "text-fg")}>{o.label}</span>
+              <span className={cn("block text-[9px] leading-tight", on ? "text-white/75" : "text-subtle")}>{o.sub}</span>
+              <span className="mt-0.5 block text-base font-black tabular-nums">{o.odds}</span>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* -------- draw no bet -------- */}
+      <div className="mt-2 grid grid-cols-2 gap-2">
+        {[
+          { sel: "HOME", label: match.homeName, odds: match.drawNoBet.HOME },
+          { sel: "AWAY", label: match.awayName, odds: match.drawNoBet.AWAY },
+        ].map((o) => {
+          const on = isSelected("DRAW_NO_BET", o.sel);
+          return (
+            <button
+              key={o.sel}
+              type="button"
+              onClick={() => onPick({ ...base, market: "DRAW_NO_BET", selection: o.sel, label: `${o.label} (no draw)`, odds: o.odds })}
+              aria-pressed={on}
+              className={cn(
+                "flex items-center justify-between gap-2 rounded-xl border-2 px-2 py-2 text-left transition-all",
+                on ? "border-brand bg-brand text-white shadow-[2px_2px_0_rgba(11,32,48,.15)]" : "border-line bg-surface hover:-translate-y-0.5 hover:border-brand/50",
+              )}
+            >
+              <span className={cn("min-w-0 truncate text-[11px] font-semibold", on ? "text-white/90" : "text-muted")}>{o.label}</span>
+              <span className={cn("text-base font-black tabular-nums", on ? "text-white" : "text-fg")}>{o.odds}</span>
+            </button>
+          );
+        })}
+      </div>
+      <p className="mt-1 text-center text-[9px] text-subtle">Draw no bet — a draw refunds the stake (singles only)</p>
+
+      {/* -------- half-time markets -------- */}
+      <button
+        type="button"
+        onClick={() => setOpenHalf((v) => !v)}
+        aria-expanded={openHalf}
+        className="mt-2 flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-xs font-semibold text-muted transition-colors hover:bg-surface hover:text-fg"
+      >
+        Half-time markets <span className="text-subtle">(HT result &amp; HT/FT)</span>
+        <span aria-hidden className={cn("transition-transform duration-200", openHalf && "rotate-180")}>
+          ▾
+        </span>
+      </button>
+
+      {openHalf ? (
+        <div className="mt-2 rounded-xl border border-line bg-surface p-2.5">
+          <p className="text-[10px] font-black uppercase tracking-wider text-subtle">Result at the break</p>
+          <div className="mt-1.5 grid grid-cols-3 gap-1.5">
+            {[
+              { sel: "HOME", label: match.homeName, odds: match.halfResult.HOME },
+              { sel: "DRAW", label: "Draw", odds: match.halfResult.DRAW },
+              { sel: "AWAY", label: match.awayName, odds: match.halfResult.AWAY },
+            ].map((o) => {
+              const on = isSelected("HALF_RESULT", o.sel);
+              return (
+                <button
+                  key={o.sel}
+                  type="button"
+                  onClick={() => onPick({ ...base, market: "HALF_RESULT", selection: o.sel, label: `Half-time ${o.label.toLowerCase()}`, odds: o.odds })}
+                  aria-pressed={on}
+                  className={cn(
+                    "rounded-xl border-2 px-1.5 py-2 text-center transition-all",
+                    on ? "border-brand bg-brand text-white" : "border-line bg-white hover:border-brand/60",
+                  )}
+                >
+                  <span className={cn("block truncate text-[10px] font-semibold", on ? "text-white/90" : "text-muted")}>{o.label}</span>
+                  <span className="mt-0.5 block text-base font-black tabular-nums">{o.odds}</span>
+                </button>
+              );
+            })}
+          </div>
+
+          <p className="mt-3 text-[10px] font-black uppercase tracking-wider text-subtle">Half-time → full-time</p>
+          <div className="mt-1.5 grid grid-cols-[auto_repeat(3,minmax(0,1fr))] gap-1 text-center">
+            <span className="grid place-items-center text-[9px] font-black uppercase text-subtle">HT\FT</span>
+            {["H", "D", "A"].map((f) => (
+              <span key={`f${f}`} className="grid place-items-center text-[9px] font-black text-subtle">
+                {f === "H" ? "Home" : f === "D" ? "Draw" : "Away"}
+              </span>
+            ))}
+            {["H", "D", "A"].map((h) => (
+              <React.Fragment key={`ht${h}`}>
+                <span className="grid place-items-center pr-1 text-right text-[9px] font-black text-subtle">
+                  {h === "H" ? "Home" : h === "D" ? "Draw" : "Away"}
+                </span>
+                {["H", "D", "A"].map((f) => {
+                  const cell = `${h}${f}`;
+                  const odds = match.halfFull[cell] ?? 0;
+                  const on = isSelected("HALF_FULL", cell);
+                  return (
+                    <button
+                      key={cell}
+                      type="button"
+                      aria-label={`Half-time ${h}, full-time ${f}, odds ${odds}`}
+                      aria-pressed={on}
+                      onClick={() => onPick({ ...base, market: "HALF_FULL", selection: cell, label: `HT/FT ${cell}`, odds })}
+                      className={cn(
+                        "rounded-lg border py-1.5 text-xs font-black tabular-nums transition-colors",
+                        on ? "border-brand bg-brand text-white" : "border-line bg-white text-fg hover:border-brand/60 hover:bg-brand/5",
+                      )}
+                    >
+                      {odds}
+                    </button>
+                  );
+                })}
+              </React.Fragment>
+            ))}
+          </div>
+          <p className="mt-1.5 text-center text-[10px] text-subtle">First letter = half-time · second = full time (H home, D draw, A away)</p>
+        </div>
+      ) : null}
 
       {/* -------- exact scores -------- */}
       <button
@@ -680,6 +859,52 @@ function MarketCard({ match, legs, onPick }: { match: BetMatch; legs: SlipLeg[];
               </React.Fragment>
             ))}
           </div>
+
+          <p className="mt-3 text-[10px] font-black uppercase tracking-wider text-subtle">Team goals — over / under</p>
+          {([["HOME", match.homeName], ["AWAY", match.awayName]] as const).map(([side, teamName]) => (
+            <div key={side} className="mt-2">
+              <p className="text-[10px] font-semibold text-muted">{teamName}</p>
+              <div className="mt-1 grid grid-cols-[auto_1fr_1fr] items-center gap-1.5 text-center">
+                <span className="text-[10px] font-black uppercase tracking-wider text-subtle">Line</span>
+                <span className="text-[10px] font-black uppercase tracking-wider text-subtle">Over</span>
+                <span className="text-[10px] font-black uppercase tracking-wider text-subtle">Under</span>
+                {(side === "HOME" ? match.teamTotals.HOME : match.teamTotals.AWAY).map((l) => (
+                  <React.Fragment key={`${side}${l.line}`}>
+                    <span className="pr-1 text-right text-xs font-black tabular-nums text-fg">{l.line}</span>
+                    {[
+                      { sel: `${side === "HOME" ? "H" : "A"}_O${l.line}`, label: "Over", odds: l.over },
+                      { sel: `${side === "HOME" ? "H" : "A"}_U${l.line}`, label: "Under", odds: l.under },
+                    ].map((o) => {
+                      const on = isSelected("TEAM_TOTALS", o.sel);
+                      return (
+                        <button
+                          key={o.sel}
+                          type="button"
+                          onClick={() =>
+                            onPick({
+                              ...base,
+                              market: "TEAM_TOTALS",
+                              selection: o.sel,
+                              label: `${o.label} ${l.line} — ${teamName}`,
+                              odds: o.odds,
+                            })
+                          }
+                          aria-pressed={on}
+                          className={cn(
+                            "rounded-lg border-2 px-1 py-1.5 transition-all",
+                            on ? "border-brand bg-brand text-white" : "border-line bg-white hover:border-brand/60",
+                          )}
+                        >
+                          <span className={cn("block text-[10px] font-semibold", on ? "text-white/90" : "text-muted")}>{o.label}</span>
+                          <span className="block text-sm font-black tabular-nums">{o.odds}</span>
+                        </button>
+                      );
+                    })}
+                  </React.Fragment>
+                ))}
+              </div>
+            </div>
+          ))}
         </div>
       ) : null}
     </article>
@@ -751,6 +976,39 @@ function Stepper({
 
 /* --------------------------------- my bets --------------------------------- */
 
+/* --------------------------------- share ----------------------------------- */
+
+function ShareSlipButton({ code }: { code: string }) {
+  const [copied, setCopied] = React.useState(false);
+  const onShare = async () => {
+    const url = `${window.location.origin}/bet/slip/${code}`;
+    if (typeof navigator.share === "function") {
+      try {
+        await navigator.share({ title: "SoE betting slip", text: "My Stadium of Elite slip", url });
+        return;
+      } catch (e) {
+        if (e instanceof Error && e.name === "AbortError") return; // user closed the sheet
+      }
+    }
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1800);
+    } catch {
+      // clipboard unavailable — the link is on the slip page anyway
+    }
+  };
+  return (
+    <button
+      type="button"
+      onClick={onShare}
+      className="rounded-md border border-line px-1.5 py-0.5 text-[10px] font-bold text-brand transition-colors hover:border-brand/50 hover:bg-brand/5"
+    >
+      {copied ? "Link copied ✓" : "Share"}
+    </button>
+  );
+}
+
 function BetsList({ bets, signedIn }: { bets: BetRow[]; signedIn: boolean }) {
   if (!signedIn) {
     return (
@@ -786,7 +1044,10 @@ function BetsList({ bets, signedIn }: { bets: BetRow[]; signedIn: boolean }) {
               </Badge>
               {b.market === "ACCA" ? <Badge tone="info">Acca</Badge> : null}
             </div>
-            <span className="text-[11px] text-subtle">{fmtStamp(b.placedAt)}</span>
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] text-subtle">{fmtStamp(b.placedAt)}</span>
+              <ShareSlipButton code={b.code} />
+            </div>
           </div>
           <p className="mt-1.5 truncate text-sm font-bold text-fg">
             {b.fixture}
