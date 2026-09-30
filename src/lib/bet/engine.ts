@@ -645,6 +645,44 @@ function needsHalfTime(market: BetMarket): boolean {
   return market === "HALF_RESULT" || market === "HALF_FULL";
 }
 
+/**
+ * Status of a whole batch of selections in one pass — a single match query for
+ * the entire page, plus one half-time lookup per match that genuinely needs it.
+ * `null` means the selection's match hasn't finished, so it's still pending.
+ */
+export async function selectionOutcomes(
+  db: Prisma.TransactionClient | PrismaClient,
+  selections: { matchId: string; market: string; selection: string }[],
+): Promise<(BetOutcome | null)[]> {
+  if (selections.length === 0) return [];
+
+  const matchIds = [...new Set(selections.map((s) => s.matchId))];
+  const matches = await db.match.findMany({
+    where: { id: { in: matchIds } },
+    select: { id: true, status: true, homeScore: true, awayScore: true },
+  });
+  const byId = new Map(matches.map((m) => [m.id, m]));
+
+  const ht = new Map<string, { home: number; away: number } | null>();
+  for (const id of matchIds) {
+    const m = byId.get(id);
+    if (!m || m.status !== "FINISHED") continue;
+    if (selections.some((s) => s.matchId === id && needsHalfTime(s.market as BetMarket))) {
+      ht.set(id, await halfTimeScore(db, id));
+    }
+  }
+
+  return selections.map((s) => {
+    const m = byId.get(s.matchId);
+    if (!m || m.status !== "FINISHED") return null;
+    return selectionOutcome(s.market as BetMarket, s.selection, {
+      home: m.homeScore,
+      away: m.awayScore,
+      ht: ht.get(s.matchId) ?? null,
+    });
+  });
+}
+
 /** Fire settlement notifications (call AFTER the settlement transaction commits). */
 export async function emitSettleNotices(notices: SettleNotice[]): Promise<void> {
   if (!notices.length) return;

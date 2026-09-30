@@ -144,6 +144,14 @@ export default async function CompetitionDetail({ params }: { params: Promise<{ 
                                 <span aria-label="Playing now" className="inline-block size-1.5 shrink-0 animate-pulse rounded-full bg-danger" />
                               ) : null}
                             </Link>
+                            {r.left ? (
+                              <span
+                                title="This team left the competition — its results stay on the table"
+                                className="ml-1.5 inline-block rounded border border-line px-1 py-0.5 align-middle text-[9px] font-black uppercase tracking-wide text-subtle"
+                              >
+                                Left
+                              </span>
+                            ) : null}
                           </td>
                           <td className="px-2 py-2.5 text-center text-muted">{r.p}</td>
                           <td className="px-2 py-2.5 text-center text-muted">{r.w}</td>

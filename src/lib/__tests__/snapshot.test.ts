@@ -25,6 +25,7 @@ function makeMatch(overrides: Partial<MatchFull> = {}): MatchFull {
     timeline: [],
     questions: [],
     incidents: [],
+    integrityFlags: [],
     substitutions: [],
     requests: [],
     _count: { roster: 0 },

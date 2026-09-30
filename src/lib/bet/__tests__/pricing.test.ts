@@ -3,6 +3,7 @@ import {
   DEFAULT_PROBS,
   MAX_SCORE_GOALS,
   MARGIN,
+  MAX_ODDS,
   clamp,
   exactScoreProbability,
   expectedGoalsFromWinProb,
@@ -41,17 +42,22 @@ describe("price", () => {
     expect(price(0.27)).toBeCloseTo(MARGIN / 0.27, 2);
   });
 
-  it("keeps every price above 1 and capped at 999.99", () => {
+  it("keeps every price above 1 and capped at the 50.00 ceiling", () => {
     expect(price(0.999)).toBeGreaterThanOrEqual(1.1);
-    expect(price(0.0001)).toBeLessThanOrEqual(999.99);
-    expect(price(0.0000001)).toBe(999.99);
-    expect(price(0)).toBe(999.99);
+    expect(price(0.0001)).toBeLessThanOrEqual(MAX_ODDS);
+    expect(price(0.0000001)).toBe(MAX_ODDS);
+    expect(price(0)).toBe(MAX_ODDS);
   });
 
-  it("prices long shots above the old fake 80 ceiling, graded by probability", () => {
+  it("prices long shots by probability, graded, up to the 50.00 cap", () => {
     const likely = price(0.3);
+    const midRange = price(0.05);
     const longShot = price(0.001);
-    expect(longShot).toBeGreaterThan(80);
+    // graded: the rarer the outcome, the longer the price…
+    expect(likely).toBeLessThan(midRange);
+    expect(midRange).toBeLessThan(longShot);
+    // …and the extreme tail lands on the ceiling rather than running away.
+    expect(longShot).toBe(MAX_ODDS);
     expect(longShot).toBeGreaterThan(likely);
   });
 

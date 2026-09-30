@@ -156,7 +156,7 @@ function FixturesGroup({
   );
 
   const pagination = (
-    <Suspense>
+    <Suspense fallback={<div className="h-10" />}>
       <FixturesPagination section={section} page={page} totalPages={totalPages} />
     </Suspense>
   );

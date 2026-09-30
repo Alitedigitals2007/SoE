@@ -301,6 +301,8 @@ model Submission {
 
   @@unique([roundId, playerId])
   @@index([roundId, seq])
+  /// Forensic lookup: every paste a given player has ever submitted.
+  @@index([playerId, pasted])
 }
 
 /**

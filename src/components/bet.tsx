@@ -42,11 +42,15 @@ export type BetMatch = {
   teamTotals: { HOME: { line: number; over: number; under: number }[]; AWAY: { line: number; over: number; under: number }[] };
   /** Bookmaker provider name (e.g. "Sportybet", "Bet9ja"). */
   provider: string;
+  /** False once kick-off passes or the fixture is no longer taking bets. */
+  bettable: boolean;
+  /** Shown on the card when `bettable` is false. */
+  bettableReason: string;
 };
 
 export type BetRow = {
   id: string;
-  /** Public share code → /bet/slip/[code]. */
+  /** Public share code → /bet/slip/[code]. Doubles as the redeem code. */
   code: string;
   fixture: string;
   market: string;
@@ -58,7 +62,21 @@ export type BetRow = {
   payout: number;
   placedAt: string;
   result: string | null;
-  legs?: { fixture: string; label: string; odds: number }[];
+  /** State of the fixture this bet hangs on. */
+  matchStatus: "DRAFT" | "LIVE" | "FINISHED";
+  /** One entry per selection — a single has exactly one. */
+  legs: BetLegRow[];
+};
+
+/** One selection on a slip, with its own resolved status. */
+export type BetLegRow = {
+  matchId: string;
+  fixture: string;
+  market: string;
+  selection: string;
+  label: string;
+  odds: number;
+  status: "PENDING" | "WON" | "LOST" | "VOID";
 };
 
 export type TxnRow = {
@@ -97,6 +115,7 @@ const TABS = [
 type TabKey = (typeof TABS)[number]["key"];
 
 const STATUS_TONE = { PENDING: "warning", WON: "success", LOST: "danger", VOID: "neutral" } as const;
+const STATUS_LABEL = { PENDING: "Pending", WON: "Won", LOST: "Lost", VOID: "Void" } as const;
 
 const TXN_ICON: Record<string, string> = {
   WELCOME: "🎁",
@@ -167,6 +186,11 @@ export function BetTerminal({
 
   function pick(l: SlipLeg) {
     setNotice(null);
+    const fixture = matches.find((m) => m.id === l.matchId);
+    if (fixture && !fixture.bettable) {
+      setNotice({ ok: false, msg: `Not bettable — ${fixture.bettableReason}.` });
+      return;
+    }
     const exists = legs.some((x) => x.matchId === l.matchId && x.market === l.market && x.selection === l.selection);
     if (!exists) {
       if (legs.some((x) => x.matchId === l.matchId)) {
@@ -506,7 +530,18 @@ function MarketCard({ match, legs, onPick }: { match: BetMatch; legs: SlipLeg[];
   const customOdds = match.odds.scoreOdds[customH * 11 + customA] ?? 0;
 
   return (
-    <article className="rounded-2xl border-2 border-fg/15 bg-bg-elevated p-4 shadow-[4px_4px_0_rgba(11,32,48,.08)]">
+    <article
+      className={cn(
+        "rounded-2xl border-2 bg-bg-elevated p-4 shadow-[4px_4px_0_rgba(11,32,48,.08)]",
+        match.bettable ? "border-fg/15" : "border-danger/40 opacity-90",
+      )}
+    >
+      {!match.bettable ? (
+        <div className="mb-3 flex flex-wrap items-center justify-center gap-x-2 gap-y-0.5 rounded-xl border-2 border-danger/40 bg-danger/10 px-3 py-2 text-center">
+          <span className="text-[11px] font-black uppercase tracking-widest text-danger">Not bettable</span>
+          <span className="text-[11px] text-muted">{match.bettableReason}</span>
+        </div>
+      ) : null}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           {match.competition ? (
@@ -997,7 +1032,43 @@ function ShareSlipButton({ code }: { code: string }) {
   );
 }
 
+/**
+ * The redeem code block — the bit you send to a friend so they can pull the
+ * slip up at /bet/slip/[code]. Optional `extra` slots the share button beside it.
+ */
+export function RedeemCodeBox({ code, caption = "Redeem code", extra }: { code: string; caption?: string; extra?: React.ReactNode }) {
+  const [copied, setCopied] = React.useState(false);
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(code);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1800);
+    } catch {
+      // clipboard unavailable — the code is on screen anyway
+    }
+  };
+  return (
+    <div className="mt-4 flex flex-wrap items-center justify-between gap-2 rounded-xl border-2 border-brand/30 bg-brand/5 px-3 py-2">
+      <div className="min-w-0">
+        <p className="text-[10px] font-black uppercase tracking-wider text-subtle">{caption}</p>
+        <p className="truncate font-mono text-xl font-black tracking-[0.2em] text-fg">{code}</p>
+      </div>
+      <div className="flex shrink-0 items-center gap-1.5">
+        <button
+          type="button"
+          onClick={copy}
+          className="h-9 rounded-lg border-2 border-fg/15 bg-surface px-3 text-xs font-black text-fg transition-colors hover:border-brand/50"
+        >
+          {copied ? "Copied ✓" : "Copy"}
+        </button>
+        {extra}
+      </div>
+    </div>
+  );
+}
+
 function BetsList({ bets, signedIn }: { bets: BetRow[]; signedIn: boolean }) {
+  const [openId, setOpenId] = React.useState<string | null>(null);
   if (!signedIn) {
     return (
       <div className="mt-6 rounded-2xl border border-brand/30 bg-brand/5 p-6 text-center">
@@ -1023,56 +1094,114 @@ function BetsList({ bets, signedIn }: { bets: BetRow[]; signedIn: boolean }) {
   }
   return (
     <ol className="mt-5 space-y-2">
-      {bets.map((b) => (
-        <li key={b.id} className="rounded-xl border border-line bg-white px-4 py-3 shadow-sm">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="flex items-center gap-2">
-              <Badge tone={STATUS_TONE[b.status]}>
-                {b.status === "PENDING" ? "Pending" : b.status === "WON" ? "Won" : b.status === "LOST" ? "Lost" : "Void"}
-              </Badge>
-              {b.market === "ACCA" ? <Badge tone="info">Acca</Badge> : null}
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-[11px] text-subtle">{fmtStamp(b.placedAt)}</span>
-              <ShareSlipButton code={b.code} />
-            </div>
-          </div>
-          <p className="mt-1.5 truncate text-sm font-bold text-fg">
-            {b.fixture}
-            {b.result ? <span className="ml-2 font-black text-brand">{b.result}</span> : null}
-          </p>
-          <p className="mt-0.5 text-xs text-muted">
-            {marketTitle(b.market)} · {b.selectionLabel} @ <span className="font-bold text-fg">{b.odds}</span>
-            {b.status === "PENDING" && b.result === null ? " · settles at full time" : ""}
-          </p>
-          {b.market === "ACCA" && b.legs?.length ? (
-            <ul className="mt-1.5 space-y-0.5 border-t border-line pt-1.5 text-[11px] text-muted">
-              {b.legs.map((l, i) => (
-                <li key={i} className="flex justify-between gap-2">
-                  <span className="truncate">{l.fixture}</span>
-                  <span className="shrink-0 font-semibold text-fg">
-                    {l.label} @ {l.odds}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          ) : null}
-          <div className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-xs">
-            <span className="text-muted">
-              Stake <span className="font-bold text-fg">{b.stake}</span> pts
-            </span>
-            <span className="text-muted">
-              To return <span className="font-bold text-fg">{b.potentialReturn}</span> pts
-            </span>
-            {b.status === "WON" ? (
-              <span className="font-black text-success">+{b.payout} pts won 🏆</span>
-            ) : b.status === "LOST" ? (
-              <span className="font-bold text-danger">lost</span>
-            ) : null}
-          </div>
-        </li>
-      ))}
+      {bets.map((b) => {
+        const open = openId === b.id;
+        return (
+          <li key={b.id} className="rounded-xl border border-line bg-white px-4 py-3 shadow-sm">
+            <button
+              type="button"
+              onClick={() => setOpenId(open ? null : b.id)}
+              aria-expanded={open}
+              className="w-full rounded-lg text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-brand/40"
+            >
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <Badge tone={STATUS_TONE[b.status]}>{STATUS_LABEL[b.status]}</Badge>
+                  {b.market === "ACCA" ? <Badge tone="info">Acca</Badge> : null}
+                </div>
+                <span className="flex items-center gap-2 text-[11px] text-subtle">
+                  {fmtStamp(b.placedAt)}
+                  <span className="font-black text-brand">{open ? "Hide ▲" : "View slip ▾"}</span>
+                </span>
+              </div>
+              <p className="mt-1.5 truncate text-sm font-bold text-fg">
+                {b.fixture}
+                {b.result ? <span className="ml-2 font-black text-brand">{b.result}</span> : null}
+              </p>
+              <p className="mt-0.5 text-xs text-muted">
+                {marketTitle(b.market)} · {b.selectionLabel} @ <span className="font-bold text-fg">{b.odds}</span>
+                {b.status === "PENDING" && b.result === null ? " · settles at full time" : ""}
+              </p>
+              <div className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-xs">
+                <span className="text-muted">
+                  Stake <span className="font-bold text-fg">{b.stake}</span> pts
+                </span>
+                <span className="text-muted">
+                  To return <span className="font-bold text-fg">{b.potentialReturn}</span> pts
+                </span>
+                {b.status === "WON" ? (
+                  <span className="font-black text-success">+{b.payout} pts won 🏆</span>
+                ) : b.status === "LOST" ? (
+                  <span className="font-bold text-danger">lost</span>
+                ) : null}
+              </div>
+            </button>
+
+            {open ? <SlipPanel bet={b} /> : null}
+          </li>
+        );
+      })}
     </ol>
+  );
+}
+
+/** The full bet slip: redeem code, every selection with its own Won/Lost status. */
+function SlipPanel({ bet }: { bet: BetRow }) {
+  return (
+    <div className="mt-3 rounded-xl border-2 border-dashed border-fg/20 bg-bg-elevated p-3">
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-[10px] font-black uppercase tracking-widest text-subtle">Bet slip</p>
+        <Link href={`/bet/slip/${bet.code}`} className="text-[11px] font-bold text-brand underline-offset-2 hover:underline">
+          Public page →
+        </Link>
+      </div>
+
+      <RedeemCodeBox code={bet.code} extra={<ShareSlipButton code={bet.code} />} />
+
+      {/* every selection, with its own status */}
+      <ol className="mt-3 space-y-1.5">
+        {bet.legs.map((leg, i) => (
+          <li
+            key={`${leg.matchId}-${i}`}
+            className="flex items-center justify-between gap-3 rounded-lg border border-line bg-white px-3 py-2"
+          >
+            <div className="min-w-0">
+              <p className="truncate text-sm font-bold text-fg">{leg.fixture}</p>
+              <p className="truncate text-[11px] text-muted">
+                {marketTitle(leg.market)} · {leg.label} @ <span className="font-bold text-fg">{leg.odds}</span>
+              </p>
+            </div>
+            <Badge tone={STATUS_TONE[leg.status]}>{STATUS_LABEL[leg.status]}</Badge>
+          </li>
+        ))}
+      </ol>
+
+      <dl className="mt-3 grid grid-cols-3 gap-2 border-t border-line pt-3 text-center">
+        <div>
+          <dt className="text-[10px] font-black uppercase tracking-wider text-subtle">Stake</dt>
+          <dd className="text-lg font-black tabular-nums text-fg">{bet.stake}</dd>
+        </div>
+        <div>
+          <dt className="text-[10px] font-black uppercase tracking-wider text-subtle">To return</dt>
+          <dd className="text-lg font-black tabular-nums text-fg">{bet.potentialReturn}</dd>
+        </div>
+        <div>
+          <dt className="text-[10px] font-black uppercase tracking-wider text-subtle">Paid</dt>
+          <dd
+            className={cn(
+              "text-lg font-black tabular-nums",
+              bet.status === "WON" ? "text-success" : bet.status === "VOID" ? "text-muted" : "text-fg",
+            )}
+          >
+            {bet.status === "LOST" ? 0 : bet.payout}
+          </dd>
+        </div>
+      </dl>
+
+      <p className="mt-2 text-center text-[11px] text-subtle">
+        {bet.result ? `Final score ${bet.result}` : "Not settled yet — results land at full time."}
+      </p>
+    </div>
   );
 }
 

@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 vi.mock("@/lib/prisma", () => ({ prisma: {} }));
 
 import { inPlayPrices } from "@/lib/bet/liveOdds";
+import { MAX_ODDS } from "@/lib/bet/pricing";
 import { MATCH_ROUNDS } from "@/lib/domain";
 
 /** Rough implied-probability sum for a two-way market with a 6% margin. */
@@ -12,8 +13,8 @@ describe("inPlayPrices", () => {
   it("is decisive once every question has been answered", () => {
     const p = inPlayPrices(1.4, 1.1, MATCH_ROUNDS, { home: 1, away: 0 });
     expect(p.home).toBeLessThan(1.2); // home win locked in
-    expect(p.draw).toBeGreaterThan(60);
-    expect(p.away).toBeGreaterThan(60);
+    expect(p.draw).toBe(MAX_ODDS); // dead rubber — pinned to the ceiling
+    expect(p.away).toBe(MAX_ODDS);
     expect(p.bttsNo).toBeLessThan(1.2); // nobody scored
     expect(p.under25).toBeLessThan(1.2); // one goal total
   });

@@ -5,8 +5,9 @@ import { formGuides, oddsForMatches } from "@/lib/bet/odds";
 import { ensureWallet } from "@/lib/bet/wallet";
 import { PublicShell } from "@/components/site";
 import { Badge } from "@/components/ui";
-import { BetTerminal, type BetMatch, type BetRow, type LeaderRow, type TxnRow } from "@/components/bet";
+import { BetTerminal, type BetMatch, type BetRow, type BetLegRow, type LeaderRow, type TxnRow } from "@/components/bet";
 import { selectionLabel } from "@/lib/bet/labels";
+import { selectionOutcomes } from "@/lib/bet/engine";
 import { MathBlock } from "@/components/MathText";
 
 export const dynamic = "force-dynamic";
@@ -16,7 +17,7 @@ export default async function BetPage() {
   const user = session?.user ?? null;
 
   const rawMatches = await prisma.match.findMany({
-    where: { status: "DRAFT", scheduledAt: { not: null } },
+    where: { status: { in: ["DRAFT", "LIVE"] }, scheduledAt: { not: null } },
     orderBy: { scheduledAt: "asc" },
     take: 30,
     select: {
@@ -24,6 +25,7 @@ export default async function BetPage() {
       code: true,
       homeName: true,
       awayName: true,
+      status: true,
       scheduledAt: true,
       competitionId: true,
       homeTeamId: true,
@@ -39,23 +41,36 @@ export default async function BetPage() {
     formGuides(rawMatches),
   ]);
 
-  const matches: BetMatch[] = rawMatches.map((m, i) => ({
-    id: m.id,
-    fixture: `${m.homeName} v ${m.awayName}`,
-    homeName: m.homeName,
-    awayName: m.awayName,
-    competition: m.competition?.name ?? null,
-    kickoff: m.scheduledAt!.toISOString(),
-    odds: allOddsList[i].match,
-    goals: allOddsList[i].goals,
-    doubleChance: allOddsList[i].doubleChance,
-    drawNoBet: allOddsList[i].drawNoBet,
-    halfResult: allOddsList[i].halfResult,
-    halfFull: allOddsList[i].halfFull,
-    teamTotals: allOddsList[i].teamTotals,
-    form: forms[i],
-    provider: "Sportybet",
-  }));
+  // Betting is open until kick-off: anything in play (or already past its
+  // kick-off) is shown, but flagged so nobody taps a dead price.
+  const now = new Date().getTime();
+  const matches: BetMatch[] = rawMatches.map((m, i) => {
+    const kickOff = m.scheduledAt!.getTime();
+    const bettable = m.status === "DRAFT" && kickOff > now;
+    return {
+      id: m.id,
+      fixture: `${m.homeName} v ${m.awayName}`,
+      homeName: m.homeName,
+      awayName: m.awayName,
+      competition: m.competition?.name ?? null,
+      kickoff: m.scheduledAt!.toISOString(),
+      odds: allOddsList[i].match,
+      goals: allOddsList[i].goals,
+      doubleChance: allOddsList[i].doubleChance,
+      drawNoBet: allOddsList[i].drawNoBet,
+      halfResult: allOddsList[i].halfResult,
+      halfFull: allOddsList[i].halfFull,
+      teamTotals: allOddsList[i].teamTotals,
+      form: forms[i],
+      provider: "Sportybet",
+      bettable,
+      bettableReason: bettable
+        ? ""
+        : m.status === "LIVE"
+          ? "Match in play — betting closed at kick-off"
+          : "Kick-off has passed — betting is closed",
+    };
+  });
 
   // Public leaderboard: top virtual-point balances.
   const topUsers = await prisma.user.findMany({
@@ -102,20 +117,59 @@ export default async function BetPage() {
     ]);
     myRank = richerThanMe + 1;
     claimedToday = !!lastClaim && lastClaim.createdAt.toISOString().slice(0, 10) === new Date().toISOString().slice(0, 10);
-    bets = rawBets.map((b) => {
-      const legs = Array.isArray(b.legs)
-        ? (b.legs as { fixture?: string; label?: string; odds?: number }[]).map((l) => ({
+
+    // Resolve every selection's status in one pass over all of this user's bets
+    // — a single match query plus a half-time lookup only where it's needed.
+    const parsed = rawBets.map((b) => {
+      const rawLegs = Array.isArray(b.legs)
+        ? (b.legs as { matchId?: string; fixture?: string; market?: string; selection?: string; label?: string; odds?: number }[])
+        : [];
+      const selections =
+        b.market === "ACCA"
+          ? rawLegs.map((l) => ({
+              matchId: l.matchId ?? b.matchId,
+              market: l.market ?? b.market,
+              selection: l.selection ?? b.selection,
+            }))
+          : [{ matchId: b.matchId, market: b.market, selection: b.selection }];
+      return { b, rawLegs, selections };
+    });
+    const outcomes = await selectionOutcomes(prisma, parsed.flatMap((p) => p.selections));
+
+    let cursor = 0;
+    bets = parsed.map(({ b, rawLegs, selections }) => {
+      const slice = outcomes.slice(cursor, cursor + selections.length);
+      cursor += selections.length;
+      const isAcca = b.market === "ACCA" && rawLegs.length > 0;
+
+      const legs: BetLegRow[] = isAcca
+        ? rawLegs.map((l, i) => ({
+            matchId: l.matchId ?? "",
             fixture: l.fixture ?? "",
-            label: l.label ?? "",
+            market: l.market ?? "",
+            selection: l.selection ?? "",
+            label: l.label || selectionLabel(l.market ?? "", l.selection ?? ""),
             odds: Number(l.odds ?? 0),
+            status: slice[i] ?? "PENDING",
           }))
-        : undefined;
+        : [
+            {
+              matchId: b.matchId,
+              fixture: `${b.match.homeName} v ${b.match.awayName}`,
+              market: b.market,
+              selection: b.selection,
+              label: selectionLabel(b.market, b.selection),
+              odds: Number(b.odds),
+              status: b.status,
+            },
+          ];
+
       return {
         id: b.id,
         code: b.code,
         fixture: `${b.match.homeName} v ${b.match.awayName}`,
         market: b.market,
-        selectionLabel: selectionLabel(b.market, b.selection, legs?.length),
+        selectionLabel: selectionLabel(b.market, b.selection, isAcca ? legs.length : undefined),
         odds: Number(b.odds),
         stake: b.stake,
         potentialReturn: b.potentialReturn,
@@ -123,6 +177,7 @@ export default async function BetPage() {
         payout: b.payout,
         placedAt: b.placedAt.toISOString(),
         result: b.match.status === "FINISHED" ? `${b.match.homeScore}–${b.match.awayScore}` : null,
+        matchStatus: b.match.status,
         legs,
       };
     });

@@ -439,7 +439,6 @@ export async function removeCompetitionTeam(actor: Actor, input: { competitionId
     // Award 3-0 to the opposing team in each affected match
     for (const match of affectedMatches) {
       const isHome = match.homeTeamId === input.teamId;
-      const winnerTeamId = isHome ? match.awayTeamId : match.homeTeamId;
       const homeScore = isHome ? 0 : 3;
       const awayScore = isHome ? 3 : 0;
 
@@ -978,6 +977,11 @@ export type StandingRow = {
   trend: "up" | "down" | "same";
   /** Last 5 results for form guide (Premier League style). */
   form: ("W" | "D" | "L")[];
+  /**
+   * The team has left the competition. Its row is kept so the fixtures it
+   * played (and the 3-0s awarded against it) still count for everyone.
+   */
+  left: boolean;
 };
 
 /** How many matches of this competition are being played right now. */
@@ -1016,6 +1020,23 @@ export async function leagueStandings(
     orderBy: { finishedAt: "asc" },
   });
 
+  // Teams that have left the competition are no longer in `competitionTeam`,
+  // but their results must stay on the table: their opponents keep the
+  // awarded 3-0 wins, and the departed side keeps its own record. Resolve
+  // them from the fixtures so nobody silently drops out of the standings.
+  const memberIds = new Set(teams.map((t) => t.team.id));
+  const removedIds = new Set<string>();
+  for (const m of matches) {
+    if (m.homeTeamId && !memberIds.has(m.homeTeamId)) removedIds.add(m.homeTeamId);
+    if (m.awayTeamId && !memberIds.has(m.awayTeamId)) removedIds.add(m.awayTeamId);
+  }
+  const removedTeams = removedIds.size
+    ? await prisma.team.findMany({
+        where: { id: { in: [...removedIds] } },
+        select: { id: true, name: true, slug: true, code: true },
+      })
+    : [];
+
   const playing = new Set<string>();
   for (const m of matches) {
     if (m.status === "LIVE") {
@@ -1027,7 +1048,10 @@ export async function leagueStandings(
   type Row = Omit<StandingRow, "playing" | "trend" | "form">;
   const rows = new Map<string, Row>();
   for (const t of teams) {
-    rows.set(t.team.id, { id: t.team.id, name: t.team.name, slug: t.team.slug, code: t.team.code, p: 0, w: 0, d: 0, l: 0, gf: 0, ga: 0, pts: 0 });
+    rows.set(t.team.id, { id: t.team.id, name: t.team.name, slug: t.team.slug, code: t.team.code, p: 0, w: 0, d: 0, l: 0, gf: 0, ga: 0, pts: 0, left: false });
+  }
+  for (const t of removedTeams) {
+    rows.set(t.id, { id: t.id, name: t.name, slug: t.slug, code: t.code, p: 0, w: 0, d: 0, l: 0, gf: 0, ga: 0, pts: 0, left: true });
   }
 
   // Track form (last 5 results) per team
@@ -1101,6 +1125,22 @@ async function computePreviousPositions(
   const rows = new Map<string, Row>();
   for (const t of teams) {
     rows.set(t.team.id, { id: t.team.id, pts: 0, gd: 0, gf: 0 });
+  }
+
+  // Same rule as the live table: a departed team keeps its past results, so
+  // resolve it here too or the trend arrows compare against a wrong baseline.
+  const memberIds = new Set(rows.keys());
+  const removedIds = new Set<string>();
+  for (const m of previousMatches) {
+    if (m.homeTeamId && !memberIds.has(m.homeTeamId)) removedIds.add(m.homeTeamId);
+    if (m.awayTeamId && !memberIds.has(m.awayTeamId)) removedIds.add(m.awayTeamId);
+  }
+  if (removedIds.size) {
+    const removed = await prisma.team.findMany({
+      where: { id: { in: [...removedIds] } },
+      select: { id: true },
+    });
+    for (const t of removed) rows.set(t.id, { id: t.id, pts: 0, gd: 0, gf: 0 });
   }
 
   for (const m of previousMatches) {
