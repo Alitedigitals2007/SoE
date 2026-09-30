@@ -541,53 +541,6 @@ export function CompetitionActions({
             ) : null}
           </>
         )}
-          <>
-            <p className="text-sm text-muted">Fixtures exist. Manage referees below, then run each match.</p>
-            {type === "LEAGUE" ? (
-              <div className="flex flex-wrap items-end gap-2">
-                <Button
-                  variant="secondary"
-                  onClick={() => {
-                    if (confirm("Redraw the round-robin fixtures? This removes all scheduled league fixtures that haven't started."))
-                      void redrawLeagueFixturesAction({ competitionId }).then((r) => flash(r, "League fixtures redrawn."));
-                  }}
-                >
-                  ♻️ Redraw round-robin fixtures
-                </Button>
-              </div>
-            ) : null}
-            <div className="flex flex-wrap items-end gap-2">
-              <Button
-                variant="secondary"
-                onClick={() =>
-                  void scheduleLeagueWaveAction({ competitionId, count: 5 }).then((r) => {
-                    if (r.ok && r.data) flash({ ok: true }, `Scheduled ${r.data.scheduled} fixture(s).`);
-                    else flash({ ok: false, error: (r as { error?: string }).error }, "");
-                    router.refresh();
-                  })
-                }
-              >
-                📅 Schedule next 5 fixtures (no clashes)
-              </Button>
-            </div>
-            {(type === "CUP" || type === "LEAGUE_CUP") ? (
-              <div className="flex flex-wrap items-end gap-2">
-                <Input value={roundLabel} onChange={(e) => setRoundLabel(e.target.value)} placeholder="Round name (cosmetic)" className="max-w-52" hidden aria-hidden />
-                <Button
-                  variant="secondary"
-                  disabled={!finishedLatestRound}
-                  title={finishedLatestRound ? "" : "Finish every match in the current round first"}
-                  onClick={() => void generateCupRoundAction({ competitionId }).then((r) => { flash(r, "Next cup round generated."); router.refresh(); })}
-                >
-                  Generate next knockout round
-                </Button>
-                {!finishedLatestRound ? (
-                  <span className="text-xs text-warning">All matches in the current round must be finished first.</span>
-                ) : null}
-              </div>
-            ) : null}
-          </>
-        )}
       </div>
     </Card>
   );

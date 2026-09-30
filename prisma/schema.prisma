@@ -358,6 +358,14 @@ enum IncidentType {
   LEFT_FULLSCREEN
   /// An upheld integrity check the referee judged to be external/AI assistance.
   AI_ASSISTANCE
+  /// The player switched tabs or windows during a question.
+  TAB_SWITCH
+  /// The player right-clicked on the match area.
+  RIGHT_CLICK
+  /// The player used a blocked keyboard shortcut.
+  KEYBOARD_SHORTCUT
+  /// The player attempted to screen record the match.
+  SCREEN_RECORDING
   OTHER
 }
 

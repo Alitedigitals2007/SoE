@@ -499,7 +499,6 @@ export function ScheduleEditor({ code, scheduledAt, refereeId, referees }: { cod
           </Field>
         </div>
       ) : null}
-      </div>
     </Card>
   );
 }

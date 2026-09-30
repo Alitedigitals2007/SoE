@@ -217,7 +217,7 @@ export async function submitAnswerAction(
 /** Player-reported anti-copy breach. Rate limited and paused-match exempt. */
 export async function reportIntegrityAction(input: {
   code: string;
-  kind: "COPIED_ANSWER" | "COPIED_CONTENT" | "LEFT_FULLSCREEN" | "TAB_SWITCH" | "RIGHT_CLICK" | "KEYBOARD_SHORTCUT" | "SCREEN_RECORDING";
+  kind: "COPIED_ANSWER" | "COPIED_CONTENT" | "LEFT_FULLSCREEN" | "TAB_SWITCH" | "RIGHT_CLICK" | "KEYBOARD_SHORTCUT" | "SCREEN_RECORDING" | "AI_ASSISTANCE";
   detail?: string;
 }): Promise<ActionResult> {
   return runEngine((actor) => reportIntegrity(actor, input));
