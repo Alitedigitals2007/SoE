@@ -1427,6 +1427,7 @@ export async function reportIntegrity(
       RIGHT_CLICK: "Right-clicked on the match area",
       KEYBOARD_SHORTCUT: "Used a blocked keyboard shortcut",
       SCREEN_RECORDING: "Attempted to screen record the match",
+      AI_ASSISTANCE: "AI-generated answer detected",
     }[input.kind];
 
   const roundNumber = match.rounds.find((r) => r.status === "OPEN" || r.status === "LOCKED")?.number ?? null;
