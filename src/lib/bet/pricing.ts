@@ -12,8 +12,8 @@
 
 /** Bookmaker margin baked into every price (odds = 0.94 / probability). */
 export const MARGIN = 0.94;
-/** Long-shot ceiling — matches the Bet.odds Decimal(5,2) column (999.99). */
-export const MAX_ODDS = 999.99;
+/** Long-shot ceiling — keeps odds reasonable, like real bookmakers. */
+export const MAX_ODDS = 50.0;
 export const DEFAULT_XG_HOME = 1.45;
 export const DEFAULT_XG_AWAY = 1.25;
 /** Default 1X2 split when a competition has no table to read. */

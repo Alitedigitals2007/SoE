@@ -40,6 +40,8 @@ export type BetMatch = {
   /** HT/FT cells keyed HH, HD, HA, DH, DD, DA, AH, AD, AA. */
   halfFull: Record<string, number>;
   teamTotals: { HOME: { line: number; over: number; under: number }[]; AWAY: { line: number; over: number; under: number }[] };
+  /** Bookmaker provider name (e.g. "Sportybet", "Bet9ja"). */
+  provider: string;
 };
 
 export type BetRow = {
@@ -147,6 +149,8 @@ export function BetTerminal({
   const [notice, setNotice] = React.useState<Notice>(null);
   const [wallet, setWallet] = React.useState(balance);
   const [prevBalance, setPrevBalance] = React.useState(balance);
+  const [collectCode, setCollectCode] = React.useState("");
+  const [showCollect, setShowCollect] = React.useState(false);
   // Sync when the server refreshes the balance prop (React's adjust-state-
   // during-render pattern — avoids a setState-inside-effect cascade).
   if (prevBalance !== balance) {
@@ -293,6 +297,36 @@ export function BetTerminal({
                 </p>
                 <p className="mt-2 text-sm font-bold text-fg">Bet slip</p>
                 <p className="mt-1 text-xs text-muted">Tap any odds to open a selection here. Add 2–6 picks for an accumulator.</p>
+                <div className="mt-4 border-t border-line pt-3">
+                  <button
+                    type="button"
+                    onClick={() => setShowCollect(!showCollect)}
+                    className="text-xs font-semibold text-brand hover:underline"
+                  >
+                    {showCollect ? "Hide collect code" : "Have a code from a friend?"}
+                  </button>
+                  {showCollect ? (
+                    <div className="mt-2 flex gap-2">
+                      <Input
+                        value={collectCode}
+                        onChange={(e) => setCollectCode(e.target.value)}
+                        placeholder="Enter friend's bet code"
+                        className="flex-1 py-1.5 text-xs"
+                      />
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => {
+                          if (collectCode.trim()) {
+                            router.push(`/bet/slip/${collectCode.trim()}`);
+                          }
+                        }}
+                      >
+                        View
+                      </Button>
+                    </div>
+                  ) : null}
+                </div>
               </div>
             ) : (
               <div className="flex max-h-[82vh] flex-col lg:max-h-none">

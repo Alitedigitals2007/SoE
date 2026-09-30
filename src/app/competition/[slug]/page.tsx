@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui";
 import { CsvDownloadButton } from "@/components/CsvDownloadButton";
 import { exportCompetitionCsvAction } from "@/app/actions/exports";
 import { formatKickoffWat } from "@/lib/format";
+import { cn } from "@/components/ui";
 
 export const dynamic = "force-dynamic";
 
@@ -98,33 +99,45 @@ export default async function CompetitionDetail({ params }: { params: Promise<{ 
                 )}
               </div>
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[640px] text-left text-sm">
+                <table className="w-full min-w-[720px] text-left text-sm">
                   <thead className="border-y border-line bg-bg-raised text-xs uppercase tracking-wider text-muted">
                     <tr>
-                      <th className="px-4 py-2 font-semibold">#</th>
-                      <th className="px-4 py-2 font-semibold">Team</th>
-                      <th className="px-2 py-2 text-center font-semibold">P</th>
-                      <th className="px-2 py-2 text-center font-semibold">W</th>
-                      <th className="px-2 py-2 text-center font-semibold">D</th>
-                      <th className="px-2 py-2 text-center font-semibold">L</th>
-                      <th className="px-2 py-2 text-center font-semibold">GF</th>
-                      <th className="px-2 py-2 text-center font-semibold">GA</th>
-                      <th className="px-2 py-2 text-center font-semibold">GD</th>
-                      <th className="px-4 py-2 text-center font-semibold">Pts</th>
+                      <th className="px-3 py-2 font-semibold">#</th>
+                      <th className="px-3 py-2 font-semibold">Team</th>
+                      <th className="px-2 py-2 text-center font-semibold" title="Played">P</th>
+                      <th className="px-2 py-2 text-center font-semibold" title="Won">W</th>
+                      <th className="px-2 py-2 text-center font-semibold" title="Drawn">D</th>
+                      <th className="px-2 py-2 text-center font-semibold" title="Lost">L</th>
+                      <th className="px-2 py-2 text-center font-semibold" title="Goals For">GF</th>
+                      <th className="px-2 py-2 text-center font-semibold" title="Goals Against">GA</th>
+                      <th className="px-2 py-2 text-center font-semibold" title="Goal Difference">GD</th>
+                      <th className="px-3 py-2 text-center font-semibold">Pts</th>
+                      <th className="px-3 py-2 text-center font-semibold">Form</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-line/70">
                     {rows.every((r) => r.p === 0) ? (
                       <tr>
-                        <td colSpan={10} className="px-4 py-10 text-center text-muted">
+                        <td colSpan={11} className="px-4 py-10 text-center text-muted">
                           No finished matches yet — results fill the table as matches end.
                         </td>
                       </tr>
                     ) : (
                       rows.map((r, i) => (
                         <tr key={r.id} data-team={r.id} className="hover:bg-bg-raised">
-                          <td className="px-4 py-2.5 font-bold text-subtle">{i + 1}</td>
-                          <td className="px-4 py-2.5">
+                          <td className="px-3 py-2.5">
+                            <span className="inline-flex items-center gap-1 font-bold text-subtle">
+                              {i + 1}
+                              {r.trend === "up" ? (
+                                <span className="text-success" title="Moved up">▲</span>
+                              ) : r.trend === "down" ? (
+                                <span className="text-danger" title="Moved down">▼</span>
+                              ) : (
+                                <span className="text-subtle" title="No change">—</span>
+                              )}
+                            </span>
+                          </td>
+                          <td className="px-3 py-2.5">
                             <Link href={`/teams/${r.slug}`} className="inline-flex items-center gap-1.5 font-semibold text-fg hover:text-brand">
                               {r.name}
                               {r.playing ? (
@@ -139,7 +152,26 @@ export default async function CompetitionDetail({ params }: { params: Promise<{ 
                           <td className="px-2 py-2.5 text-center text-muted">{r.gf}</td>
                           <td className="px-2 py-2.5 text-center text-muted">{r.ga}</td>
                           <td className="px-2 py-2.5 text-center font-semibold text-fg">{r.gf - r.ga}</td>
-                          <td className="px-4 py-2.5 text-center text-base font-black text-brand">{r.pts}</td>
+                          <td className="px-3 py-2.5 text-center text-base font-black text-brand">{r.pts}</td>
+                          <td className="px-3 py-2.5">
+                            <div className="flex justify-center gap-0.5">
+                              {r.form.length === 0 ? (
+                                <span className="text-xs text-subtle">—</span>
+                              ) : (
+                                r.form.map((f, fi) => (
+                                  <span
+                                    key={fi}
+                                    className={cn(
+                                      "grid size-4 place-items-center rounded text-[9px] font-black text-white",
+                                      f === "W" ? "bg-success" : f === "L" ? "bg-danger" : "bg-subtle",
+                                    )}
+                                  >
+                                    {f}
+                                  </span>
+                                ))
+                              )}
+                            </div>
+                          </td>
                         </tr>
                       ))
                     )}

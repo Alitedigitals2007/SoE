@@ -358,6 +358,7 @@ export function CompetitionActions({
   availableTeams,
   currentTeamIds,
   finishedLatestRound,
+  currentTeams,
 }: {
   competitionId: string;
   status: "DRAFT" | "ACTIVE" | "FINISHED";
@@ -366,10 +367,12 @@ export function CompetitionActions({
   availableTeams: TeamOption[];
   currentTeamIds: string[];
   finishedLatestRound: boolean;
+  currentTeams: { id: string; name: string }[];
 }) {
   const { notice, flash, router } = useFlash();
   const [teamId, setTeamId] = React.useState("");
   const [roundLabel, setRoundLabel] = React.useState("");
+  const [removeTeamId, setRemoveTeamId] = React.useState("");
 
   return (
     <Card>
@@ -453,6 +456,91 @@ export function CompetitionActions({
             </div>
           </>
         ) : (
+          <>
+            <p className="text-sm text-muted">Fixtures exist. Manage referees below, then run each match.</p>
+            {type === "LEAGUE" ? (
+              <div className="flex flex-wrap items-end gap-2">
+                <Button
+                  variant="secondary"
+                  onClick={() => {
+                    if (confirm("Redraw the round-robin fixtures? This removes all scheduled league fixtures that haven't started."))
+                      void redrawLeagueFixturesAction({ competitionId }).then((r) => flash(r, "League fixtures redrawn."));
+                  }}
+                >
+                  ♻️ Redraw round-robin fixtures
+                </Button>
+              </div>
+            ) : null}
+            <div className="flex flex-wrap items-end gap-2">
+              <Button
+                variant="secondary"
+                onClick={() =>
+                  void scheduleLeagueWaveAction({ competitionId, count: 5 }).then((r) => {
+                    if (r.ok && r.data) flash({ ok: true }, `Scheduled ${r.data.scheduled} fixture(s).`);
+                    else flash({ ok: false, error: (r as { error?: string }).error }, "");
+                    router.refresh();
+                  })
+                }
+              >
+                📅 Schedule next 5 fixtures (no clashes)
+              </Button>
+            </div>
+            {(type === "CUP" || type === "LEAGUE_CUP") ? (
+              <div className="flex flex-wrap items-end gap-2">
+                <Input value={roundLabel} onChange={(e) => setRoundLabel(e.target.value)} placeholder="Round name (cosmetic)" className="max-w-52" hidden aria-hidden />
+                <Button
+                  variant="secondary"
+                  disabled={!finishedLatestRound}
+                  title={finishedLatestRound ? "" : "Finish every match in the current round first"}
+                  onClick={() => void generateCupRoundAction({ competitionId }).then((r) => { flash(r, "Next cup round generated."); router.refresh(); })}
+                >
+                  Generate next knockout round
+                </Button>
+                {!finishedLatestRound ? (
+                  <span className="text-xs text-warning">All matches in the current round must be finished first.</span>
+                ) : null}
+              </div>
+            ) : null}
+            {/* Remove team section */}
+            {currentTeams.length > 0 ? (
+              <div className="border-t border-line pt-3">
+                <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted">Remove team</p>
+                <div className="flex flex-wrap items-end gap-2">
+                  <Select value={removeTeamId} onChange={(e) => setRemoveTeamId(e.target.value)} className="w-56" aria-label="Remove team">
+                    <option value="">Select team to remove…</option>
+                    {currentTeams.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.name}
+                      </option>
+                    ))}
+                  </Select>
+                  <Button
+                    variant="danger"
+                    disabled={!removeTeamId}
+                    onClick={() => {
+                      if (confirm("Remove this team from the competition? All their remaining matches will be awarded as 3-0 losses.")) {
+                        void removeCompetitionTeamAction({ competitionId, teamId: removeTeamId }).then((r) => {
+                          if (r.ok) {
+                            setRemoveTeamId("");
+                            flash({ ok: true }, `Team removed. ${r.data?.removedMatches ?? 0} match(es) awarded as 3-0.`);
+                          } else {
+                            flash(r, "Could not remove team.");
+                          }
+                          router.refresh();
+                        });
+                      }
+                    }}
+                  >
+                    Remove team
+                  </Button>
+                </div>
+                <p className="mt-1 text-[11px] text-subtle">
+                  Removing a team awards all their remaining fixtures as 3-0 wins to the opposing team.
+                </p>
+              </div>
+            ) : null}
+          </>
+        )}
           <>
             <p className="text-sm text-muted">Fixtures exist. Manage referees below, then run each match.</p>
             {type === "LEAGUE" ? (

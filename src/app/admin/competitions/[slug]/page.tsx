@@ -67,6 +67,7 @@ export default async function AdminCompetitionDetail({ params }: { params: Promi
               availableTeams={availableTeams}
               currentTeamIds={currentTeamIds}
               finishedLatestRound={finishedLatestRound}
+              currentTeams={comp.teams.map((t) => ({ id: t.teamId, name: t.team.name }))}
             />
             <div className="rounded-2xl border border-line bg-white p-4">
               <p className="text-xs font-bold uppercase tracking-wider text-muted">Teams ({comp.teams.length})</p>

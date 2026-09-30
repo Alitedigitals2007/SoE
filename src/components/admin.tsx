@@ -433,8 +433,9 @@ function utcIsoToNigeriaLocal(iso: string): string {
   return shifted.toISOString().slice(0, 16);
 }
 
-export function ScheduleEditor({ code, scheduledAt }: { code: string; scheduledAt: string | null }) {
+export function ScheduleEditor({ code, scheduledAt, refereeId, referees }: { code: string; scheduledAt: string | null; refereeId: string | null; referees: RefereeOption[] }) {
   const [value, setValue] = React.useState(scheduledAt ? utcIsoToNigeriaLocal(scheduledAt) : "");
+  const [refId, setRefId] = React.useState(refereeId ?? "");
   const [notice, setNotice] = React.useState<Notice>(null);
   const router = useRouter();
   const busy = false;
@@ -447,6 +448,17 @@ export function ScheduleEditor({ code, scheduledAt }: { code: string; scheduledA
         router.refresh();
       } else {
         setNotice({ kind: "err", text: r.error ?? "Could not save the schedule." });
+      }
+    });
+  }
+
+  function saveReferee(id: string) {
+    void assignRefereeAction({ matchId: code, refereeId: id || null }).then((r) => {
+      if (r.ok) {
+        setNotice({ kind: "ok", text: "Referee assigned." });
+        router.refresh();
+      } else {
+        setNotice({ kind: "err", text: r.error ?? "Could not assign referee." });
       }
     });
   }
@@ -467,6 +479,26 @@ export function ScheduleEditor({ code, scheduledAt }: { code: string; scheduledA
           </Button>
         ) : null}
         {notice ? <div className="basis-full"><NoticeLine notice={notice} /></div> : null}
+      </div>
+      {referees.length > 0 ? (
+        <div className="border-t border-line p-4">
+          <Field label="Referee in charge" hint="Assign the referee for this match.">
+            <div className="flex flex-wrap items-end gap-2">
+              <Select value={refId} onChange={(e) => setRefId(e.target.value)} className="w-56">
+                <option value="">No referee</option>
+                {referees.map((r) => (
+                  <option key={r.id} value={r.id}>
+                    {r.name}
+                  </option>
+                ))}
+              </Select>
+              <Button variant="secondary" onClick={() => saveReferee(refId)}>
+                Assign referee
+              </Button>
+            </div>
+          </Field>
+        </div>
+      ) : null}
       </div>
     </Card>
   );

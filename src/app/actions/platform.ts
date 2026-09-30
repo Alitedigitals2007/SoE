@@ -19,6 +19,7 @@ import {
   PlatformError,
   playerStats,
   redrawLeagueFixtures,
+  removeCompetitionTeam,
   removeTeamMember,
   scheduleLeagueWave,
   setCompetitionStatus,
@@ -107,6 +108,10 @@ export async function createCompetitionAction(input: {
 
 export async function addCompetitionTeamAction(input: { competitionId: string; teamId: string }) {
   return runEngine((a) => addCompetitionTeam(a, input));
+}
+
+export async function removeCompetitionTeamAction(input: { competitionId: string; teamId: string }) {
+  return runEngine((a) => removeCompetitionTeam(a, input));
 }
 
 export async function generateLeagueFixturesAction(input: { competitionId: string }) {

@@ -55,6 +55,7 @@ export default async function AdminMatchPage({ params }: { params: Promise<{ cod
   const available: AvailablePlayer[] = availableRows.map((a) => ({ ...a }));
   const scheduledAt = match.scheduledAt ? match.scheduledAt.toISOString() : null;
   const started = match.status !== "DRAFT";
+  const referees = await prisma.user.findMany({ where: { role: "REFEREE" }, orderBy: { name: "asc" }, select: { id: true, name: true } });
 
   const goalRounds: GoalRoundRow[] = match.rounds.map((r) => {
     const toRow = (s: NonNullable<typeof r.goalSubmission>) => ({
@@ -117,7 +118,7 @@ export default async function AdminMatchPage({ params }: { params: Promise<{ cod
             label: "Schedule & prep",
             content: (
               <div className="space-y-4">
-                <ScheduleEditor code={match.code} scheduledAt={scheduledAt} />
+                <ScheduleEditor code={match.code} scheduledAt={scheduledAt} refereeId={match.refereeId} referees={referees} />
                 <PostponeEditor code={match.code} scheduledAt={scheduledAt} />
               </div>
             ),

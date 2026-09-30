@@ -106,7 +106,12 @@ export default async function AdminMatchSetupPage({ params }: { params: Promise<
 
         {match.status === "DRAFT" ? (
           <div className="mt-4">
-            <ScheduleEditor code={match.code} scheduledAt={match.scheduledAt ? match.scheduledAt.toISOString() : null} />
+            <ScheduleEditor
+              code={match.code}
+              scheduledAt={match.scheduledAt ? match.scheduledAt.toISOString() : null}
+              refereeId={match.refereeId}
+              referees={await prisma.user.findMany({ where: { role: "REFEREE" }, orderBy: { name: "asc" }, select: { id: true, name: true } })}
+            />
           </div>
         ) : null}
 

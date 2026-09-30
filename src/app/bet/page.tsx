@@ -54,6 +54,7 @@ export default async function BetPage() {
     halfFull: allOddsList[i].halfFull,
     teamTotals: allOddsList[i].teamTotals,
     form: forms[i],
+    provider: "Sportybet",
   }));
 
   // Public leaderboard: top virtual-point balances.
@@ -193,7 +194,7 @@ export default async function BetPage() {
           <p className="mt-3 text-xs text-muted">
             <strong className="text-fg">P(k)</strong> is the Poisson chance of exactly k goals at expected goals
             λ; the 1X2 split comes from the standings gap (points per game) with the draw fixed at 0.27; every
-            price is the probability inverted and scaled by the 0.94 bookmaker margin, capped at 999.99.
+            price is the probability inverted and scaled by the 0.94 bookmaker margin, capped at 50.00.
           </p>
         </section>
 

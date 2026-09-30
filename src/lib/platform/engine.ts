@@ -413,6 +413,71 @@ export async function addCompetitionTeam(actor: Actor, input: { competitionId: s
   }
 }
 
+/**
+ * Remove a team from a competition. All remaining fixtures involving this team
+ * are automatically awarded as 3-0 wins to the opposing team, with the reason
+ * recorded as "Team left the competition". The team is then removed from the
+ * competition table.
+ */
+export async function removeCompetitionTeam(actor: Actor, input: { competitionId: string; teamId: string }) {
+  const blocked = await requireAdmin(actor);
+  if (blocked) return blocked;
+  const comp = await prisma.competition.findUnique({
+    where: { id: input.competitionId },
+    include: { teams: true, matches: true },
+  });
+  if (!comp) return err("Competition not found.");
+  const teamEntry = comp.teams.find((t) => t.teamId === input.teamId);
+  if (!teamEntry) return err("That team is not in this competition.");
+
+  // Find all DRAFT matches involving this team
+  const affectedMatches = comp.matches.filter(
+    (m) => m.status === "DRAFT" && (m.homeTeamId === input.teamId || m.awayTeamId === input.teamId),
+  );
+
+  await prisma.$transaction(async (tx) => {
+    // Award 3-0 to the opposing team in each affected match
+    for (const match of affectedMatches) {
+      const isHome = match.homeTeamId === input.teamId;
+      const winnerTeamId = isHome ? match.awayTeamId : match.homeTeamId;
+      const homeScore = isHome ? 0 : 3;
+      const awayScore = isHome ? 3 : 0;
+
+      await tx.match.update({
+        where: { id: match.id },
+        data: {
+          status: "FINISHED",
+          homeScore,
+          awayScore,
+          finishedAt: new Date(),
+          startedAt: match.startedAt ?? new Date(),
+          statusNote: "Team left the competition",
+          version: { increment: 1 },
+        },
+      });
+
+      // Add timeline event for each awarded match
+      const count = await tx.timelineEvent.count({ where: { matchId: match.id } });
+      await tx.timelineEvent.create({
+        data: {
+          matchId: match.id,
+          type: "ADMIN_OVERRIDE",
+          label: `Match awarded ${homeScore}–${awayScore}`,
+          detail: "Team left the competition — automatic 3-0 win",
+          seq: count + 1,
+        },
+      });
+    }
+
+    // Remove the team from the competition
+    await tx.competitionTeam.delete({
+      where: { id: teamEntry.id },
+    });
+  });
+
+  return ok({ removedMatches: affectedMatches.length });
+}
+
 /* --------------------------- fixture generation ----------------------------- */
 
 async function syncRosterFromTeams(tx: Prisma.TransactionClient, matchId: string, homeTeamId: string, awayTeamId: string) {
@@ -909,6 +974,10 @@ export type StandingRow = {
   pts: number;
   /** This team has a match in progress right now (drives the live table). */
   playing: boolean;
+  /** Position movement compared to previous matchday: "up", "down", "same". */
+  trend: "up" | "down" | "same";
+  /** Last 5 results for form guide (Premier League style). */
+  form: ("W" | "D" | "L")[];
 };
 
 /** How many matches of this competition are being played right now. */
@@ -921,6 +990,10 @@ export async function liveMatchCount(competitionId: string): Promise<number> {
  * so goals scored mid-matchday move the rows immediately — exactly like a
  * Premier League table on a Saturday. Finished matches replace those numbers
  * as soon as the whistle goes.
+ *
+ * Also computes:
+ * - `trend`: position movement vs previous matchday (up/down/same)
+ * - `form`: last 5 results (Premier League style)
  */
 export async function leagueStandings(
   competitionId: string,
@@ -939,7 +1012,8 @@ export async function leagueStandings(
       homeTeamId: { not: null },
       awayTeamId: { not: null },
     },
-    select: { homeTeamId: true, awayTeamId: true, homeScore: true, awayScore: true, status: true },
+    select: { homeTeamId: true, awayTeamId: true, homeScore: true, awayScore: true, status: true, finishedAt: true },
+    orderBy: { finishedAt: "asc" },
   });
 
   const playing = new Set<string>();
@@ -950,11 +1024,15 @@ export async function leagueStandings(
     }
   }
 
-  type Row = Omit<StandingRow, "playing">;
+  type Row = Omit<StandingRow, "playing" | "trend" | "form">;
   const rows = new Map<string, Row>();
   for (const t of teams) {
     rows.set(t.team.id, { id: t.team.id, name: t.team.name, slug: t.team.slug, code: t.team.code, p: 0, w: 0, d: 0, l: 0, gf: 0, ga: 0, pts: 0 });
   }
+
+  // Track form (last 5 results) per team
+  const formMap = new Map<string, ("W" | "D" | "L")[]>();
+
   for (const m of matches) {
     const h = rows.get(m.homeTeamId!);
     const a = rows.get(m.awayTeamId!);
@@ -962,13 +1040,86 @@ export async function leagueStandings(
     h.p++; a.p++;
     h.gf += m.homeScore; h.ga += m.awayScore;
     a.gf += m.awayScore; a.ga += m.homeScore;
-    if (m.homeScore > m.awayScore) { h.w++; h.pts += 3; a.l++; }
-    else if (m.homeScore < m.awayScore) { a.w++; a.pts += 3; h.l++; }
-    else { h.d++; a.d++; h.pts++; a.pts++; }
+    if (m.homeScore > m.awayScore) { h.w++; h.pts += 3; a.l++; addForm(formMap, h.id, "W"); addForm(formMap, a.id, "L"); }
+    else if (m.homeScore < m.awayScore) { a.w++; a.pts += 3; h.l++; addForm(formMap, h.id, "L"); addForm(formMap, a.id, "W"); }
+    else { h.d++; a.d++; h.pts++; a.pts++; addForm(formMap, h.id, "D"); addForm(formMap, a.id, "D"); }
   }
-  return [...rows.values()]
-    .map((r) => ({ ...r, playing: playing.has(r.id) }))
-    .sort((x, y) => y.pts - x.pts || y.gf - y.ga - (x.gf - x.ga) || y.gf - x.gf || x.name.localeCompare(y.name));
+
+  // Compute trend: compare current position to position before the last finished match
+  const sorted = [...rows.values()].sort((x, y) => y.pts - x.pts || y.gf - y.ga - (x.gf - x.ga) || y.gf - x.gf || x.name.localeCompare(y.name));
+  const currentPositions = new Map<string, number>();
+  sorted.forEach((r, i) => currentPositions.set(r.id, i + 1));
+
+  // Get previous positions (before the last batch of finished matches)
+  const previousPositions = await computePreviousPositions(competitionId, matches);
+
+  return sorted
+    .map((r) => {
+      const currentPos = currentPositions.get(r.id) ?? 0;
+      const prevPos = previousPositions.get(r.id) ?? currentPos;
+      const trend: "up" | "down" | "same" = currentPos < prevPos ? "up" : currentPos > prevPos ? "down" : "same";
+      return {
+        ...r,
+        playing: playing.has(r.id),
+        trend,
+        form: formMap.get(r.id) ?? [],
+      };
+    });
+}
+
+function addForm(formMap: Map<string, ("W" | "D" | "L")[]>, teamId: string, result: "W" | "D" | "L") {
+  const existing = formMap.get(teamId) ?? [];
+  existing.push(result);
+  if (existing.length > 5) existing.shift();
+  formMap.set(teamId, existing);
+}
+
+/**
+ * Compute team positions before the last matchday.
+ * Uses all finished matches except the most recent batch.
+ */
+async function computePreviousPositions(
+  competitionId: string,
+  allMatches: { homeTeamId: string | null; awayTeamId: string | null; homeScore: number; awayScore: number; status: string; finishedAt: Date | null }[],
+): Promise<Map<string, number>> {
+  const finishedMatches = allMatches.filter((m) => m.status === "FINISHED" && m.finishedAt);
+  if (finishedMatches.length === 0) return new Map();
+
+  // Find the last matchday (most recent finishedAt)
+  const lastMatchday = Math.max(...finishedMatches.map((m) => m.finishedAt!.getTime()));
+  const previousMatches = finishedMatches.filter((m) => m.finishedAt!.getTime() < lastMatchday);
+
+  if (previousMatches.length === 0) return new Map();
+
+  // Compute standings from previous matches only
+  const teams = await prisma.competitionTeam.findMany({
+    where: { competitionId },
+    include: { team: { select: { id: true } } },
+  });
+
+  type Row = { id: string; pts: number; gd: number; gf: number };
+  const rows = new Map<string, Row>();
+  for (const t of teams) {
+    rows.set(t.team.id, { id: t.team.id, pts: 0, gd: 0, gf: 0 });
+  }
+
+  for (const m of previousMatches) {
+    const h = rows.get(m.homeTeamId!);
+    const a = rows.get(m.awayTeamId!);
+    if (!h || !a) continue;
+    h.gd += m.homeScore - m.awayScore;
+    a.gd += m.awayScore - m.homeScore;
+    h.gf += m.homeScore;
+    a.gf += m.awayScore;
+    if (m.homeScore > m.awayScore) h.pts += 3;
+    else if (m.homeScore < m.awayScore) a.pts += 3;
+    else { h.pts++; a.pts++; }
+  }
+
+  const sorted = [...rows.values()].sort((x, y) => y.pts - x.pts || y.gd - x.gd || y.gf - x.gf);
+  const positions = new Map<string, number>();
+  sorted.forEach((r, i) => positions.set(r.id, i + 1));
+  return positions;
 }
 
 /* ----------------------------- public stat cards --------------------------- */
