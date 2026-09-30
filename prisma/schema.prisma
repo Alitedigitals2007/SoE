@@ -125,6 +125,11 @@ model Match {
   referee          User?       @relation("MatchReferee", fields: [refereeId], references: [id], onDelete: SetNull)
   countdownSeconds Int         @default(15)
 
+  // Match integrity: on-field players are held in full screen and cannot paste,
+  // and every signal is surfaced to the referee and admins. Half-time releases
+  // the full-screen requirement (see MatchPlayer below).
+  integrityMode Boolean @default(true)
+
   // Optional tournament context. Friendly matches carry none of these.
   competitionId String?
   competition   Competition? @relation(fields: [competitionId], references: [id], onDelete: SetNull)
@@ -154,6 +159,7 @@ model Match {
   requests        SubstitutionRequest[]
   substitutions   Substitution[]
   incidents       ConductIncident[]
+  integrityFlags  IntegrityFlag[]
   timeline        TimelineEvent[]
   potmVotes       PotmVote[]
   chatMessages    ChatMessage[]
@@ -188,9 +194,13 @@ model MatchPlayer {
 
   submissions Submission[]
   incidents   ConductIncident[]
+  integrityFlags IntegrityFlag[]
   outInSubs   Substitution[]    @relation("SubPlayerOut")
   inInSubs    Substitution[]    @relation("SubPlayerIn")
   assists     Round[]           @relation("RoundAssist")
+
+  /// Computed integrity score (0-100, higher = cleaner). Updated after each flag.
+  integrityScore Int @default(100)
 
   @@unique([matchId, userId])
   @@unique([matchId, team, number])
@@ -240,16 +250,24 @@ model Round {
   question         Question       @relation(fields: [questionId], references: [id])
   status           RoundStatus    @default(PENDING)
   openedAt         DateTime?
+  /// The question becomes readable at `openedAt`, but the answer box stays shut
+  /// until here. Splitting read time from typing time is what stops a lookup:
+  /// by the time anyone may answer, the search is already over.
+  inputOpensAt     DateTime?
   closesAt         DateTime?
   lockedAt         DateTime?
   decidedAt        DateTime?
   decision         RoundDecision?
   goalSubmissionId String?        @unique
   assistPlayerId   String? // player credited with the assist on a goal round
+  /// Submissions struck by an upheld integrity flag. Kept (not deleted) as
+  /// evidence, but the referee can no longer award them.
+  struckSubmissionIds String[]    @default([])
 
   submissions    Submission[]
   goalSubmission Submission?  @relation("RoundWinner", fields: [goalSubmissionId], references: [id])
   assistPlayer   MatchPlayer? @relation("RoundAssist", fields: [assistPlayerId], references: [id], onDelete: SetNull)
+  integrityFlags IntegrityFlag[]
 
   @@unique([matchId, number])
   @@unique([matchId, questionId])
@@ -269,7 +287,17 @@ model Submission {
   seq         Int // 1-based submission order inside the round
   submittedAt DateTime    @default(now())
 
+  // Integrity forensics, all captured at submit time.
+  /// The client reported a paste/drop into the answer field.
+  pasted      Boolean     @default(false)
+  /// Server-measured gap between the answer box unlocking and this submission.
+  typingMs    Int?
+  charCount   Int?
+  /// Server-side heuristic: answer looks AI-generated.
+  aiDetected  Boolean     @default(false)
+
   winningRound Round? @relation("RoundWinner")
+  integrityFlags IntegrityFlag[]
 
   @@unique([roundId, playerId])
   @@index([roundId, seq])
@@ -324,6 +352,12 @@ enum IncidentType {
   ACCOUNT_MISUSE
   UNAUTHORIZED_ASSISTANCE
   DISRESPECT_REFEREE
+  /// The answer was pasted or dropped into the box instead of typed.
+  COPIED_ANSWER
+  /// The player left full screen while a question was in play.
+  LEFT_FULLSCREEN
+  /// An upheld integrity check the referee judged to be external/AI assistance.
+  AI_ASSISTANCE
   OTHER
 }
 
@@ -364,7 +398,60 @@ enum TimelineType {
   PENALTY_MISS
   PENALTY_SHOOTOUT_START
   PENALTY_SHOOTOUT_END
+  INTEGRITY_FLAG // an anti-copy breach was raised on the public board
   ADMIN_OVERRIDE // admin manually fixed the score or a goal record
+}
+
+/**
+ * ---------------------------- Match integrity -------------------------------
+ *
+ * A breach is raised the moment it happens (paste, copy attempt, or leaving
+ * fullscreen mid-question) and is visible to the referee and admins. Nothing is
+ * punished automatically: `action` stays null until an official issues the
+ * sanction, and the referee chooses the action. `suggested` is the escalation
+ * rule for this breach's ordinal number on the player — 1st warning, 2nd
+ * yellow, 3rd and beyond red — so the board can pre-select the right card.
+ */
+
+enum IntegrityFlagKind {
+  COPIED_ANSWER // text pasted or dropped into the answer box
+  COPIED_CONTENT // tried to copy a question or answer off the screen
+  LEFT_FULLSCREEN // broke fullscreen while a question was in play
+  TAB_SWITCH // switched tabs or windows during a question
+  RIGHT_CLICK // right-clicked on the match area
+  KEYBOARD_SHORTCUT // used a blocked keyboard shortcut
+  SCREEN_RECORDING // attempted to screen record
+  AI_ASSISTANCE // answer flagged as potentially AI-generated
+}
+
+model IntegrityFlag {
+  id       String            @id @default(cuid())
+  matchId  String
+  match    Match             @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  playerId String
+  player   MatchPlayer       @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  roundId  String?
+  round    Round?            @relation(fields: [roundId], references: [id], onDelete: SetNull)
+  /// Set when the breach is a paste, so the referee board can badge that answer.
+  submissionId String?
+  submission   Submission? @relation(fields: [submissionId], references: [id], onDelete: SetNull)
+
+  kind      IntegrityFlagKind
+  detail    String? // short human line, e.g. "Left fullscreen at 04:12"
+  /// This player's nth breach of the match, 1-based. Drives the escalation.
+  seq       Int
+  suggested IncidentAction  @default(WARNING)
+  /// null until a referee/admin issues the card.
+  action    IncidentAction?
+  issuedById String?
+  issuedAt   DateTime?
+  createdAt  DateTime @default(now())
+
+  @@index([matchId, createdAt])
+  @@index([matchId, action])
+  // One ordinal per player per match: a race between two simultaneous breaches
+  // loses the duplicate instead of double-counting the player's escalation.
+  @@unique([playerId, seq])
 }
 
 model TimelineEvent {

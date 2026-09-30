@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import type {
   AnswerView,
   IncidentAction,
+  IntegrityBoardView,
   MatchSnapshot,
   PenaltyKickView,
   PenaltyShootoutView,
@@ -63,6 +64,13 @@ export const matchInclude = {
     },
   },
   competition: { select: { type: true } },
+  integrityFlags: {
+    orderBy: { createdAt: "asc" as const },
+    include: {
+      player: { include: { user: { select: { id: true, name: true } } } },
+      round: { select: { number: true } },
+    },
+  },
   potmVotes: {
     include: {
       player: { select: { id: true, name: true } },
@@ -101,6 +109,11 @@ function roundToView(
       team: isReferee && slot ? slot.team : undefined,
       at: s.submittedAt.toISOString(),
       winner: round.goalSubmissionId === s.id,
+      // The paste badge is a referee's-eye signal only: spectators see the
+      // answer text but are told nothing about how it got typed.
+      pasted: isReferee ? s.pasted : undefined,
+      // AI detection is also referee-only: players don't know they were flagged.
+      aiDetected: isReferee ? s.aiDetected : undefined,
     };
   });
 
@@ -152,6 +165,7 @@ export function buildSnapshot(
     number: m.number,
     role: m.role,
     isCaptain: m.isCaptain,
+    integrityScore: m.integrityScore,
   }));
 
   const viewerRosterSlot =
@@ -294,6 +308,39 @@ export function buildSnapshot(
     competitionType: (match.competition?.type === "LEAGUE" || match.competition?.type === "CUP") ? match.competition.type : null,
     cupRound: match.cupRound ?? null,
     penaltyShootout,
+    integrity: buildIntegrity(match, isReferee || isAdmin),
+  };
+}
+
+/**
+ * The anti-copy board. The breach list is referee/admin only; the count of
+ * punished breaches is public so the scoreboard can carry the tally and a
+ * player knows a card has already been issued elsewhere in the match.
+ */
+function buildIntegrity(
+  match: MatchFull,
+  canSeeFlags: boolean,
+): IntegrityBoardView {
+  return {
+    issuedCount: match.integrityFlags.filter((f) => f.action !== null).length,
+    flags: canSeeFlags
+      ? match.integrityFlags.map((f) => ({
+          id: f.id,
+          kind: f.kind,
+          detail: f.detail,
+          seq: f.seq,
+          suggested: f.suggested,
+          action: f.action,
+          playerUserId: f.player.userId,
+          playerName: f.player.user.name,
+          team: f.player.team as TeamSide,
+          number: f.player.number,
+          roundNumber: f.round?.number ?? null,
+          submissionId: f.submissionId,
+          at: f.createdAt.toISOString(),
+          issuedAt: f.issuedAt?.toISOString() ?? null,
+        }))
+      : [],
   };
 }
 
@@ -350,6 +397,18 @@ function buildSummary(
     elapsedSec: elapsedSecondsSince(match.startedAt, e.createdAt),
   }));
 
+  // Post-match integrity report
+  const totalBreaches = match.integrityFlags.length;
+  const aiDetections = match.integrityFlags.filter((f) => f.kind === "AI_ASSISTANCE").length;
+  const playerScores = match.roster
+    .map((r) => ({
+      name: r.user.name,
+      team: r.team as TeamSide,
+      score: r.integrityScore,
+      breaches: match.integrityFlags.filter((f) => f.playerId === r.id).length,
+    }))
+    .sort((a, b) => b.score - a.score);
+
   return {
     finalHome: match.homeName,
     finalAway: match.awayName,
@@ -362,6 +421,11 @@ function buildSummary(
     substitutions,
     timeline,
     topAnswers: scorers,
+    integrityReport: {
+      totalBreaches,
+      aiDetections,
+      playerScores,
+    },
   };
 }
 

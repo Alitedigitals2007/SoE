@@ -12,6 +12,7 @@ import {
   decideRound,
   decideSubstitution,
   endMatch,
+  issueIntegrityAction as issueIntegrityEngine,
   kickOff,
   lockAndReveal,
   MatchGuardError,
@@ -20,6 +21,7 @@ import {
   postponeMatch,
   recordIncident,
   removeQuestion,
+  reportIntegrity,
   requestSubstitution,
   resumeMatch,
   setLineup,
@@ -204,8 +206,31 @@ export async function openNextQuestionAction(code: string): Promise<ActionResult
   return runEngine((actor) => openNextQuestion(actor, { code }));
 }
 
-export async function submitAnswerAction(code: string, answer: string): Promise<ActionResult> {
-  return runEngine((actor) => submitAnswer(actor, { code, answer }));
+export async function submitAnswerAction(
+  code: string,
+  answer: string,
+  pasted = false,
+): Promise<ActionResult> {
+  return runEngine((actor) => submitAnswer(actor, { code, answer, pasted }));
+}
+
+/** Player-reported anti-copy breach. Rate limited and paused-match exempt. */
+export async function reportIntegrityAction(input: {
+  code: string;
+  kind: "COPIED_ANSWER" | "COPIED_CONTENT" | "LEFT_FULLSCREEN" | "TAB_SWITCH" | "RIGHT_CLICK" | "KEYBOARD_SHORTCUT" | "SCREEN_RECORDING";
+  detail?: string;
+}): Promise<ActionResult> {
+  return runEngine((actor) => reportIntegrity(actor, input));
+}
+
+/** Referee/admin issues the warning, yellow or red for a logged breach. */
+export async function issueIntegrityAction(input: {
+  code: string;
+  flagId: string;
+  action: "WARNING" | "YELLOW_CARD" | "RED_CARD";
+  note?: string;
+}): Promise<ActionResult> {
+  return runEngine((actor) => issueIntegrityEngine(actor, input));
 }
 
 export async function lockRevealAction(code: string, force = false): Promise<ActionResult> {

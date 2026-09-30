@@ -20,6 +20,9 @@ export type IncidentType =
   | "ACCOUNT_MISUSE"
   | "UNAUTHORIZED_ASSISTANCE"
   | "DISRESPECT_REFEREE"
+  | "COPIED_ANSWER"
+  | "LEFT_FULLSCREEN"
+  | "AI_ASSISTANCE"
   | "OTHER";
 
 export const INCIDENT_LABELS: Record<IncidentType, string> = {
@@ -31,6 +34,9 @@ export const INCIDENT_LABELS: Record<IncidentType, string> = {
   ACCOUNT_MISUSE: "Account misuse",
   UNAUTHORIZED_ASSISTANCE: "Unauthorized assistance",
   DISRESPECT_REFEREE: "Disrespect toward referee",
+  COPIED_ANSWER: "Answer pasted or dropped in",
+  LEFT_FULLSCREEN: "Left fullscreen during a question",
+  AI_ASSISTANCE: "External / AI assistance",
   OTHER: "Other",
 };
 
@@ -49,6 +55,59 @@ export const HALFTIME_SECONDS = 120;
 /** Questions played per match (the bank prepares more; rounds 1..10 are played). */
 export const MATCH_ROUNDS = 10;
 
+/* ---------------------------- Match integrity ------------------------------- */
+
+/**
+ * Breach kinds. A copy attempt on the question is reported separately from a
+ * paste into the answer box, because the referee judges them differently: a
+ * copy is an attempt to leak the question, a paste is an attempt to inject an
+ * answer.
+ */
+export type IntegrityFlagKind =
+  | "COPIED_ANSWER"
+  | "COPIED_CONTENT"
+  | "LEFT_FULLSCREEN"
+  | "TAB_SWITCH"
+  | "RIGHT_CLICK"
+  | "KEYBOARD_SHORTCUT"
+  | "SCREEN_RECORDING"
+  | "AI_ASSISTANCE";
+
+export const INTEGRITY_KIND_LABELS: Record<IntegrityFlagKind, string> = {
+  COPIED_ANSWER: "Answer pasted in",
+  COPIED_CONTENT: "Copied from the screen",
+  LEFT_FULLSCREEN: "Left fullscreen",
+  TAB_SWITCH: "Switched tabs/windows",
+  RIGHT_CLICK: "Right-clicked on match area",
+  KEYBOARD_SHORTCUT: "Used blocked keyboard shortcut",
+  SCREEN_RECORDING: "Attempted screen recording",
+  AI_ASSISTANCE: "AI-generated answer detected",
+};
+
+export const INTEGRITY_KIND_ICONS: Record<IntegrityFlagKind, string> = {
+  COPIED_ANSWER: "📋",
+  COPIED_CONTENT: "⧉",
+  LEFT_FULLSCREEN: "⛶",
+  TAB_SWITCH: "🔀",
+  RIGHT_CLICK: "🖱️",
+  KEYBOARD_SHORTCUT: "⌨️",
+  SCREEN_RECORDING: "🎥",
+  AI_ASSISTANCE: "🤖",
+};
+
+/**
+ * Escalation rule: a player's nth breach of a match is worth a warning, then a
+ * yellow, then a red. Ordinals past three stay at red.
+ */
+export function integrityActionForSeq(seq: number): IncidentAction {
+  if (seq >= 3) return "RED_CARD";
+  if (seq === 2) return "YELLOW_CARD";
+  return "WARNING";
+}
+
+/** Minimum gap between two accepted breach reports from one player, in ms. */
+export const INTEGRITY_REPORT_COOLDOWN_MS = 2000;
+
 /* ------------------------------ Public views ------------------------------ */
 
 export interface RosterSlotView {
@@ -58,6 +117,8 @@ export interface RosterSlotView {
   number: number;
   role: LineupRole;
   isCaptain: boolean;
+  /** 0-100, higher = cleaner record. 100 = no breaches. */
+  integrityScore: number;
 }
 
 export interface TimelineItemView {
@@ -77,6 +138,7 @@ export interface TimelineItemView {
     | "PENALTY_MISS"
     | "PENALTY_SHOOTOUT_START"
     | "PENALTY_SHOOTOUT_END"
+    | "INTEGRITY_FLAG"
     | "ADMIN_OVERRIDE";
   label: string;
   detail?: string | null;
@@ -93,6 +155,36 @@ export interface AnswerView {
   team?: TeamSide;
   at: string;
   winner?: boolean;
+  /** referee/admin only: the answer was pasted or dropped in, not typed */
+  pasted?: boolean;
+  /** referee/admin only: server flagged this as potentially AI-generated */
+  aiDetected?: boolean;
+}
+
+/** One anti-copy breach, as shown on the referee's integrity board. */
+export interface IntegrityFlagView {
+  id: string;
+  kind: IntegrityFlagKind;
+  detail: string | null;
+  /** this player's nth breach of the match, 1-based */
+  seq: number;
+  suggested: IncidentAction;
+  action: IncidentAction | null;
+  playerUserId: string;
+  playerName: string;
+  team: TeamSide;
+  number: number;
+  roundNumber: number | null;
+  submissionId: string | null;
+  at: string;
+  issuedAt: string | null;
+}
+
+export interface IntegrityBoardView {
+  /** referee/admin only: every breach, newest last. Empty for everyone else. */
+  flags: IntegrityFlagView[];
+  /** public: how many breaches have been punished. Shown on the scoreboard. */
+  issuedCount: number;
 }
 
 export interface RoundView {
@@ -164,6 +256,12 @@ export interface MatchSummary {
   }[];
   timeline: TimelineItemView[];
   topAnswers: { name: string; team: TeamSide; goals: number }[];
+  /** Post-match integrity report: total breaches, AI detections, and per-player scores */
+  integrityReport: {
+    totalBreaches: number;
+    aiDetections: number;
+    playerScores: { name: string; team: TeamSide; score: number; breaches: number }[];
+  };
 }
 
 export interface MatchSnapshot {
@@ -208,6 +306,8 @@ export interface MatchSnapshot {
   competitionType: "LEAGUE" | "CUP" | null;
   cupRound: number | null;
   penaltyShootout: PenaltyShootoutView | null;
+  /** anti-copy board: full detail for the referee, a counter for everyone */
+  integrity: IntegrityBoardView;
 }
 
 /** Result shape for server actions — never throw across the boundary. */

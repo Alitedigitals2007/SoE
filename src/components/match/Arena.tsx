@@ -7,6 +7,7 @@ import {
   decideRoundAction,
   decideSubstitutionAction,
   endMatchAction,
+  issueIntegrityAction,
   lockRevealAction,
   openNextQuestionAction,
   pauseMatchAction,
@@ -30,8 +31,11 @@ import {
   HALFTIME_SECONDS,
   INCIDENT_ACTIONS,
   INCIDENT_LABELS,
+  INTEGRITY_KIND_ICONS,
+  INTEGRITY_KIND_LABELS,
   type IncidentAction,
   type IncidentType,
+  type IntegrityFlagView,
   type MatchSnapshot,
   type PenaltyShootoutView,
   type RoundView,
@@ -40,6 +44,7 @@ import {
 } from "@/lib/domain";
 import { ChatBox } from "@/components/match/ChatBox";
 import { KickoffCountdown } from "@/components/KickoffCountdown";
+import { useMatchIntegrity, type ZoneHandlers } from "@/components/match/useMatchIntegrity";
 
 function pickPhrase(seed: string, phrases: string[]): string {
   let h = 0;
@@ -80,6 +85,8 @@ function commentaryLine(ev: TimelineItemView): string {
       return `A change coming up here${detail}`;
     case "CARD":
       return `Oooft, the referee reaches for a card here!${detail}`;
+    case "INTEGRITY_FLAG":
+      return `A copy attempt has been flagged!${detail}`;
     case "HALF_TIME":
       return `Half-time! Grab a drink, catch your breath — we go again shortly.${detail}`;
     case "FULL_TIME":
@@ -196,11 +203,27 @@ function ArenaInner({
   const isReferee = snapshot.viewer.isReferee;
   const matchLive = snapshot.status === "LIVE";
 
+  // Integrity rules bind only an on-field player during running play. A pause
+  // (half-time included) lifts them, and the referee and admins are exempt.
+  const enforcing =
+    matchLive && !snapshot.paused && snapshot.viewer.player?.role === "STARTER";
+  const integrity = useMatchIntegrity({ code: snapshot.code, enforcing });
+
   return (
     <div className="mx-auto w-full max-w-7xl px-4 py-6">
       <MatchHeader snapshot={snapshot} mode={mode} />
 
+      <SpectatorAlert snapshot={snapshot} />
+
       <PauseBanner snapshot={snapshot} onError={onError} />
+
+      {enforcing ? (
+        <IntegrityGate
+          fullscreen={integrity.fullscreen}
+          pasteBlocked={integrity.pasteBlocked}
+          onEnterFullscreen={() => void integrity.requestFullscreen()}
+        />
+      ) : null}
 
       <div className="mt-4 grid gap-4 lg:grid-cols-3">
         <div className="lg:col-span-2 space-y-4">
@@ -223,9 +246,12 @@ function ArenaInner({
           ) : snapshot.status === "DRAFT" ? (
             <PreMatch snapshot={snapshot} />
           ) : (
-            <Stage snapshot={snapshot} onError={onError} />
+            <Stage snapshot={snapshot} onError={onError} zoneHandlers={integrity.zoneHandlers} />
           )}
 
+          {isReferee && matchLive ? (
+            <IntegrityBoard snapshot={snapshot} onError={onError} />
+          ) : null}
           {isReferee && matchLive && <RefereeTools snapshot={snapshot} onError={onError} />}
           {!isReferee && matchLive && <CaptainTools snapshot={snapshot} onError={onError} />}
         </div>
@@ -396,6 +422,44 @@ function PauseBanner({ snapshot, onError }: { snapshot: MatchSnapshot; onError: 
   );
 }
 
+/**
+ * Public alert banner: shown to everyone when a breach is detected.
+ * This makes integrity enforcement visible to all viewers.
+ */
+function SpectatorAlert({ snapshot }: { snapshot: MatchSnapshot }) {
+  const [dismissed, setDismissed] = React.useState(false);
+  const [lastFlagId, setLastFlagId] = React.useState<string | null>(null);
+
+  const latestFlag = snapshot.integrity.flags.length
+    ? snapshot.integrity.flags[snapshot.integrity.flags.length - 1]
+    : null;
+
+  // Show alert for new flags
+  if (latestFlag && latestFlag.id !== lastFlagId) {
+    setLastFlagId(latestFlag.id);
+    setDismissed(false);
+  }
+
+  if (!latestFlag || dismissed) return null;
+
+  return (
+    <div className="mt-4 rounded-xl border-2 border-danger/50 bg-danger/10 px-4 py-3 text-center">
+      <p className="text-sm font-semibold text-danger">
+        ⚠️ Integrity breach detected — {latestFlag.playerName} ({latestFlag.team === "HOME" ? snapshot.homeName : snapshot.awayName})
+      </p>
+      <p className="mt-1 text-xs text-muted">
+        {INTEGRITY_KIND_ICONS[latestFlag.kind]} {INTEGRITY_KIND_LABELS[latestFlag.kind]} · Breach #{latestFlag.seq} of the match
+      </p>
+      <button
+        className="mt-2 text-xs text-subtle underline hover:text-fg"
+        onClick={() => setDismissed(true)}
+      >
+        Dismiss
+      </button>
+    </div>
+  );
+}
+
 function MatchHeader({ snapshot, mode }: { snapshot: MatchSnapshot; mode: LiveMode }) {
   const live = snapshot.status === "LIVE";
   const liveTone = live ? "success" : snapshot.status === "FINISHED" ? "neutral" : "warning";
@@ -409,6 +473,12 @@ function MatchHeader({ snapshot, mode }: { snapshot: MatchSnapshot; mode: LiveMo
           <Badge tone={liveTone}>{liveText}</Badge>
           <span className="text-xs font-medium text-muted">Code {snapshot.code}</span>
           <LiveChip mode={mode} />
+          {snapshot.integrity.issuedCount > 0 ? (
+            <Badge tone="danger" className="bg-danger/15 text-danger">
+              ⛨ {snapshot.integrity.issuedCount} copy card
+              {snapshot.integrity.issuedCount === 1 ? "" : "s"}
+            </Badge>
+          ) : null}
         </div>
         <div className="flex items-center gap-3">
           <p className="text-xs text-subtle">Referee: {snapshot.refereeName}</p>
@@ -566,7 +636,13 @@ function PreMatch({ snapshot }: { snapshot: MatchSnapshot }) {
 
 /* ------------------------------ the live stage ------------------------------ */
 
-function Stage({ snapshot, onError }: { snapshot: MatchSnapshot; onError: (e: string | null) => void }) {
+type StageProps = {
+  snapshot: MatchSnapshot;
+  onError: (e: string | null) => void;
+  zoneHandlers: ZoneHandlers;
+};
+
+function Stage({ snapshot, onError, zoneHandlers }: StageProps) {
   const round = snapshot.round;
   const isReferee = snapshot.viewer.isReferee;
   const isDraw = snapshot.homeScore === snapshot.awayScore;
@@ -619,7 +695,16 @@ function Stage({ snapshot, onError }: { snapshot: MatchSnapshot; onError: (e: st
     );
   }
 
-  if (round.status === "OPEN") return <OpenStage snapshot={snapshot} round={round} isReferee={isReferee} onError={onError} />;
+  if (round.status === "OPEN")
+    return (
+      <OpenStage
+        snapshot={snapshot}
+        round={round}
+        isReferee={isReferee}
+        onError={onError}
+        zoneHandlers={zoneHandlers}
+      />
+    );
   if (round.status === "LOCKED") return <LockedStage snapshot={snapshot} round={round} isReferee={isReferee} onError={onError} />;
   return <DecidedStage snapshot={snapshot} round={round} isReferee={isReferee} onError={onError} />;
 }
@@ -629,11 +714,13 @@ function OpenStage({
   round,
   isReferee,
   onError,
+  zoneHandlers,
 }: {
   snapshot: MatchSnapshot;
   round: RoundView;
   isReferee: boolean;
   onError: (e: string | null) => void;
+  zoneHandlers: ZoneHandlers;
 }) {
   const my = snapshot.viewer.player;
   const canAnswer = !!my?.canSubmitNow;
@@ -649,36 +736,40 @@ function OpenStage({
       <div className="space-y-5 p-5">
         <CountdownPanel closesAt={round.closesAt} />
 
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-widest text-gold">Question {round.number} / 10</p>
-          <h2 className="mt-1 text-xl font-bold leading-snug text-fg sm:text-2xl">
-            <MathText>{round.questionText}</MathText>
-          </h2>
-        </div>
+        {/* Protected zone: nothing in here can be copied out or pasted into
+            while play is running. Every attempt is reported to the referee. */}
+        <div {...zoneHandlers} className="space-y-5">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-widest text-gold">Question {round.number} / 10</p>
+            <h2 className="mt-1 text-xl font-bold leading-snug text-fg sm:text-2xl">
+              <MathText>{round.questionText}</MathText>
+            </h2>
+          </div>
 
-        {my ? (
-          onField ? (
-            canAnswer ? (
-              <AnswerForm code={snapshot.code} onError={onError} />
+          {my ? (
+            onField ? (
+              canAnswer ? (
+                <AnswerForm code={snapshot.code} onError={onError} />
+              ) : (
+                <div className="rounded-lg border border-line bg-bg-raised px-4 py-3 text-sm">
+                  {didAnswer ? (
+                    <p className="text-success">
+                      Answer locked in — <span className="font-semibold"><MathText>{my.myAnswerThisRound}</MathText></span>
+                    </p>
+                  ) : (
+                    <p className="text-muted">This question is no longer open for answers.</p>
+                  )}
+                </div>
+              )
             ) : (
-              <div className="rounded-lg border border-line bg-bg-raised px-4 py-3 text-sm">
-                {didAnswer ? (
-                  <p className="text-success">
-                    Answer locked in — <span className="font-semibold"><MathText>{my.myAnswerThisRound}</MathText></span>
-                  </p>
-                ) : (
-                  <p className="text-muted">This question is no longer open for answers.</p>
-                )}
+              <div className="rounded-lg border border-line bg-bg-raised px-4 py-3 text-sm text-muted">
+                {my.role === "SUB" ? "You are on the bench — only on-field players can answer." : "You have left the field and cannot answer."}
               </div>
             )
           ) : (
-            <div className="rounded-lg border border-line bg-bg-raised px-4 py-3 text-sm text-muted">
-              {my.role === "SUB" ? "You are on the bench — only on-field players can answer." : "You have left the field and cannot answer."}
-            </div>
-          )
-        ) : (
-          <p className="text-sm text-muted">Players are submitting their answers — stay tuned.</p>
-        )}
+            <p className="text-sm text-muted">Players are submitting their answers — stay tuned.</p>
+          )}
+        </div>
 
         {isReferee && <ForceLockButton code={snapshot.code} onError={onError} />}
       </div>
@@ -764,6 +855,22 @@ function LockedStage({
                           title={`Matches the answer key (${round.correctAnswer}) once chemistry/maths notation is normalised`}
                         >
                           ✓ answer key
+                        </span>
+                      ) : null}
+                      {isReferee && a.pasted ? (
+                        <span
+                          className="shrink-0 rounded bg-danger/20 px-1.5 py-0.5 text-[10px] font-bold uppercase text-danger"
+                          title="This answer was pasted or dropped into the box, not typed. A copy check is on your integrity board."
+                        >
+                          ⧉ pasted
+                        </span>
+                      ) : null}
+                      {isReferee && a.aiDetected ? (
+                        <span
+                          className="shrink-0 rounded bg-purple-500/20 px-1.5 py-0.5 text-[10px] font-bold uppercase text-purple-500"
+                          title="This answer was flagged as potentially AI-generated. Review on the integrity board."
+                        >
+                          🤖 AI
                         </span>
                       ) : null}
                       {isReferee && normalizeAnswer(a.answer) !== a.answer.trim() ? (
@@ -887,11 +994,176 @@ function DecidedStage({
   );
 }
 
+/* ----------------------------- match integrity ----------------------------- */
+
+/**
+ * Player-facing warnings. Copying is blocked outright and reported silently, so
+ * this explains the consequences rather than pretending to stop them: the
+ * referee sees every attempt and decides the card. Being out of fullscreen
+ * while play runs is itself a reportable breach, so the banner doubles as the
+ * "you have been flagged" notice.
+ */
+function IntegrityGate({
+  fullscreen,
+  pasteBlocked,
+  onEnterFullscreen,
+}: {
+  fullscreen: boolean;
+  pasteBlocked: boolean;
+  onEnterFullscreen: () => void;
+}) {
+  if (fullscreen && !pasteBlocked) {
+    return (
+      <p className="mt-3 text-center text-[11px] font-semibold uppercase tracking-widest text-success">
+        ● Fullscreen locked · copying disabled
+      </p>
+    );
+  }
+  return (
+    <div
+      role="alert"
+      className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-xl border-2 border-danger/50 bg-danger/10 px-4 py-3"
+    >
+      <p className="text-sm font-semibold text-danger">
+        {!fullscreen
+          ? "Fullscreen required — you have been flagged with the referee."
+          : "Copy and paste are blocked here — the referee has been told."}
+      </p>
+      {!fullscreen ? (
+        <Button size="sm" variant="danger" onClick={onEnterFullscreen}>
+          ⛶ Enter fullscreen
+        </Button>
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * The referee's anti-copy board. Every breach lands here the moment it happens,
+ * with the escalation the rules call for pre-selected: a player's first breach
+ * is a warning, their second a yellow, their third and beyond a red. The
+ * referee still has to press the button — nothing is booked automatically.
+ */
+function IntegrityBoard({
+  snapshot,
+  onError,
+}: {
+  snapshot: MatchSnapshot;
+  onError: (e: string | null) => void;
+}) {
+  const [busyId, setBusyId] = React.useState<string | null>(null);
+  const flags = snapshot.integrity.flags;
+  const pending = flags.filter((f) => !f.action);
+  const settled = flags.filter((f) => f.action);
+
+  const issue = (flag: IntegrityFlagView, action: IncidentAction) => {
+    setBusyId(flag.id);
+    void submit(
+      issueIntegrityAction({ code: snapshot.code, flagId: flag.id, action }),
+      onError,
+    ).finally(() => setBusyId(null));
+  };
+
+  return (
+    <Card>
+      <CardHeader
+        title="Match integrity"
+        description="Copy, paste and fullscreen exits. You decide the card."
+        aside={
+          <Badge tone={pending.length ? "warning" : "neutral"}>
+            {flags.length} check{flags.length === 1 ? "" : "s"} · {snapshot.integrity.issuedCount} booked
+          </Badge>
+        }
+      />
+      <div className="p-5">
+        <p className="text-xs text-muted">
+          Escalation: first breach a warning, second a yellow card, third a red. Half-time and any
+          pause are exempt.
+        </p>
+
+        {flags.length === 0 ? (
+          <EmptyState
+            className="mt-4"
+            title="No copy attempts"
+            description="Nothing has been flagged. The board fills the moment a player pastes, copies or drops out of fullscreen."
+          />
+        ) : null}
+
+        {pending.length ? (
+          <ul className="mt-4 space-y-3" role="list">
+            {pending.map((f) => (
+              <li
+                key={f.id}
+                className="rounded-lg border-2 border-warning/40 bg-warning/5 px-4 py-3"
+              >
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="text-sm font-bold text-fg">
+                      {f.playerName}{" "}
+                      <span className="font-normal text-muted">
+                        #{f.number} · {f.team === "HOME" ? snapshot.homeName : snapshot.awayName}
+                      </span>
+                    </p>
+                    <p className="mt-0.5 text-xs text-warning">
+                      {INTEGRITY_KIND_ICONS[f.kind]} {INTEGRITY_KIND_LABELS[f.kind]}
+                      {f.roundNumber ? ` · question ${f.roundNumber}` : ""}
+                    </p>
+                    {f.detail ? <p className="mt-0.5 text-xs text-muted">{f.detail}</p> : null}
+                  </div>
+                  <Badge tone="warning">
+                    Breach {f.seq} → {INCIDENT_ACTIONS[f.suggested]}
+                  </Badge>
+                </div>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {(Object.keys(INCIDENT_ACTIONS) as IncidentAction[]).map((a) => (
+                    <Button
+                      key={a}
+                      size="sm"
+                      variant={a === f.suggested ? "danger" : "secondary"}
+                      loading={busyId === f.id}
+                      onClick={() => issue(f, a)}
+                    >
+                      {INCIDENT_ACTIONS[a]}
+                    </Button>
+                  ))}
+                </div>
+              </li>
+            ))}
+          </ul>
+        ) : null}
+
+        {settled.length ? (
+          <div className="mt-5 border-t border-line pt-4">
+            <p className="text-xs font-semibold uppercase tracking-widest text-muted">Booked</p>
+            <ul className="mt-2 space-y-1.5" role="list">
+              {settled.map((f) => (
+                <li key={f.id} className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                  <span className="text-muted">
+                    {f.playerName} · {INTEGRITY_KIND_LABELS[f.kind]}
+                    {f.roundNumber ? ` · Q${f.roundNumber}` : ""}
+                  </span>
+                  <Badge tone={f.action === "RED_CARD" ? "danger" : f.action === "YELLOW_CARD" ? "warning" : "neutral"}>
+                    {f.action ? INCIDENT_ACTIONS[f.action] : ""}
+                  </Badge>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+      </div>
+    </Card>
+  );
+}
+
 /* ------------------------- player + referee helpers ------------------------ */
 
 function AnswerForm({ code, onError }: { code: string; onError: (e: string | null) => void }) {
   const [value, setValue] = React.useState("");
   const [busy, setBusy] = React.useState(false);
+  // Set if a paste was ever attempted on this box. The zone handler stops the
+  // text landing, but the server is told regardless so an extension or a
+  // hand-built request cannot submit a pasted answer silently.
+  const pasteAttempted = React.useRef(false);
 
   return (
     <form
@@ -901,9 +1173,10 @@ function AnswerForm({ code, onError }: { code: string; onError: (e: string | nul
         const trimmed = value.trim();
         if (!trimmed || busy) return;
         setBusy(true);
-        void submit(submitAnswerAction(code, trimmed), onError).finally(() => {
+        void submit(submitAnswerAction(code, trimmed, pasteAttempted.current), onError).finally(() => {
           setBusy(false);
           setValue("");
+          pasteAttempted.current = false;
         });
       }}
     >
@@ -917,6 +1190,11 @@ function AnswerForm({ code, onError }: { code: string; onError: (e: string | nul
           maxLength={240}
           value={value}
           onChange={(e) => setValue(e.target.value)}
+          onPaste={() => {
+            pasteAttempted.current = true;
+          }}
+          autoComplete="off"
+          spellCheck={false}
           placeholder="Type your answer…"
           className="min-w-0 flex-1 rounded-md border border-line-strong bg-bg-raised px-3 py-2.5 text-base text-fg placeholder:text-subtle focus:border-gold focus:outline-none focus:ring-1 focus:ring-gold"
         />
@@ -924,7 +1202,9 @@ function AnswerForm({ code, onError }: { code: string; onError: (e: string | nul
           Submit
         </Button>
       </div>
-      <p className="text-xs text-subtle">Once submitted, your answer is locked.</p>
+      <p className="text-xs text-subtle">
+        Typing only — pasting is blocked and goes to the referee. Once submitted, your answer is locked.
+      </p>
     </form>
   );
 }
@@ -1407,11 +1687,28 @@ function LineupColumn({
             <span className="w-5 text-right text-xs font-bold tabular-nums text-subtle">{p.number}</span>
             <span className="min-w-0 flex-1 truncate font-medium text-fg">{p.name}</span>
             {p.isCaptain ? <span aria-label="captain" className="text-xs text-gold">C</span> : null}
+            <IntegrityScoreBadge score={p.integrityScore} />
             <RoleDot role={p.role} />
           </li>
         ))}
       </ul>
     </div>
+  );
+}
+
+function IntegrityScoreBadge({ score }: { score: number }) {
+  if (score >= 100) return null;
+  const tone = score >= 80 ? "warning" : "danger";
+  return (
+    <span
+      className={cn(
+        "shrink-0 rounded px-1 py-0.5 text-[9px] font-bold",
+        tone === "warning" ? "bg-warning/15 text-warning" : "bg-danger/15 text-danger",
+      )}
+      title={`Integrity score: ${score}/100`}
+    >
+      {score}
+    </span>
   );
 }
 
@@ -1694,6 +1991,34 @@ function FullTime({
               </ul>
             </div>
           ) : null}
+
+          <div>
+            <h3 className="text-xs font-bold uppercase tracking-wider text-brand">Integrity Report</h3>
+            <dl className="mt-2 space-y-1 text-sm">
+              <Fact label="Total breaches" value={summary.integrityReport.totalBreaches} />
+              <Fact label="AI detections" value={summary.integrityReport.aiDetections} />
+            </dl>
+            {summary.integrityReport.playerScores.length > 0 ? (
+              <div className="mt-3">
+                <p className="text-xs font-semibold text-muted">Player integrity scores</p>
+                <ul className="mt-1 space-y-1">
+                  {summary.integrityReport.playerScores.map((p) => (
+                    <li key={p.name} className="flex items-center justify-between text-xs">
+                      <span className="text-fg">{p.name}</span>
+                      <span className="flex items-center gap-2">
+                        {p.breaches > 0 ? (
+                          <span className="text-danger">{p.breaches} breach{p.breaches === 1 ? "" : "es"}</span>
+                        ) : null}
+                        <span className={cn("font-bold tabular-nums", p.score >= 100 ? "text-success" : p.score >= 80 ? "text-warning" : "text-danger")}>
+                          {p.score}
+                        </span>
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+          </div>
         </section>
       </div>
 

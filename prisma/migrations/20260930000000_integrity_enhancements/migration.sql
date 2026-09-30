@@ -1,0 +1,12 @@
+-- AlterTable
+ALTER TABLE "MatchPlayer" ADD COLUMN     "integrityScore" INTEGER NOT NULL DEFAULT 100;
+
+-- AlterTable
+ALTER TABLE "Submission" ADD COLUMN     "aiDetected" BOOLEAN NOT NULL DEFAULT false;
+
+-- AlterEnum
+ALTER TYPE "IntegrityFlagKind" ADD VALUE 'TAB_SWITCH';
+ALTER TYPE "IntegrityFlagKind" ADD VALUE 'RIGHT_CLICK';
+ALTER TYPE "IntegrityFlagKind" ADD VALUE 'KEYBOARD_SHORTCUT';
+ALTER TYPE "IntegrityFlagKind" ADD VALUE 'SCREEN_RECORDING';
+ALTER TYPE "IntegrityFlagKind" ADD VALUE 'AI_ASSISTANCE';

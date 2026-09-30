@@ -13,7 +13,14 @@ import { GOAL_POINTS } from "@/lib/platform/engine";
 import { emitSettleNotices, settleMatchBets, type SettleNotice } from "@/lib/bet/engine";
 import { applyWalletChanges } from "@/lib/bet/wallet";
 import type { ActionResult, ErrResult, Role, TeamSide as TeamSideView } from "@/lib/domain";
-import { HALFTIME_AFTER_QUESTION, HALFTIME_SECONDS } from "@/lib/domain";
+import {
+  HALFTIME_AFTER_QUESTION,
+  HALFTIME_SECONDS,
+  INCIDENT_ACTIONS,
+  INTEGRITY_KIND_LABELS,
+  INTEGRITY_REPORT_COOLDOWN_MS,
+  integrityActionForSeq,
+} from "@/lib/domain";
 
 type Tx = Prisma.TransactionClient;
 
@@ -43,6 +50,10 @@ async function loadMatchFor(code: string, tx: PrismaClient | Tx = prisma) {
         },
       },
       timeline: true,
+      integrityFlags: {
+        orderBy: { createdAt: "asc" },
+        include: { player: { include: { user: { select: { id: true, name: true } } } }, round: { select: { number: true } } },
+      },
       questions: { orderBy: { order: "asc" } },
       penaltyShootout: {
         include: {
@@ -126,6 +137,44 @@ export async function autoResumeHalftime(match: { id: string; code: string; paus
 
 function teamNameOf(match: NonNullable<Awaited<ReturnType<typeof loadMatchFor>>>, team: TeamSide) {
   return team === "HOME" ? match.homeName : match.awayName;
+}
+
+/**
+ * Server-side heuristic to flag potentially AI-generated answers.
+ * Looks for patterns typical of AI output: excessive length, perfect structure,
+ * AI-typical phrases, and suspiciously fast submission with high complexity.
+ */
+function detectAIAnswer(answer: string, typingMs: number | null): boolean {
+  const lower = answer.toLowerCase();
+
+  // AI-typical phrases
+  const aiPhrases = [
+    "certainly!", "i'd be happy to", "i'd be happy to help",
+    "as an ai", "as a language model", "in conclusion",
+    "it's important to note", "it is important to note",
+    "firstly,", "secondly,", "thirdly,",
+    "in summary,", "to summarize,", "overall,",
+    "delve", "tapestry", "landscape", "realm",
+    "furthermore,", "moreover,", "additionally,",
+    "in today's", "in today's world", "in today's digital",
+    "vital", "crucial", "essential", "comprehensive",
+  ];
+
+  const hasAiPhrase = aiPhrases.some((p) => lower.includes(p));
+
+  // Very long, well-structured answers (AI tends to be verbose)
+  const isVeryLong = answer.length > 200;
+
+  // Perfect formatting: multiple sentences with proper punctuation
+  const sentences = answer.split(/[.!?]+/).filter((s) => s.trim().length > 0);
+  const hasPerfectStructure = sentences.length >= 3 && answer.length > 100;
+
+  // Suspiciously fast for complex answer
+  const suspiciouslyFast = typingMs !== null && typingMs < 3000 && answer.length > 80;
+
+  // Multiple AI indicators = likely AI
+  const indicators = [hasAiPhrase, isVeryLong, hasPerfectStructure, suspiciouslyFast].filter(Boolean).length;
+  return indicators >= 2;
 }
 
 function rosterNameOf(match: NonNullable<Awaited<ReturnType<typeof loadMatchFor>>>, playerId: string) {
@@ -814,7 +863,7 @@ export async function openNextQuestion(actor: Actor, input: { code: string }): P
 
 export async function submitAnswer(
   actor: Actor,
-  input: { code: string; answer: string },
+  input: { code: string; answer: string; pasted?: boolean },
 ): Promise<ActionResult> {
   const match = await loadMatchFor(input.code);
   if (!match) return err("Match not found.");
@@ -839,18 +888,87 @@ export async function submitAnswer(
   const answer = input.answer.trim();
   if (!answer) return err("An empty answer cannot be submitted.");
   if (answer.length > 240) return err("Answers must be under 240 characters.");
+  // The client blocks paste outright; this is the belt-and-braces record of it.
+  const pasted = input.pasted === true;
+
+  // AI detection heuristic: flag answers that look AI-generated.
+  const aiDetected = detectAIAnswer(answer, round.openedAt ? now.getTime() - round.openedAt.getTime() : null);
 
   await prisma.$transaction(async (tx) => {
     const seq = await tx.submission.count({ where: { roundId: round.id } });
-    await tx.submission.create({
+    const submission = await tx.submission.create({
       data: {
         roundId: round.id,
         playerId: mySlot.id,
         answer,
         submittedAt: now,
         seq: seq + 1,
+        pasted,
+        charCount: answer.length,
+        typingMs: round.openedAt ? Math.max(0, now.getTime() - round.openedAt.getTime()) : null,
+        aiDetected,
       },
     });
+    if (pasted) {
+      // A pasted answer is judged on its merits, but the breach is logged so the
+      // referee sees it on the answer board and can issue the card.
+      const breach = await raiseIntegrityFlag(
+        tx,
+        {
+          matchId: match.id,
+          playerId: mySlot.id,
+          roundId: round.id,
+          submissionId: submission.id,
+          kind: "COPIED_ANSWER",
+          detail: `Answer pasted into the box for question ${round.number}`,
+          breachAt: now,
+        },
+        match.integrityFlags,
+      );
+      if (breach) {
+        await appendTimeline(
+          tx,
+          match.id,
+          "INTEGRITY_FLAG",
+          `Copy attempt — ${rosterNameOf(match, mySlot.id)}`,
+          `${breach.seq === 1 ? "First" : breach.seq === 2 ? "Second" : "Third"} breach of the match. ${breach.suggested === "WARNING" ? "Referee decision: warning" : breach.suggested === "YELLOW_CARD" ? "Referee decision: yellow card" : "Referee decision: red card"}.`,
+          null,
+        );
+        await tx.matchPlayer.update({
+          where: { id: mySlot.id },
+          data: { integrityScore: { decrement: 10 } },
+        });
+      }
+    }
+    if (aiDetected) {
+      const breach = await raiseIntegrityFlag(
+        tx,
+        {
+          matchId: match.id,
+          playerId: mySlot.id,
+          roundId: round.id,
+          submissionId: submission.id,
+          kind: "AI_ASSISTANCE",
+          detail: `Answer flagged as potentially AI-generated for question ${round.number}`,
+          breachAt: now,
+        },
+        match.integrityFlags,
+      );
+      if (breach) {
+        await appendTimeline(
+          tx,
+          match.id,
+          "INTEGRITY_FLAG",
+          `AI assistance detected — ${rosterNameOf(match, mySlot.id)}`,
+          `${breach.seq === 1 ? "First" : breach.seq === 2 ? "Second" : "Third"} breach of the match. ${breach.suggested === "WARNING" ? "Referee decision: warning" : breach.suggested === "YELLOW_CARD" ? "Referee decision: yellow card" : "Referee decision: red card"}.`,
+          null,
+        );
+        await tx.matchPlayer.update({
+          where: { id: mySlot.id },
+          data: { integrityScore: { decrement: 15 } },
+        });
+      }
+    }
     await bumpVersion(tx, match.id);
   });
   await publishMatchUpdate(match.code);
@@ -1204,6 +1322,220 @@ export async function recordIncident(
       "CARD",
       `${actionLabel} — ${rosterNameOf(match, slot.id)}`,
       input.note?.trim() || null,
+      actor.userId,
+    );
+    await bumpVersion(tx, match.id);
+  });
+  await publishMatchUpdate(match.code);
+  return ok(undefined);
+}
+
+/* ------------------------------ match integrity ---------------------------- */
+
+/**
+ * Creates one anti-copy breach inside an existing transaction and returns it.
+ * The player's ordinal (`seq`) is their breach count in this match, and it picks
+ * the escalation the referee is expected to apply: 1st warning, 2nd yellow,
+ * 3rd and beyond red. Nothing is punished here — `action` stays null until
+ * `issueIntegrityAction` runs.
+ *
+ * `known` is the match's already-loaded flag list, used to find the previous
+ * breach for the cooldown check without a second round trip.
+ */
+async function raiseIntegrityFlag(
+  tx: Tx,
+  data: {
+    matchId: string;
+    playerId: string;
+    roundId?: string | null;
+    submissionId?: string | null;
+    kind: "COPIED_ANSWER" | "COPIED_CONTENT" | "LEFT_FULLSCREEN" | "TAB_SWITCH" | "RIGHT_CLICK" | "KEYBOARD_SHORTCUT" | "SCREEN_RECORDING" | "AI_ASSISTANCE";
+    detail?: string;
+    breachAt: Date;
+  },
+  known: { playerId: string; seq: number; createdAt: Date }[],
+) {
+  const mine = known.filter((f) => f.playerId === data.playerId);
+  const seq = mine.length + 1;
+  const suggested = integrityActionForSeq(seq);
+  return tx.integrityFlag.create({
+    data: {
+      matchId: data.matchId,
+      playerId: data.playerId,
+      roundId: data.roundId ?? null,
+      submissionId: data.submissionId ?? null,
+      kind: data.kind,
+      detail: data.detail ?? null,
+      seq,
+      suggested,
+      createdAt: data.breachAt,
+    },
+  });
+}
+
+/** True when this player already has a breach inside the cooldown window. */
+function withinCooldown(
+  known: { playerId: string; createdAt: Date }[],
+  playerId: string,
+  at: Date,
+  cooldownMs: number,
+): boolean {
+  const last = known
+    .filter((f) => f.playerId === playerId)
+    .reduce<Date | null>((max, f) => (!max || f.createdAt > max ? f.createdAt : max), null);
+  return !!last && at.getTime() - last.getTime() < cooldownMs;
+}
+
+/**
+ * Client-reported breach: a paste/drop into the answer box, a copy attempt, or
+ * leaving fullscreen. Only an on-field player in a running, un-paused match can
+ * raise one — half-time and any other pause is exempt, and the referee and
+ * admins are never flagged because they are not answerable.
+ *
+ * The report is rate limited: holding Ctrl+C or tabbing out repeatedly folds
+ * into the single breach already on the board rather than a wall of cards.
+ */
+export async function reportIntegrity(
+  actor: Actor,
+  input: { code: string; kind: "COPIED_ANSWER" | "COPIED_CONTENT" | "LEFT_FULLSCREEN" | "TAB_SWITCH" | "RIGHT_CLICK" | "KEYBOARD_SHORTCUT" | "SCREEN_RECORDING"; detail?: string },
+): Promise<ActionResult> {
+  const match = await loadMatchFor(input.code);
+  if (!match) return err("Match not found.");
+  if (match.status !== "LIVE") return err("The match is not live.");
+  // A pause means the referee stopped play — fullscreen is not owed and copying
+  // is not cheating while the question is frozen.
+  if (match.pausedAt) return err("Play is paused — no integrity checks during the break.");
+
+  const slot = match.roster.find((r) => r.userId === actor.userId);
+  if (!slot) return err("You are not part of this match.");
+  if (actor.role !== "PLAYER") return err("Only players are subject to match integrity checks.");
+  if (slot.role !== "STARTER") return err("Only on-field players are subject to match integrity checks.");
+
+  const now = new Date();
+  if (withinCooldown(match.integrityFlags, slot.id, now, INTEGRITY_REPORT_COOLDOWN_MS)) {
+    // Silently accepted: the breach already on the board covers this attempt.
+    return ok(undefined);
+  }
+
+  const kindDetail =
+    input.detail?.trim() ||
+    {
+      COPIED_ANSWER: "Text pasted into the answer box",
+      COPIED_CONTENT: "Tried to copy from the match screen",
+      LEFT_FULLSCREEN: "Left fullscreen while the match was running",
+      TAB_SWITCH: "Switched tabs or windows during the match",
+      RIGHT_CLICK: "Right-clicked on the match area",
+      KEYBOARD_SHORTCUT: "Used a blocked keyboard shortcut",
+      SCREEN_RECORDING: "Attempted to screen record the match",
+    }[input.kind];
+
+  const roundNumber = match.rounds.find((r) => r.status === "OPEN" || r.status === "LOCKED")?.number ?? null;
+  const round = roundNumber != null ? match.rounds.find((r) => r.number === roundNumber) : undefined;
+
+  try {
+    await prisma.$transaction(async (tx) => {
+      const created = await raiseIntegrityFlag(
+        tx,
+        {
+          matchId: match.id,
+          playerId: slot.id,
+          roundId: round?.id ?? null,
+          kind: input.kind,
+          detail: kindDetail,
+          breachAt: now,
+        },
+        match.integrityFlags,
+      );
+      const ordinal = created.seq;
+      const ordWord = ordinal === 1 ? "First" : ordinal === 2 ? "Second" : "Third";
+      const sanction =
+        created.suggested === "WARNING"
+          ? "Referee decision: warning"
+          : created.suggested === "YELLOW_CARD"
+            ? "Referee decision: yellow card"
+            : "Referee decision: red card";
+      await appendTimeline(
+        tx,
+        match.id,
+        "INTEGRITY_FLAG",
+        `Copy attempt — ${rosterNameOf(match, slot.id)}`,
+        `${ordWord} breach of the match. ${sanction}.`,
+        null,
+      );
+      // Decrement player's integrity score based on severity
+      const scorePenalty = input.kind === "AI_ASSISTANCE" ? 15 : 10;
+      await tx.matchPlayer.update({
+        where: { id: slot.id },
+        data: { integrityScore: { decrement: scorePenalty } },
+      });
+      await bumpVersion(tx, match.id);
+    });
+  } catch (e) {
+    // A simultaneous breach won the ordinal race — their card stands, ours is
+    // a duplicate of the same behaviour, so drop it rather than escalate twice.
+    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") return ok(undefined);
+    throw e;
+  }
+  await publishMatchUpdate(match.code);
+  return ok(undefined);
+}
+
+/**
+ * The referee (or an admin) issues the card for a breach. Reuses the existing
+ * conduct-incident machinery so the sanction shows up on the public card list,
+ * the match report and the player's record exactly like a manually booked card,
+ * including sending a red-carded player off the field.
+ */
+export async function issueIntegrityAction(
+  actor: Actor,
+  input: { code: string; flagId: string; action: IncidentAction; note?: string },
+): Promise<ActionResult> {
+  const match = await assertReferee(actor, input.code);
+  const flag = match.integrityFlags.find((f) => f.id === input.flagId);
+  if (!flag) return err("That integrity check is not on this match.");
+  if (flag.action) return err("A sanction has already been issued for this check.");
+
+  const slot = match.roster.find((r) => r.id === flag.playerId);
+  if (!slot) return err("That player is no longer on this roster.");
+  // Sending someone off for a third breach is pointless if they are already out.
+  if (input.action === "RED_CARD" && slot.role === "OUT")
+    return err(`${slot.user.name} has already left the field.`);
+
+  const incidentType =
+    flag.kind === "LEFT_FULLSCREEN" ? ("LEFT_FULLSCREEN" as const) :
+    flag.kind === "TAB_SWITCH" ? ("TAB_SWITCH" as const) :
+    flag.kind === "RIGHT_CLICK" ? ("RIGHT_CLICK" as const) :
+    flag.kind === "KEYBOARD_SHORTCUT" ? ("KEYBOARD_SHORTCUT" as const) :
+    flag.kind === "SCREEN_RECORDING" ? ("SCREEN_RECORDING" as const) :
+    flag.kind === "AI_ASSISTANCE" ? ("AI_ASSISTANCE" as const) :
+    ("COPIED_ANSWER" as const);
+  const actionLabel = INCIDENT_ACTIONS[input.action];
+  const playerName = rosterNameOf(match, slot.id);
+  const note = input.note?.trim() || flag.detail || INTEGRITY_KIND_LABELS[flag.kind];
+
+  await prisma.$transaction(async (tx) => {
+    await tx.conductIncident.create({
+      data: {
+        matchId: match.id,
+        playerId: slot.id,
+        type: incidentType,
+        action: input.action,
+        note,
+      },
+    });
+    if (input.action === "RED_CARD") {
+      await tx.matchPlayer.update({ where: { id: slot.id }, data: { role: "OUT" } });
+    }
+    await tx.integrityFlag.update({
+      where: { id: flag.id },
+      data: { action: input.action, issuedById: actor.userId, issuedAt: new Date() },
+    });
+    await appendTimeline(
+      tx,
+      match.id,
+      "CARD",
+      `${actionLabel} — ${playerName}`,
+      flag.round ? `Copy check on question ${flag.round.number}. ${note}` : `Copy check. ${note}`,
       actor.userId,
     );
     await bumpVersion(tx, match.id);
