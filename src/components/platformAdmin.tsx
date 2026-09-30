@@ -12,6 +12,7 @@ import {
   generateGroupFixturesAction,
   generateLeagueFixturesAction,
   redrawLeagueFixturesAction,
+  removeCompetitionTeamAction,
   removeTeamMemberAction,
   scheduleLeagueWaveAction,
   setCompetitionStatusAction,

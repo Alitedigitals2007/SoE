@@ -1397,7 +1397,7 @@ function withinCooldown(
  */
 export async function reportIntegrity(
   actor: Actor,
-  input: { code: string; kind: "COPIED_ANSWER" | "COPIED_CONTENT" | "LEFT_FULLSCREEN" | "TAB_SWITCH" | "RIGHT_CLICK" | "KEYBOARD_SHORTCUT" | "SCREEN_RECORDING"; detail?: string },
+  input: { code: string; kind: "COPIED_ANSWER" | "COPIED_CONTENT" | "LEFT_FULLSCREEN" | "TAB_SWITCH" | "RIGHT_CLICK" | "KEYBOARD_SHORTCUT" | "SCREEN_RECORDING" | "AI_ASSISTANCE"; detail?: string },
 ): Promise<ActionResult> {
   const match = await loadMatchFor(input.code);
   if (!match) return err("Match not found.");

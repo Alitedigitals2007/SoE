@@ -4,6 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { addPlayerAction, createMatchAction, postponeMatchAction, removePlayerAction, setMatchScheduleAction, adminEditGoalRoundAction, adminOverrideScoreAction } from "@/app/actions/match";
+import { assignRefereeAction } from "@/app/actions/platform";
 import { createUserAction, updateUserAction } from "@/app/actions/admin";
 import { Badge, Button, Card, CardHeader, cn, Field, Input, Select } from "@/components/ui";
 import { MathText } from "@/components/MathText";
@@ -217,7 +218,7 @@ function UserRowItem({ user, flash }: { user: UserRow; flash: (r: { ok: boolean;
 
 /* ------------------------------ new match form ----------------------------- */
 
-export type RefereeOption = { id: string; name: string; email: string };
+export type RefereeOption = { id: string; name: string };
 export type TeamOptionRow = { id: string; name: string; _count: { members: number } };
 
 /** Wall-clock time chosen in Nigeria (Africa/Lagos, UTC+1, no DST) → UTC ISO. */
