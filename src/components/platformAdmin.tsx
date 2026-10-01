@@ -16,6 +16,7 @@ import {
   removeTeamMemberAction,
   scheduleLeagueWaveAction,
   setCompetitionStatusAction,
+  setCupFormatAction,
   setTeamCaptainAction,
   setTeamImageAction,
   transferTeamMemberAction,
@@ -360,6 +361,9 @@ export function CompetitionActions({
   currentTeamIds,
   finishedLatestRound,
   currentTeams,
+  legsPerTie,
+  thirdPlace,
+  cupFormatEditable,
 }: {
   competitionId: string;
   status: "DRAFT" | "ACTIVE" | "FINISHED";
@@ -369,17 +373,80 @@ export function CompetitionActions({
   currentTeamIds: string[];
   finishedLatestRound: boolean;
   currentTeams: { id: string; name: string }[];
+  legsPerTie: number;
+  thirdPlace: boolean;
+  /** False once a draw has produced fixtures — the format is locked then. */
+  cupFormatEditable: boolean;
 }) {
   const { notice, flash, router } = useFlash();
   const [teamId, setTeamId] = React.useState("");
   const [roundLabel, setRoundLabel] = React.useState("");
   const [removeTeamId, setRemoveTeamId] = React.useState("");
 
+  const setCup = (patch: { legsPerTie?: number; thirdPlace?: boolean }, done: string) =>
+    void setCupFormatAction({ competitionId, ...patch }).then((r) => {
+      flash(r, done);
+      router.refresh();
+    });
+
   return (
     <Card>
       <CardHeader title="Competition control" description="Admin actions for this competition." />
       <div className="space-y-4 p-4">
         {notice ? <NoticeLine notice={notice} /> : null}
+
+        {type === "CUP" || type === "LEAGUE_CUP" ? (
+          <div className="rounded-xl border border-line bg-bg-raised p-3">
+            <p className="text-xs font-black uppercase tracking-wider text-subtle">Cup rules</p>
+
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <span className="text-xs text-muted">Ties</span>
+              <div className="inline-flex overflow-hidden rounded-lg border border-line">
+                {[1, 2].map((n) => (
+                  <button
+                    key={n}
+                    type="button"
+                    disabled={!cupFormatEditable}
+                    aria-pressed={legsPerTie === n}
+                    onClick={() => setCup({ legsPerTie: n }, n === 2 ? "Ties are now two legs." : "Ties are now single legs.")}
+                    className={cn(
+                      "px-3 py-1.5 text-xs font-bold transition-colors",
+                      !cupFormatEditable ? "cursor-not-allowed opacity-60" : "",
+                      legsPerTie === n ? "bg-brand text-white" : "bg-white text-muted hover:bg-line",
+                    )}
+                  >
+                    {n === 1 ? "1 leg" : "2 legs · aggregate"}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {type === "CUP" ? (
+              <label className="mt-2.5 flex cursor-pointer items-center gap-2 text-xs text-muted">
+                <input
+                  type="checkbox"
+                  disabled={!cupFormatEditable}
+                  checked={thirdPlace}
+                  onChange={(e) => setCup({ thirdPlace: e.target.checked }, e.target.checked ? "Third-place match added." : "Third-place match removed.")}
+                  className="size-4 accent-[var(--color-brand,#0b6b5b)]"
+                />
+                Third-place match
+              </label>
+            ) : null}
+
+            {!cupFormatEditable ? (
+              <p className="mt-2 text-xs text-subtle">
+                Locked — the draw has been made, so the legs cannot change.
+                {type === "CUP" ? " The third-place match can still be added or removed until it is played." : ""}
+              </p>
+            ) : (
+              <p className="mt-2 text-xs text-subtle">
+                Two legs settle on aggregate with no away-goals rule; a level tie goes to penalties on the second leg.
+                The final is always one match.
+              </p>
+            )}
+          </div>
+        ) : null}
 
         {status !== "FINISHED" ? (
           <Button
@@ -553,7 +620,7 @@ export function FixtureRefereeRow({
   match,
   referees,
 }: {
-  match: { id: string; code: string; homeName: string; awayName: string; homeScore: number; awayScore: number; status: string; cupRound: number | null; refereeId: string | null; scheduledAt?: string | null };
+  match: { id: string; code: string; homeName: string; awayName: string; homeScore: number; awayScore: number; status: string; cupRound: number | null; cupLeg?: number | null; cupThirdPlace?: boolean; refereeId: string | null; scheduledAt?: string | null };
   referees: { id: string; name: string }[];
 }) {
   const { flash } = useFlash();
@@ -566,7 +633,11 @@ export function FixtureRefereeRow({
         </p>
         <p className="text-xs text-subtle">
           Code {match.code}
-          {match.cupRound ? ` · Cup round ${match.cupRound}` : ""} · <span className={cn("font-semibold", match.status === "LIVE" ? "text-success" : match.status === "DRAFT" ? "text-warning" : "text-muted")}>{match.status}</span>
+          {match.cupThirdPlace
+            ? " · Third-place match"
+            : match.cupRound
+              ? ` · Cup round ${match.cupRound}${match.cupLeg ? ` · leg ${match.cupLeg} of 2` : ""}`
+              : ""} · <span className={cn("font-semibold", match.status === "LIVE" ? "text-success" : match.status === "DRAFT" ? "text-warning" : "text-muted")}>{match.status}</span>
           {match.scheduledAt ? (
             <span className="ml-1">
               · ⏱ {new Date(new Date(match.scheduledAt).getTime() + 3600_000).toISOString().slice(11, 16)} WAT

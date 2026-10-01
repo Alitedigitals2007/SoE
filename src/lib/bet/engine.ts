@@ -654,6 +654,29 @@ export async function selectionOutcomes(
   db: Prisma.TransactionClient | PrismaClient,
   selections: { matchId: string; market: string; selection: string }[],
 ): Promise<(BetOutcome | null)[]> {
+  const rows = await resolveSelections(db, selections);
+  return rows.map((r) => r.status);
+}
+
+export type SelectionResult = { status: BetOutcome | null; score: string | null };
+
+/**
+ * Same batched read, plus each match's final scoreline — so a slip can show
+ * `2–1` beside the selection it settled on. `score` stays null until that
+ * fixture finishes; a null `status` means the selection is still pending.
+ */
+export async function selectionResults(
+  db: Prisma.TransactionClient | PrismaClient,
+  selections: { matchId: string; market: string; selection: string }[],
+): Promise<SelectionResult[]> {
+  return resolveSelections(db, selections);
+}
+
+/** One pass over the fixtures for a batch: status + final score per selection. */
+async function resolveSelections(
+  db: Prisma.TransactionClient | PrismaClient,
+  selections: { matchId: string; market: string; selection: string }[],
+): Promise<SelectionResult[]> {
   if (selections.length === 0) return [];
 
   const matchIds = [...new Set(selections.map((s) => s.matchId))];
@@ -674,12 +697,15 @@ export async function selectionOutcomes(
 
   return selections.map((s) => {
     const m = byId.get(s.matchId);
-    if (!m || m.status !== "FINISHED") return null;
-    return selectionOutcome(s.market as BetMarket, s.selection, {
-      home: m.homeScore,
-      away: m.awayScore,
-      ht: ht.get(s.matchId) ?? null,
-    });
+    if (!m || m.status !== "FINISHED") return { status: null, score: null };
+    return {
+      status: selectionOutcome(s.market as BetMarket, s.selection, {
+        home: m.homeScore,
+        away: m.awayScore,
+        ht: ht.get(s.matchId) ?? null,
+      }),
+      score: `${m.homeScore}–${m.awayScore}`,
+    };
   });
 }
 

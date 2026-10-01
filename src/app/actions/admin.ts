@@ -89,6 +89,10 @@ export async function createWizardCompetitionAction(input: {
   topAdvancing?: number;
   roundsCount?: number;
   countdownSecs?: number;
+  /** CUP: 1 leg or 2 legs (aggregate, no away goals). */
+  legsPerTie?: number;
+  /** CUP: play a third-place match. */
+  thirdPlace?: boolean;
 }): Promise<ActionResult<{ competitionId: string; slug: string }>> {
   const actor = await currentActor();
   if (!actor) return { ok: false, error: "Sign in to continue." };
@@ -98,6 +102,7 @@ export async function createWizardCompetitionAction(input: {
     return await createCompetition(actor, input);
   } catch (e) {
     console.error("createWizardCompetitionAction failed", e);
-    return { ok: false, error: "Could not create competition." };
+    const msg = e instanceof Error ? e.message.split("\n")[0] : String(e);
+    return { ok: false, error: `Could not create competition — ${msg.slice(0, 200)}` };
   }
 }

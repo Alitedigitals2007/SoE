@@ -2,7 +2,7 @@ import Link from "next/link";
 import type { Metadata } from "next";
 import { prisma } from "@/lib/prisma";
 import { marketTitle, selectionLabel } from "@/lib/bet/labels";
-import { selectionOutcomes } from "@/lib/bet/engine";
+import { selectionResults } from "@/lib/bet/engine";
 import { PublicShell } from "@/components/site";
 import { Badge } from "@/components/ui";
 import { RedeemCodeBox } from "@/components/bet";
@@ -40,7 +40,7 @@ type LegJson = {
   odds?: number;
 };
 
-type LegView = { fixture: string; label: string; odds: number; status: keyof typeof STATUS_LABEL };
+type LegView = { fixture: string; label: string; market: string; odds: number; status: keyof typeof STATUS_LABEL; score: string | null };
 
 /** Public read-only view of a placed slip: /bet/slip/[code]. */
 export default async function BetSlipPage({ params }: { params: Promise<{ code: string }> }) {
@@ -84,26 +84,36 @@ export default async function BetSlipPage({ params }: { params: Promise<{ code: 
   const rawLegs = Array.isArray(bet.legs) ? (bet.legs as LegJson[]) : [];
   const isAcca = bet.market === "ACCA" && rawLegs.length > 0;
 
-  // Each leg is judged on its own scoreline — one match query for the slip.
-  const legs: LegView[] = [];
-  if (isAcca) {
-    const outcomes = await selectionOutcomes(
-      prisma,
-      rawLegs.map((l) => ({
+  // Every selection is judged on its own scoreline — one match query for the slip.
+  const selections = isAcca
+    ? rawLegs.map((l) => ({
         matchId: l.matchId ?? bet.matchId,
         market: l.market ?? bet.market,
         selection: l.selection ?? bet.selection,
-      })),
-    );
-    rawLegs.forEach((l, i) => {
-      legs.push({
+      }))
+    : [{ matchId: bet.matchId, market: bet.market, selection: bet.selection }];
+
+  const results = await selectionResults(prisma, selections);
+
+  const legs: LegView[] = isAcca
+    ? rawLegs.map((l, i) => ({
         fixture: l.fixture ?? "",
         label: l.label || selectionLabel(l.market ?? "", l.selection ?? ""),
+        market: l.market ?? bet.market,
         odds: Number(l.odds ?? 0),
-        status: outcomes[i] ?? "PENDING",
-      });
-    });
-  }
+        status: (results[i]?.status ?? "PENDING") as keyof typeof STATUS_LABEL,
+        score: results[i]?.score ?? null,
+      }))
+    : [
+        {
+          fixture: `${bet.match.homeName} v ${bet.match.awayName}`,
+          label: selectionLabel(bet.market, bet.selection),
+          market: bet.market,
+          odds: Number(bet.odds),
+          status: (results[0]?.status ?? "PENDING") as keyof typeof STATUS_LABEL,
+          score: results[0]?.score ?? null,
+        },
+      ];
 
   const finished = bet.match.status === "FINISHED";
   const result = finished ? `${bet.match.homeScore}–${bet.match.awayScore}` : null;
@@ -124,42 +134,44 @@ export default async function BetSlipPage({ params }: { params: Promise<{ code: 
         <article className="mt-6 rounded-2xl border-2 border-fg/15 bg-bg-elevated p-5 shadow-[4px_4px_0_rgba(11,32,48,.08)]">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <span className="text-sm font-black text-fg">
-              {bet.match.homeName} v {bet.match.awayName}
+              {bet.market === "ACCA"
+                ? `Accumulator · ${legs.length} selection${legs.length === 1 ? "" : "s"}`
+                : `${bet.match.homeName} v ${bet.match.awayName}`}
             </span>
             {bet.match.scheduledAt ? (
               <span className="text-[11px] text-muted">{fmtStamp(bet.match.scheduledAt.toISOString())}</span>
             ) : null}
           </div>
 
-          {bet.market === "ACCA" ? (
-            <ul className="mt-3 space-y-1.5 border-t border-line pt-3 text-sm">
-              {legs.map((l, i) => (
-                <li key={i} className="flex items-center justify-between gap-3">
+          <ul className="mt-3 space-y-1.5 border-t border-line pt-3 text-sm">
+            {legs.map((l, i) => (
+              <li
+                key={i}
+                className="flex items-center justify-between gap-3 rounded-lg border border-line bg-white px-3 py-2"
+              >
+                <span className="flex min-w-0 items-center gap-2.5">
+                  {/* the final score leads — it's the answer everyone opens the slip for */}
+                  <span
+                    className={
+                      l.score
+                        ? "shrink-0 rounded-md border border-fg/20 bg-surface px-1.5 py-0.5 text-center text-sm font-black tabular-nums leading-none text-fg"
+                        : "shrink-0 rounded-md border border-dashed border-line bg-white px-1.5 py-0.5 text-center text-[13px] font-black leading-none text-subtle"
+                    }
+                    aria-label={l.score ? `Final score ${l.score}` : "Not played yet"}
+                  >
+                    {l.score ?? "v"}
+                  </span>
                   <span className="min-w-0">
-                    <span className="block truncate text-fg">{l.fixture}</span>
-                    <span className="block text-xs text-muted">{l.label}</span>
+                    <span className="block truncate font-bold text-fg">{l.fixture}</span>
+                    <span className="block truncate text-xs text-muted">
+                      {marketTitle(l.market)} · {l.label} @ <span className="font-black text-fg">{l.odds}</span>
+                    </span>
                   </span>
-                  <span className="flex shrink-0 items-center gap-2">
-                    <span className="text-sm font-black tabular-nums text-fg">{l.odds}</span>
-                    <Badge tone={STATUS_TONE[l.status]}>{STATUS_LABEL[l.status]}</Badge>
-                  </span>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <div className="mt-3 border-t border-line pt-3">
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="text-sm text-muted">{marketTitle(bet.market)}</p>
-                  <p className="text-lg font-black text-fg">{selectionLabel(bet.market, bet.selection, legs.length)}</p>
-                  <p className="text-sm text-muted">
-                    Odds <span className="font-black text-fg">{Number(bet.odds)}</span>
-                  </p>
-                </div>
-                <Badge tone={STATUS_TONE[bet.status]}>{STATUS_LABEL[bet.status]}</Badge>
-              </div>
-            </div>
-          )}
+                </span>
+                <Badge tone={STATUS_TONE[l.status]}>{STATUS_LABEL[l.status]}</Badge>
+              </li>
+            ))}
+          </ul>
 
           <div className="mt-4 grid grid-cols-3 gap-2 border-t border-line pt-3 text-center">
             <div>

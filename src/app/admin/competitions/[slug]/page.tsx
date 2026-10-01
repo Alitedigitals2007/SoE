@@ -22,10 +22,18 @@ export default async function AdminCompetitionDetail({ params }: { params: Promi
   const availableTeams = allTeams.filter((t) => !currentTeamIds.includes(t.id));
   const referees = await prisma.user.findMany({ where: { role: "REFEREE" }, orderBy: { name: "asc" }, select: { id: true, name: true } });
 
-  const maxRound = comp.matches.length ? Math.max(...comp.matches.map((m) => m.cupRound ?? 0)) : 0;
-  const latestRoundMatches = maxRound ? comp.matches.filter((m) => m.cupRound === maxRound) : [];
+  const bracketMatches = comp.matches.filter((m) => !m.cupThirdPlace);
+  const maxRound = bracketMatches.length ? Math.max(...bracketMatches.map((m) => m.cupRound ?? 0)) : 0;
+  const latestRoundMatches = maxRound ? bracketMatches.filter((m) => m.cupRound === maxRound) : [];
   const finishedLatestRound = latestRoundMatches.length > 0 && latestRoundMatches.every((m) => m.status === "FINISHED");
-  const cupFinalDone = comp.matches.some((m) => m.cupRound !== null && m.status === "FINISHED") && latestRoundMatches.length === 1 && finishedLatestRound;
+  const cupFinalDone = latestRoundMatches.length === 1 && finishedLatestRound;
+  const thirdPlaceMatch = comp.matches.find((m) => m.cupThirdPlace) ?? null;
+  // Legs can only change while no knockout fixture exists yet — a LEAGUE_CUP's
+  // groups squat on cupRound 1, so its draw starts at round 2.
+  const knockoutRound = comp.type === "CUP" ? 1 : 2;
+  const cupFormatEditable =
+    (comp.type === "CUP" || comp.type === "LEAGUE_CUP") &&
+    !comp.matches.some((m) => (m.cupRound ?? 0) >= knockoutRound);
 
   const fixtures = comp.matches.map((m) => ({
     id: m.id,
@@ -36,6 +44,8 @@ export default async function AdminCompetitionDetail({ params }: { params: Promi
     awayScore: m.awayScore,
     status: m.status,
     cupRound: m.cupRound,
+    cupLeg: m.cupLeg,
+    cupThirdPlace: m.cupThirdPlace,
     refereeId: m.refereeId,
     scheduledAt: m.scheduledAt ? m.scheduledAt.toISOString() : null,
   }));
@@ -47,8 +57,14 @@ export default async function AdminCompetitionDetail({ params }: { params: Promi
           <div>
             <div className="flex flex-wrap items-center gap-2">
               <h1 className="text-2xl font-bold text-fg">{comp.name}</h1>
-              <Badge tone={comp.type === "CUP" ? "info" : "pitch"}>{comp.type === "CUP" ? "Knockout cup" : "League"}</Badge>
+              <Badge tone={comp.type === "CUP" ? "info" : "pitch"}>{comp.type === "CUP" ? "Knockout cup" : comp.type === "LEAGUE_CUP" ? "League + Cup" : comp.type === "CUSTOM" ? "Custom" : "League"}</Badge>
               <Badge tone={comp.status === "FINISHED" ? "neutral" : comp.status === "ACTIVE" ? "success" : "warning"}>{comp.status}</Badge>
+              {comp.type === "CUP" || comp.type === "LEAGUE_CUP" ? (
+                <Badge tone="neutral">
+                  {comp.legsPerTie === 2 ? "Two legs · aggregate" : "Single leg"}
+                </Badge>
+              ) : null}
+              {comp.type === "CUP" && comp.thirdPlace ? <Badge tone="gold">Third-place match</Badge> : null}
             </div>
             <p className="text-sm text-muted">
               Season {comp.season} · <Link className="text-subtle underline-offset-2 hover:text-brand hover:underline" href={`/competition/${comp.slug}`}>Public page →</Link>
@@ -68,6 +84,9 @@ export default async function AdminCompetitionDetail({ params }: { params: Promi
               currentTeamIds={currentTeamIds}
               finishedLatestRound={finishedLatestRound}
               currentTeams={comp.teams.map((t) => ({ id: t.teamId, name: t.team.name }))}
+              legsPerTie={comp.legsPerTie}
+              thirdPlace={comp.thirdPlace}
+              cupFormatEditable={cupFormatEditable}
             />
             <div className="rounded-2xl border border-line bg-white p-4">
               <p className="text-xs font-bold uppercase tracking-wider text-muted">Teams ({comp.teams.length})</p>
@@ -92,7 +111,11 @@ export default async function AdminCompetitionDetail({ params }: { params: Promi
               <h2 className="text-lg font-bold text-fg">Fixtures ({fixtures.length})</h2>
               {comp.type === "CUP" && maxRound ? (
                 <Badge tone={cupFinalDone ? "gold" : "neutral"}>
-                  {cupFinalDone ? "Cup complete — champion decided" : `Round ${maxRound}${latestRoundMatches.length === 1 ? " · final" : ""}`}
+                  {cupFinalDone
+                    ? thirdPlaceMatch && thirdPlaceMatch.status !== "FINISHED"
+                      ? "Final done — third-place match to play"
+                      : "Cup complete — champion decided"
+                    : `Round ${maxRound}${latestRoundMatches.length === 1 ? " · final" : ""}`}
                 </Badge>
               ) : null}
             </div>

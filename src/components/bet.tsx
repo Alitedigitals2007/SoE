@@ -77,6 +77,8 @@ export type BetLegRow = {
   label: string;
   odds: number;
   status: "PENDING" | "WON" | "LOST" | "VOID";
+  /** Final scoreline of this selection's fixture — null until it's played. */
+  score: string | null;
 };
 
 export type TxnRow = {
@@ -248,8 +250,16 @@ export function BetTerminal({
         setNotice({ ok: false, msg: r.error });
       }
     } catch (e) {
+      // The action itself never came back — almost always a dropped connection.
       console.error(e);
-      setNotice({ ok: false, msg: "Could not place the bet — please try again." });
+      const msg = e instanceof Error ? e.message : "";
+      const offline = /fetch failed|network|ECONNRESET|Failed to fetch|load failed/i.test(msg);
+      setNotice({
+        ok: false,
+        msg: offline
+          ? "Couldn't reach the server — your connection dropped. Nothing was placed; try again in a moment."
+          : "Could not place the bet — please try again.",
+      });
     } finally {
       setBusy(false);
     }
@@ -1067,6 +1077,65 @@ export function RedeemCodeBox({ code, caption = "Redeem code", extra }: { code: 
   );
 }
 
+/**
+ * Paste a friend's redeem code to open their slip — the mirror of the box we
+ * hand out on every placed bet, so a code you were sent actually goes somewhere.
+ */
+export function RedeemLookup() {
+  const router = useRouter();
+  const [code, setCode] = React.useState("");
+  const [error, setError] = React.useState<string | null>(null);
+
+  function open(e: React.FormEvent) {
+    e.preventDefault();
+    const cleaned = code.trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+    if (!cleaned) {
+      setError("Enter a slip code first.");
+      return;
+    }
+    if (!/^[A-Z0-9]{4,16}$/.test(cleaned)) {
+      setError("A slip code is 8 letters and digits — check what you copied.");
+      return;
+    }
+    setError(null);
+    router.push(`/bet/slip/${cleaned}`);
+  }
+
+  return (
+    <form
+      onSubmit={open}
+      className="mt-4 rounded-2xl border border-line bg-white p-4 shadow-sm"
+      aria-label="Open a slip by code"
+    >
+      <label htmlFor="redeem-lookup" className="block text-xs font-black uppercase tracking-wider text-subtle">
+        Have a slip code?
+      </label>
+      <p className="mt-0.5 text-xs text-muted">Paste the code a friend shared with you to open their bet slip.</p>
+      <div className="mt-2 flex flex-wrap gap-2">
+        <Input
+          id="redeem-lookup"
+          value={code}
+          onChange={(e) => setCode(e.target.value)}
+          placeholder="e.g. K7PMX2QD"
+          autoComplete="off"
+          autoCapitalize="characters"
+          spellCheck={false}
+          className="h-10 flex-1 min-w-[10rem] font-mono uppercase tracking-[0.2em]"
+          aria-describedby={error ? "redeem-lookup-error" : undefined}
+        />
+        <Button type="submit" variant="primary" className="h-10">
+          Open slip
+        </Button>
+      </div>
+      {error ? (
+        <p id="redeem-lookup-error" role="alert" className="mt-2 text-xs font-semibold text-danger">
+          {error}
+        </p>
+      ) : null}
+    </form>
+  );
+}
+
 function BetsList({ bets, signedIn }: { bets: BetRow[]; signedIn: boolean }) {
   const [openId, setOpenId] = React.useState<string | null>(null);
   if (!signedIn) {
@@ -1165,11 +1234,25 @@ function SlipPanel({ bet }: { bet: BetRow }) {
             key={`${leg.matchId}-${i}`}
             className="flex items-center justify-between gap-3 rounded-lg border border-line bg-white px-3 py-2"
           >
-            <div className="min-w-0">
-              <p className="truncate text-sm font-bold text-fg">{leg.fixture}</p>
-              <p className="truncate text-[11px] text-muted">
-                {marketTitle(leg.market)} · {leg.label} @ <span className="font-bold text-fg">{leg.odds}</span>
-              </p>
+            <div className="flex min-w-0 items-center gap-2.5">
+              {/* final scoreline leads the row — the thing everyone looks for first */}
+              <span
+                className={cn(
+                  "shrink-0 rounded-md border px-1.5 py-0.5 text-center text-sm font-black tabular-nums leading-none",
+                  leg.score
+                    ? "border-fg/20 bg-surface text-fg"
+                    : "border-dashed border-line bg-white text-[13px] text-subtle",
+                )}
+                aria-label={leg.score ? `Final score ${leg.score}` : "Not played yet"}
+              >
+                {leg.score ?? "v"}
+              </span>
+              <div className="min-w-0">
+                <p className="truncate text-sm font-bold text-fg">{leg.fixture}</p>
+                <p className="truncate text-[11px] text-muted">
+                  {marketTitle(leg.market)} · {leg.label} @ <span className="font-bold text-fg">{leg.odds}</span>
+                </p>
+              </div>
             </div>
             <Badge tone={STATUS_TONE[leg.status]}>{STATUS_LABEL[leg.status]}</Badge>
           </li>

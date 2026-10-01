@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { leagueStandings, liveMatchCount, competitionTopScorers, competitionTopAssists } from "@/lib/platform/engine";
 import { PublicShell } from "@/components/site";
 import { LiveStandings } from "@/components/LiveStandings";
+import { Bracket, type BracketMatch } from "@/components/Bracket";
 import { Badge } from "@/components/ui";
 import { CsvDownloadButton } from "@/components/CsvDownloadButton";
 import { exportCompetitionCsvAction } from "@/app/actions/exports";
@@ -23,6 +24,7 @@ export default async function CompetitionDetail({ params }: { params: Promise<{ 
           homeTeam: { select: { slug: true } },
           awayTeam: { select: { slug: true } },
           competition: true,
+          penaltyShootout: { select: { status: true, winner: true } },
         },
         orderBy: [{ cupRound: "asc" }, { createdAt: "asc" }],
       },
@@ -32,19 +34,16 @@ export default async function CompetitionDetail({ params }: { params: Promise<{ 
 
   const showTable = comp.type === "LEAGUE";
   const cup = comp.type === "CUP";
+  const showBracket = comp.type === "CUP" || comp.type === "LEAGUE_CUP";
   const rows = showTable ? await leagueStandings(comp.id, { live: true }) : null;
   const liveGames = showTable ? await liveMatchCount(comp.id) : 0;
   const [topScorers, topAssists] = await Promise.all([competitionTopScorers(comp.id), competitionTopAssists(comp.id)]);
 
-  const groupByRound = new Map<number, typeof comp.matches>();
-  if (cup) {
-    for (const m of comp.matches) {
-      const r = m.cupRound ?? 0;
-      if (!groupByRound.has(r)) groupByRound.set(r, []);
-      groupByRound.get(r)!.push(m);
-    }
-  }
-  const rounds = cup ? [...groupByRound.entries()].sort((a, b) => a[0] - b[0]) : [];
+  // A League + Cup competition's group fixtures share cupRound 1 with nothing
+  // knockout about them, so the bracket only takes the real ties.
+  const knockoutMatches: BracketMatch[] = showBracket
+    ? comp.matches.filter((m) => m.cupRound != null && (comp.type !== "LEAGUE_CUP" || m.cupRound >= 2))
+    : [];
   const publicMatches = comp.matches.filter((m) => m.status !== "DRAFT" || m.scheduledAt);
 
   return (
@@ -59,12 +58,12 @@ export default async function CompetitionDetail({ params }: { params: Promise<{ 
             {comp.status === "FINISHED" ? "Closed" : comp.status === "ACTIVE" ? "Live" : "Setup"}
           </Badge>
         </div>
-        <p className="mt-1 text-sm text-muted">Season {comp.season} · {comp.teams.length} teams</p>
+        <p className="mt-1 text-sm text-muted">Season {comp.season} Â· {comp.teams.length} teams</p>
 
         <div className="mt-6 flex flex-wrap items-center gap-3">
           {comp.status !== "FINISHED" && comp.matches.length > 0 ? (
             <Link href={`/fantasy/${comp.id}`} className="inline-flex h-10 items-center rounded-lg brand-gradient px-4 text-sm font-semibold text-white shadow-sm hover:brightness-105">
-              ⭐ Pick your fantasy XI
+              â­ Pick your fantasy XI
             </Link>
           ) : null}
           {showTable && (
@@ -75,24 +74,27 @@ export default async function CompetitionDetail({ params }: { params: Promise<{ 
             />
           )}
           <a href="#fixtures" className="text-sm font-semibold text-brand underline-offset-2 hover:underline">
-            Jump to fixtures ↓
+            Jump to fixtures â†“
           </a>
         </div>
 
-        {cup ? (
-          <CupSection comp={comp} rounds={rounds} />
+        {showBracket ? (
+          <Bracket
+            matches={knockoutMatches}
+            entrants={comp.teams.map((t) => t.team.name)}
+          />
         ) : showTable && rows ? (
           <LiveStandings autoRefresh={liveGames > 0}>
           <div className="mt-8 overflow-hidden rounded-2xl border border-line bg-white shadow-sm">
               <div className="flex flex-wrap items-center justify-between gap-2 px-5 py-4">
                 <div>
                   <h2 className="text-lg font-bold text-fg">Standings</h2>
-                  <p className="mt-0.5 text-xs text-muted lg:hidden">Swipe sideways to see all columns →</p>
+                  <p className="mt-0.5 text-xs text-muted lg:hidden">Swipe sideways to see all columns â†’</p>
                 </div>
                 {liveGames > 0 ? (
                   <span className="inline-flex items-center gap-1.5 rounded-full bg-danger/10 px-2.5 py-1 text-[11px] font-black uppercase tracking-wider text-danger">
                     <span aria-hidden className="size-1.5 animate-pulse rounded-full bg-danger" />
-                    Live table · {liveGames} {liveGames === 1 ? "match" : "matches"} in play
+                    Live table Â· {liveGames} {liveGames === 1 ? "match" : "matches"} in play
                   </span>
                 ) : (
                   <span className="text-[11px] font-semibold uppercase tracking-wider text-subtle">Auto-updates during matchday</span>
@@ -119,7 +121,7 @@ export default async function CompetitionDetail({ params }: { params: Promise<{ 
                     {rows.every((r) => r.p === 0) ? (
                       <tr>
                         <td colSpan={11} className="px-4 py-10 text-center text-muted">
-                          No finished matches yet — results fill the table as matches end.
+                          No finished matches yet â€” results fill the table as matches end.
                         </td>
                       </tr>
                     ) : (
@@ -129,11 +131,11 @@ export default async function CompetitionDetail({ params }: { params: Promise<{ 
                             <span className="inline-flex items-center gap-1 font-bold text-subtle">
                               {i + 1}
                               {r.trend === "up" ? (
-                                <span className="text-success" title="Moved up">▲</span>
+                                <span className="text-success" title="Moved up">â–²</span>
                               ) : r.trend === "down" ? (
-                                <span className="text-danger" title="Moved down">▼</span>
+                                <span className="text-danger" title="Moved down">â–¼</span>
                               ) : (
-                                <span className="text-subtle" title="No change">—</span>
+                                <span className="text-subtle" title="No change">â€”</span>
                               )}
                             </span>
                           </td>
@@ -146,7 +148,7 @@ export default async function CompetitionDetail({ params }: { params: Promise<{ 
                             </Link>
                             {r.left ? (
                               <span
-                                title="This team left the competition — its results stay on the table"
+                                title="This team left the competition â€” its results stay on the table"
                                 className="ml-1.5 inline-block rounded border border-line px-1 py-0.5 align-middle text-[9px] font-black uppercase tracking-wide text-subtle"
                               >
                                 Left
@@ -164,7 +166,7 @@ export default async function CompetitionDetail({ params }: { params: Promise<{ 
                           <td className="px-3 py-2.5">
                             <div className="flex justify-center gap-0.5">
                               {r.form.length === 0 ? (
-                                <span className="text-xs text-subtle">—</span>
+                                <span className="text-xs text-subtle">â€”</span>
                               ) : (
                                 r.form.map((f, fi) => (
                                   <span
@@ -192,8 +194,8 @@ export default async function CompetitionDetail({ params }: { params: Promise<{ 
           <div className="mt-8 rounded-2xl border-2 border-dashed border-fg/15 bg-bg-elevated p-8 text-center">
             <p className="text-sm text-muted">
               {comp.type === "LEAGUE_CUP"
-                ? "Group fixtures are shown below — per-group tables and the knockout bracket appear as matches are played."
-                : "This competition uses a custom schedule — the fixtures below are the match list."}
+                ? "Group fixtures are shown below â€” per-group tables and the knockout bracket appear as matches are played."
+                : "This competition uses a custom schedule â€” the fixtures below are the match list."}
             </p>
           </div>
         )}
@@ -202,7 +204,7 @@ export default async function CompetitionDetail({ params }: { params: Promise<{ 
           <div className="mt-10 grid gap-5 md:grid-cols-2">
             {topScorers.length > 0 ? (
               <div className="rounded-2xl border-2 border-fg/15 bg-bg-elevated p-5 shadow-[4px_4px_0_rgba(11,32,48,.08)]">
-                <h3 className="text-sm font-black uppercase tracking-wider text-gold">⚽ Golden boot</h3>
+                <h3 className="text-sm font-black uppercase tracking-wider text-gold">âš½ Golden boot</h3>
                 <ol className="mt-3 space-y-1.5">
                   {topScorers.map((s, i) => (
                     <li key={s.id} className="flex items-center gap-3 text-sm">
@@ -218,7 +220,7 @@ export default async function CompetitionDetail({ params }: { params: Promise<{ 
             ) : null}
             {topAssists.length > 0 ? (
               <div className="rounded-2xl border-2 border-fg/15 bg-bg-elevated p-5 shadow-[4px_4px_0_rgba(11,32,48,.08)]">
-                <h3 className="text-sm font-black uppercase tracking-wider text-info">🎯 Top assists</h3>
+                <h3 className="text-sm font-black uppercase tracking-wider text-info">ðŸŽ¯ Top assists</h3>
                 <ol className="mt-3 space-y-1.5">
                   {topAssists.map((s, i) => (
                     <li key={s.id} className="flex items-center gap-3 text-sm">
@@ -235,7 +237,7 @@ export default async function CompetitionDetail({ params }: { params: Promise<{ 
           </div>
         ) : null}
 
-        {/* Fixtures — public view: unscheduled drafts (no date & time yet) stay hidden */}
+        {/* Fixtures â€” public view: unscheduled drafts (no date & time yet) stay hidden */}
         <div id="fixtures" className="mt-10">          <h2 className="text-xl font-bold text-fg">
             {cup ? "Matches" : "Fixtures"} <span className="text-base font-medium text-muted">({publicMatches.length})</span>
           </h2>
@@ -257,6 +259,7 @@ export default async function CompetitionDetail({ params }: { params: Promise<{ 
                   homeSlug={m.homeTeam?.slug}
                   awaySlug={m.awayTeam?.slug}
                   round={cup ? m.cupRound ?? undefined : undefined}
+                  leg={cup ? m.cupLeg ?? undefined : undefined}
                   scheduledAt={m.scheduledAt ? m.scheduledAt.toISOString() : null}
                 />
               ))
@@ -278,6 +281,7 @@ function MatchRow({
   homeSlug,
   awaySlug,
   round,
+  leg,
   scheduledAt,
 }: {
   code: string;
@@ -289,6 +293,7 @@ function MatchRow({
   homeSlug?: string;
   awaySlug?: string;
   round?: number;
+  leg?: number;
   scheduledAt?: string | null;
 }) {
   const finished = status === "FINISHED";
@@ -297,13 +302,18 @@ function MatchRow({
     <div className="rounded-xl border border-line bg-white px-4 py-3 shadow-sm transition-colors hover:border-brand/40">
       <div className="flex items-center gap-3">
         <div className="min-w-0 flex-1">
-          {round ? <p className="text-[10px] font-bold uppercase tracking-widest text-subtle">Round {round}</p> : null}
+          {round ? (
+            <p className="text-[10px] font-bold uppercase tracking-widest text-subtle">
+              Round {round}
+              {leg ? ` · leg ${leg} of 2` : ""}
+            </p>
+          ) : null}
           <p className="flex items-center justify-between gap-2 text-sm font-semibold text-fg">
             <span className="flex min-w-0 flex-1 justify-end truncate">
               {homeSlug ? <Link href={`/teams/${homeSlug}`} className="hover:text-brand">{home}</Link> : home}
             </span>
             <span className="mx-2 shrink-0 rounded-lg bg-surface px-2.5 py-1 font-black tabular-nums text-fg">
-              {finished || live ? `${hs} – ${as}` : "vs"}
+              {finished || live ? `${hs} â€“ ${as}` : "vs"}
             </span>
             <span className="flex min-w-0 flex-1 truncate">
               {awaySlug ? <Link href={`/teams/${awaySlug}`} className="hover:text-brand">{away}</Link> : away}
@@ -311,7 +321,7 @@ function MatchRow({
           </p>
           {scheduledAt && !finished ? (
             <p className="mt-1.5 flex items-center gap-1.5 truncate text-[11px] font-medium text-muted">
-              <span aria-hidden>🗓️</span> {formatKickoffWat(scheduledAt)}
+              <span aria-hidden>ðŸ—“ï¸</span> {formatKickoffWat(scheduledAt)}
             </p>
           ) : null}
         </div>
@@ -321,57 +331,6 @@ function MatchRow({
             Open
           </Link>
         </div>
-      </div>
-    </div>
-  );
-}
-
-function CupSection({
-  comp,
-  rounds,
-}: {
-  comp: { id: string; name: string; teams: { team: { name: string; slug: string; code: string } }[] };
-  rounds: [number, { id: string; code: string; homeName: string; awayName: string; homeScore: number; awayScore: number; status: string }[]][];
-}) {
-  const finalIdx = rounds.length - 1;
-  return (
-    <div className="mt-8 rounded-2xl border border-line bg-white p-5 shadow-sm">
-      <h2 className="text-lg font-bold text-fg">Bracket</h2>
-      <div className="mt-4 grid gap-6 md:grid-cols-3 lg:grid-cols-4">
-        {rounds.map(([round, matches], idx) => {
-          const isFinal = matches.length === 1 && idx === finalIdx;
-          return (
-            <div key={round} className="min-w-0">
-              <p className="mb-2 text-xs font-black uppercase tracking-widest text-brand">
-                {isFinal ? "🏆 Final" : `Round ${round}${idx === 0 ? " · First" : ""}`}
-              </p>
-              <div className="space-y-2">
-                {matches.map((m) => (
-                  <a key={m.id} href={`/match/${m.code}`} className="block rounded-lg border border-line bg-bg-raised p-2.5 text-xs transition-colors hover:border-brand/40">
-                    <p className="flex items-center justify-between gap-1 font-semibold text-fg">
-                      <span className="truncate">{m.homeName}</span>
-                      <span className="shrink-0 tabular-nums">
-                        {m.status === "FINISHED" ? `${m.homeScore}–${m.awayScore}` : "v"}
-                      </span>
-                    </p>
-                    <p className="mt-0.5 flex items-center justify-between gap-1 font-semibold text-fg">
-                      <span className="truncate">{m.awayName}</span>
-                      {m.status === "LIVE" ? <span aria-hidden className="size-1.5 shrink-0 animate-pulse rounded-full bg-danger" /> : null}
-                    </p>
-                  </a>
-                ))}
-              </div>
-            </div>
-          );
-        })}
-        {rounds.length === 0 ? (
-          <p className="text-sm text-muted">The bracket will appear here when the first round is generated.</p>
-        ) : null}
-      </div>
-      <div className="mt-6 border-t border-line pt-4">
-        <p className="text-xs text-muted">
-          Entrants: {comp.teams.map((t) => t.team.name).join(", ")}
-        </p>
       </div>
     </div>
   );

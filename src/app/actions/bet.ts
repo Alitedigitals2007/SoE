@@ -14,6 +14,11 @@ async function runBet<T>(fn: (actor: { userId: string }) => Promise<ActionResult
     return await fn(actor);
   } catch (e) {
     if (e instanceof PlatformError) return { ok: false, error: e.message };
+    // Neon's pooler wakes on demand — a cold start or a dropped connection
+    // shows up here, and a raw driver message just reads as "error".
+    const code = (e as { code?: string }).code;
+    if (code === "P1001" || code === "P1009" || e instanceof Prisma.PrismaClientInitializationError)
+      return { ok: false, error: "Couldn't reach the server just now — give it a moment and try again." };
     if (e instanceof Prisma.PrismaClientKnownRequestError) {
       if (e.code === "P2002") return { ok: false, error: "That already exists — please refresh." };
       if (e.code === "P2025") return { ok: false, error: "That record no longer exists — please refresh." };

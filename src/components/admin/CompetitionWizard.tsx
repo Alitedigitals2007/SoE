@@ -4,9 +4,11 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import { createWizardCompetitionAction } from "@/app/actions/admin";
 import {
+  competitionStandingsAction,
   generateCupRoundAction,
   generateGroupFixturesAction,
   generateLeagueFixturesAction,
+  pickSourceCompetitionsAction,
 } from "@/app/actions/platform";
 import { Button, Card, CardHeader, cn, Field, Input, Select } from "@/components/ui";
 import type { TeamOption } from "@/components/platformAdmin";
@@ -27,11 +29,32 @@ type Settings = {
   groupsCount: number;
   teamsPerGroup: number;
   topAdvancing: number;
+  /** CUP: 1 leg, or 2 legs settled on aggregate (no away goals). */
+  legsPerTie: 1 | 2;
+  /** CUP: play a third-place match between the semi-final losers. */
+  thirdPlace: boolean;
+  /** Where the team list came from — "all" or an existing competition. */
+  source: "all" | string;
 };
 
 type Step = 1 | 2 | 3;
 
 type Notice = { kind: "ok" | "err"; text: string } | null;
+
+/** A competition an admin can lift a team list from. */
+type SourceComp = { id: string; name: string; season: string; type: string; teamCount: number };
+
+/** The columns of a standings table the picker needs — the row also carries
+ *  trend/form/left, which this form doesn't display. */
+type StandingsRow = {
+  id: string;
+  name: string;
+  p: number;
+  gf: number;
+  ga: number;
+  pts: number;
+  left: boolean;
+};
 
 /* -------------------------------------------------------------------------- */
 /*                                  constants                                 */
@@ -54,6 +77,9 @@ const DEFAULT_SETTINGS: Settings = {
   groupsCount: 2,
   teamsPerGroup: 4,
   topAdvancing: 2,
+  legsPerTie: 1,
+  thirdPlace: false,
+  source: "all",
 };
 
 /* -------------------------------------------------------------------------- */
@@ -66,9 +92,23 @@ function leagueFixtureCount(teams: number, rounds: number): number {
   return Math.floor(n / 2) * (n - 1) * rounds;
 }
 
-function cupFixtureCount(teams: number): number {
+/**
+ * A single-elimination bracket with `teams` entries always runs `teams - 1`
+ * ties. Every tie is two legs except the final, which is always one match.
+ */
+function cupFixtureCount(teams: number, legs: 1 | 2 = 1, thirdPlace = false): number {
   if (teams < 2) return 0;
-  return teams / 2;
+  const ties = teams - 1;
+  const legsBeforeFinal = Math.max(0, ties - 1);
+  // A two-team "cup" is just the final — there are no semi-finals to play off.
+  return legsBeforeFinal * legs + 1 + (thirdPlace && teams >= 4 ? 1 : 0);
+}
+
+/** Ties in the first round: the top seeds get a bye when the field isn't 2ⁿ. */
+function cupRoundOneTies(teams: number): number {
+  if (teams < 2) return 0;
+  const power = 2 ** Math.ceil(Math.log2(teams));
+  return (teams - (power - teams)) / 2;
 }
 
 function groupCupFixtureCount(
@@ -76,10 +116,11 @@ function groupCupFixtureCount(
   groups: number,
   perGroup: number,
   advance: number,
+  legs: 1 | 2 = 1,
 ): { groupFixtures: number; knockoutFixtures: number } {
   const groupFixtures = groups * Math.floor((perGroup * (perGroup - 1)) / 2);
   const advancingTeams = groups * advance;
-  const knockoutFixtures = advancingTeams >= 2 ? cupFixtureCount(advancingTeams) : 0;
+  const knockoutFixtures = advancingTeams >= 2 ? cupFixtureCount(advancingTeams, legs) : 0;
   return { groupFixtures, knockoutFixtures };
 }
 
@@ -127,6 +168,33 @@ export function CompetitionWizard({ teams }: { teams: TeamOption[] }) {
   const [notice, setNotice] = React.useState<Notice>(null);
   const [loading, setLoading] = React.useState(false);
 
+  const [sources, setSources] = React.useState<SourceComp[] | null>(null);
+  const [standings, setStandings] = React.useState<StandingsRow[] | null>(null);
+  const [sourceLoading, setSourceLoading] = React.useState(false);
+  const [sourceError, setSourceError] = React.useState<string | null>(null);
+
+  /** Load the competitions list once, when the league picker is first opened. */
+  async function openSources() {
+    if (sources) return;
+    const r = await pickSourceCompetitionsAction();
+    if (r.ok) setSources(r.data ?? []);
+    else setSourceError(r.error ?? "Could not load competitions.");
+  }
+
+  /** Pull a competition's standings so rows can be tapped to add those teams. */
+  async function loadStandings(id: string) {
+    setSourceLoading(true);
+    setSourceError(null);
+    const r = await competitionStandingsAction(id);
+    if (r.ok) {
+      setStandings(r.data ?? []);
+      update("source", id);
+    } else {
+      setSourceError(r.error ?? "Could not load that competition's standings.");
+    }
+    setSourceLoading(false);
+  }
+
   function update<K extends keyof Settings>(key: K, value: Settings[K]) {
     setSettings((s) => ({ ...s, [key]: value }));
   }
@@ -142,11 +210,18 @@ export function CompetitionWizard({ teams }: { teams: TeamOption[] }) {
 
   const teamCount = settings.teamIds.length;
   const predictedLeague = format === "LEAGUE" || format === "LEAGUE_CUP" ? leagueFixtureCount(teamCount, settings.roundsCount) : 0;
-  const predictedCup = format === "CUP" ? cupFixtureCount(teamCount) : 0;
+  const predictedCupTies = format === "CUP" ? cupRoundOneTies(teamCount) : 0;
+  const predictedCup = format === "CUP" ? cupFixtureCount(teamCount, settings.legsPerTie, settings.thirdPlace) : 0;
   let predictedGroup = 0;
   let predictedKnockout = 0;
   if (format === "LEAGUE_CUP" && teamCount >= 2) {
-    const g = groupCupFixtureCount(teamCount, settings.groupsCount, settings.teamsPerGroup, settings.topAdvancing);
+    const g = groupCupFixtureCount(
+      teamCount,
+      settings.groupsCount,
+      settings.teamsPerGroup,
+      settings.topAdvancing,
+      settings.legsPerTie,
+    );
     predictedGroup = g.groupFixtures;
     predictedKnockout = g.knockoutFixtures;
   }
@@ -186,6 +261,8 @@ export function CompetitionWizard({ teams }: { teams: TeamOption[] }) {
         topAdvancing: format === "LEAGUE_CUP" ? settings.topAdvancing : undefined,
         roundsCount: format === "LEAGUE" ? settings.roundsCount : undefined,
         countdownSecs: settings.countdownSecs,
+        legsPerTie: format === "CUP" || format === "LEAGUE_CUP" ? settings.legsPerTie : undefined,
+        thirdPlace: format === "CUP" ? settings.thirdPlace : undefined,
       });
 
       if (!result.ok) {
@@ -233,7 +310,11 @@ export function CompetitionWizard({ teams }: { teams: TeamOption[] }) {
       case "LEAGUE":
         return `All ${teamCount} teams play each other in a round-robin. Each round has ${Math.floor(teamCount / 2)} fixtures.`;
       case "CUP":
-        return `${teamCount} teams in a single-elimination bracket. Round 1 has ${teamCount / 2} fixtures.`;
+        return `${teamCount} teams in a single-elimination bracket${
+          settings.legsPerTie === 2 ? " — two legs per tie, settled on aggregate (no away goals)" : ""
+        }${settings.thirdPlace ? ", plus a third-place match" : ""}. ${predictedCupTies} tie${
+          predictedCupTies === 1 ? "" : "s"
+        } in round 1.`;
       case "LEAGUE_CUP":
         return `${settings.groupsCount} groups of ${settings.teamsPerGroup}. Top ${settings.topAdvancing} from each group advance to knockout.`;
       case "CUSTOM":
@@ -316,25 +397,143 @@ export function CompetitionWizard({ teams }: { teams: TeamOption[] }) {
             </div>
 
             <Field label={`Teams (${teamCount} selected${format === "CUP" ? " — needs even count" : ""})`}>
-              <div className="grid max-h-56 grid-cols-2 gap-1.5 overflow-y-auto sm:grid-cols-3">
-                {teams.map((t) => (
-                  <button
-                    key={t.id}
-                    type="button"
-                    onClick={() => toggleTeam(t.id)}
-                    aria-pressed={settings.teamIds.includes(t.id)}
-                    className={cn(
-                      "flex items-center gap-2 rounded-lg border px-3 py-2 text-left text-sm transition-colors",
-                      settings.teamIds.includes(t.id)
-                        ? "border-brand bg-brand/10 text-brand-deep"
-                        : "border-line bg-bg-raised text-muted hover:border-line-strong",
-                    )}
-                  >
-                    <span aria-hidden>{settings.teamIds.includes(t.id) ? "✓" : "+"}</span>
-                    <span className="truncate font-medium">{t.name}</span>
-                  </button>
-                ))}
+              {/* Pick from every team, or lift the list straight out of a league table. */}
+              <div className="mb-2 flex flex-wrap gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => update("source", "all")}
+                  aria-pressed={settings.source === "all"}
+                  className={cn(
+                    "rounded-lg border px-3 py-1.5 text-xs font-bold transition-colors",
+                    settings.source === "all"
+                      ? "border-brand bg-brand/10 text-brand-deep"
+                      : "border-line bg-bg-raised text-muted hover:border-line-strong",
+                  )}
+                >
+                  All teams
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    update("source", settings.source === "all" ? "browse" : settings.source);
+                    void openSources();
+                  }}
+                  aria-pressed={settings.source !== "all"}
+                  className={cn(
+                    "rounded-lg border px-3 py-1.5 text-xs font-bold transition-colors",
+                    settings.source !== "all"
+                      ? "border-brand bg-brand/10 text-brand-deep"
+                      : "border-line bg-bg-raised text-muted hover:border-line-strong",
+                  )}
+                >
+                  From a league table
+                </button>
               </div>
+
+              {settings.source !== "all" ? (
+                <div className="space-y-2">
+                  <Select
+                    value={settings.source === "browse" ? "" : settings.source}
+                    onChange={(e) => {
+                      if (e.target.value) void loadStandings(e.target.value);
+                    }}
+                    aria-label="Source competition"
+                  >
+                    <option value="">Choose a competition…</option>
+                    {(sources ?? []).map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name} · {c.season} ({c.teamCount} teams)
+                      </option>
+                    ))}
+                  </Select>
+
+                  {sourceError ? <p className="text-xs text-danger">{sourceError}</p> : null}
+
+                  {sourceLoading ? (
+                    <p className="rounded-lg border border-dashed border-line px-3 py-4 text-center text-xs text-muted">
+                      Loading the table…
+                    </p>
+                  ) : standings && standings.length > 0 ? (
+                    <div className="max-h-72 overflow-y-auto rounded-lg border border-line">
+                      <table className="w-full text-xs">
+                        <thead className="sticky top-0 bg-bg-raised text-[10px] uppercase tracking-wide text-subtle">
+                          <tr>
+                            <th className="px-2 py-1.5 text-left font-bold">#</th>
+                            <th className="px-2 py-1.5 text-left font-bold">Team</th>
+                            <th className="px-1 py-1.5 text-right font-bold">P</th>
+                            <th className="px-1 py-1.5 text-right font-bold">GD</th>
+                            <th className="px-2 py-1.5 text-right font-bold">Pts</th>
+                            <th className="px-2 py-1.5 text-center font-bold">Pick</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {standings.map((row, i) => {
+                            const picked = settings.teamIds.includes(row.id);
+                            return (
+                              <tr
+                                key={row.id}
+                                onClick={() => toggleTeam(row.id)}
+                                className={cn(
+                                  "cursor-pointer border-t border-line",
+                                  picked ? "bg-brand/10" : "bg-white hover:bg-surface",
+                                )}
+                              >
+                                <td className="px-2 py-1.5 font-black tabular-nums text-fg">{i + 1}</td>
+                                <td className="max-w-[10rem] truncate px-2 py-1.5 font-semibold text-fg">
+                                  {row.name}
+                                  {row.left ? <span className="ml-1 text-[10px] text-subtle">(left)</span> : null}
+                                </td>
+                                <td className="px-1 py-1.5 text-right tabular-nums text-muted">{row.p}</td>
+                                <td className="px-1 py-1.5 text-right tabular-nums text-muted">{row.gf - row.ga}</td>
+                                <td className="px-2 py-1.5 text-right font-black tabular-nums text-fg">{row.pts}</td>
+                                <td className="px-2 py-1.5 text-center">
+                                  <span
+                                    className={cn(
+                                      "inline-grid size-5 place-items-center rounded border text-[10px] font-black",
+                                      picked ? "border-brand bg-brand text-white" : "border-line text-subtle",
+                                    )}
+                                    aria-hidden
+                                  >
+                                    {picked ? "✓" : "+"}
+                                  </span>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : standings && standings.length === 0 ? (
+                    <p className="rounded-lg border border-dashed border-line px-3 py-4 text-center text-xs text-muted">
+                      That competition has no teams yet.
+                    </p>
+                  ) : (
+                    <p className="rounded-lg border border-dashed border-line px-3 py-4 text-center text-xs text-muted">
+                      Choose a competition to pull up its standings, then tap rows to add those teams.
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <div className="grid max-h-56 grid-cols-2 gap-1.5 overflow-y-auto sm:grid-cols-3">
+                  {teams.map((t) => (
+                    <button
+                      key={t.id}
+                      type="button"
+                      onClick={() => toggleTeam(t.id)}
+                      aria-pressed={settings.teamIds.includes(t.id)}
+                      className={cn(
+                        "flex items-center gap-2 rounded-lg border px-3 py-2 text-left text-sm transition-colors",
+                        settings.teamIds.includes(t.id)
+                          ? "border-brand bg-brand/10 text-brand-deep"
+                          : "border-line bg-bg-raised text-muted hover:border-line-strong",
+                      )}
+                    >
+                      <span aria-hidden>{settings.teamIds.includes(t.id) ? "✓" : "+"}</span>
+                      <span className="truncate font-medium">{t.name}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
             </Field>
 
             {/* Format-specific settings */}
@@ -361,16 +560,59 @@ export function CompetitionWizard({ teams }: { teams: TeamOption[] }) {
               </div>
             )}
 
-            {format === "CUP" && (
-              <Field label="Seeding method">
-                <Select
-                  value={settings.seedingMethod}
-                  onChange={(e) => update("seedingMethod", e.target.value as "random" | "rank")}
-                >
-                  <option value="rank">By rank (seed order)</option>
-                  <option value="random">Random draw</option>
-                </Select>
-              </Field>
+            {(format === "CUP" || format === "LEAGUE_CUP") && (
+              <div className="space-y-3 rounded-xl border border-line bg-bg-raised p-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-subtle">
+                  {format === "CUP" ? "Cup rules" : "Knockout rules"}
+                </p>
+                <div className={cn("grid gap-3", format === "CUP" ? "sm:grid-cols-2" : "")}>
+                  <Field label="Ties">
+                    <Select
+                      value={String(settings.legsPerTie)}
+                      onChange={(e) => update("legsPerTie", Number(e.target.value) === 2 ? 2 : 1)}
+                    >
+                      <option value="1">1 leg — straight knockout</option>
+                      <option value="2">2 legs — aggregate score</option>
+                    </Select>
+                  </Field>
+                  {format === "CUP" ? (
+                    <Field label="Seeding method">
+                      <Select
+                        value={settings.seedingMethod}
+                        onChange={(e) => update("seedingMethod", e.target.value as "random" | "rank")}
+                      >
+                        <option value="rank">By rank (seed order)</option>
+                        <option value="random">Random draw</option>
+                      </Select>
+                    </Field>
+                  ) : null}
+                </div>
+
+                {format === "CUP" ? (
+                  <label className="flex cursor-pointer items-start gap-2.5 rounded-lg border border-line bg-white px-3 py-2.5">
+                    <input
+                      type="checkbox"
+                      checked={settings.thirdPlace}
+                      onChange={(e) => update("thirdPlace", e.target.checked)}
+                      className="mt-1 size-4 accent-[var(--color-brand,#0b6b5b)]"
+                    />
+                    <span className="min-w-0">
+                      <span className="block text-sm font-semibold text-fg">Third-place match</span>
+                      <span className="block text-xs text-subtle">
+                        The two semi-final losers play off once, alongside the final.
+                      </span>
+                    </span>
+                  </label>
+                ) : null}
+
+                {settings.legsPerTie === 2 ? (
+                  <p className="rounded-lg border border-brand/25 bg-brand/5 px-3 py-2 text-xs text-muted">
+                    Both legs count towards the aggregate. There is <strong className="text-fg">no away-goals
+                    rule</strong> — if the tie is level after the second leg it goes to a penalty shootout on that
+                    leg. The final is always a single match.
+                  </p>
+                ) : null}
+              </div>
             )}
 
             {format === "LEAGUE_CUP" && (
@@ -470,7 +712,9 @@ export function CompetitionWizard({ teams }: { teams: TeamOption[] }) {
                 )}
                 {format === "CUP" && (
                   <p className="font-semibold text-fg">
-                    {predictedCup} matches (round 1) + {Math.max(0, predictedCup / 2)} finals
+                    {predictedCup} matches total — {predictedCupTies} tie{predictedCupTies === 1 ? "" : "s"} in round 1
+                    {settings.legsPerTie === 2 ? ", two legs each except the final" : ""}
+                    {settings.thirdPlace ? ", plus a third-place match" : ""}
                   </p>
                 )}
                 {format === "LEAGUE_CUP" && (

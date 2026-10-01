@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { generateMatchCode } from "@/lib/matchCode";
 import { notifyAllUsers } from "@/lib/notify";
 import { applyWalletTxn } from "@/lib/bet/wallet";
+import { legOneIndex, returnLegNotBefore, returnLegWaits } from "@/lib/platform/scheduling";
 import type { ActionResult, ErrResult, Role, TeamSide } from "@/lib/domain";
 
 export type Actor = { userId: string; role: Role };
@@ -149,12 +150,13 @@ export async function scheduleAllFixtures(
     where: { id: input.competitionId },
     include: {
       matches: {
-        orderBy: { createdAt: "asc" },
-        select: { id: true, status: true, scheduledAt: true, homeTeamId: true, awayTeamId: true },
+        orderBy: [{ cupRound: "asc" }, { createdAt: "asc" }],
+        select: { id: true, status: true, scheduledAt: true, homeTeamId: true, awayTeamId: true, cupTie: true, cupLeg: true },
       },
     },
   });
   if (!comp) return err("Competition not found.");
+  const legs = legOneIndex(comp.matches);
   let unscheduled = comp.matches.filter((m) => m.status === "DRAFT" && !m.scheduledAt);
   if (unscheduled.length === 0) return ok({ scheduled: 0, rounds: 0 });
   // Per-team load = matches finished or already scheduled, used only to
@@ -191,6 +193,8 @@ export async function scheduleAllFixtures(
     const roundPicks: typeof unscheduled = [];
     for (const m of candidates) {
       if ((m.homeTeamId && busy.has(m.homeTeamId)) || (m.awayTeamId && busy.has(m.awayTeamId))) continue;
+      // A return leg never goes out in the same wave as (or before) leg one.
+      if (returnLegWaits(m, legs)) continue;
       roundPicks.push(m);
       if (m.homeTeamId) busy.add(m.homeTeamId);
       if (m.awayTeamId) busy.add(m.awayTeamId);
@@ -202,17 +206,25 @@ export async function scheduleAllFixtures(
       return err(`Could not schedule ${unscheduled.length} remaining fixture(s) without a team clash.`);
     }
 
+    let waveEnd = kickoff;
     for (let i = 0; i < roundPicks.length; i++) {
-      allUpdates.push({ id: roundPicks[i].id, scheduledAt: new Date(kickoff.getTime() + i * matchGapMs) });
-      bump(roundPicks[i].homeTeamId, 1);
-      bump(roundPicks[i].awayTeamId, 1);
+      const m = roundPicks[i];
+      const base = new Date(kickoff.getTime() + i * matchGapMs);
+      const notBefore = returnLegNotBefore(m, legs);
+      const at = notBefore && notBefore > base ? notBefore : base;
+      if (m.cupTie && m.cupLeg === 1) legs.setLegOneTime(m.cupTie, at);
+      allUpdates.push({ id: m.id, scheduledAt: at });
+      if (at > waveEnd) waveEnd = at;
+      bump(m.homeTeamId, 1);
+      bump(m.awayTeamId, 1);
     }
 
     const pickedIds = new Set(roundPicks.map((m) => m.id));
     unscheduled = unscheduled.filter((m) => !pickedIds.has(m.id));
     roundsBuilt++;
-    // Next round starts a day after the last kickoff of this round.
-    kickoff = new Date(kickoff.getTime() + (roundPicks.length - 1) * matchGapMs + roundGapMs);
+    // Next round starts a day after the last kickoff actually handed out — a
+    // return leg pushed out by TIE_GAP_MS has to keep its breathing room.
+    kickoff = new Date(waveEnd.getTime() + roundGapMs);
   }
 
   await prisma.$transaction(
@@ -247,11 +259,13 @@ export async function scheduleLeagueWave(
     where: { id: input.competitionId },
     include: {
       matches: {
-        select: { id: true, status: true, scheduledAt: true, homeTeamId: true, awayTeamId: true },
+        orderBy: [{ cupRound: "asc" }, { createdAt: "asc" }],
+        select: { id: true, status: true, scheduledAt: true, homeTeamId: true, awayTeamId: true, cupTie: true, cupLeg: true },
       },
     },
   });
   if (!comp) return err("Competition not found.");
+  const legs = legOneIndex(comp.matches);
   const unscheduled = comp.matches.filter((m) => m.status === "DRAFT" && !m.scheduledAt);
   if (unscheduled.length === 0) return ok({ scheduled: 0 });
 
@@ -285,6 +299,9 @@ export async function scheduleLeagueWave(
   for (const m of candidates) {
     if (picks.length >= count) break;
     if ((m.homeTeamId && busy.has(m.homeTeamId)) || (m.awayTeamId && busy.has(m.awayTeamId))) continue;
+    // Hold a return leg back until its first leg has a kick-off, so the legs
+    // can never come out of two waves in the wrong order.
+    if (returnLegWaits(m, legs)) continue;
     picks.push(m);
     if (m.homeTeamId) busy.add(m.homeTeamId);
     if (m.awayTeamId) busy.add(m.awayTeamId);
@@ -294,12 +311,15 @@ export async function scheduleLeagueWave(
   const kickoff = input.firstKickAt ?? new Date(Date.now() + 90 * 60 * 1000);
 
   await prisma.$transaction(
-    picks.map((m, i) =>
-      prisma.match.update({
-        where: { id: m.id },
-        data: { scheduledAt: new Date(kickoff.getTime() + i * matchGapMs) },
-      }),
-    ),
+    picks.map((m, i) => {
+      const base = new Date(kickoff.getTime() + i * matchGapMs);
+      // Two legs of one tie are never same-weekend: keep at least a day between
+      // them no matter how quickly the admin runs through the waves.
+      const notBefore = returnLegNotBefore(m, legs);
+      const at = notBefore && notBefore > base ? notBefore : base;
+      if (m.cupTie && m.cupLeg === 1) legs.setLegOneTime(m.cupTie, at);
+      return prisma.match.update({ where: { id: m.id }, data: { scheduledAt: at } });
+    }),
   );
 
   notifyAllUsers({
@@ -322,6 +342,77 @@ export async function setCompetitionStatus(
   return ok(undefined);
 }
 
+/**
+ * Change a cup's format after it has been created.
+ *
+ * Both knobs are only safe while the fixtures they would contradict don't exist
+ * yet:
+ *  - legs per tie can only change before a draw has produced any knockout
+ *    fixture, because you can't retroactively give an existing tie a second leg
+ *    (or throw one away) without rewriting scores that may already be played;
+ *  - the third-place match can be added any time before it exists, and taken
+ *    away only while the fixture is still an unplayed, unscheduled draft that
+ *    nobody has placed a bet on.
+ */
+export async function setCupFormat(
+  actor: Actor,
+  input: { competitionId: string; legsPerTie?: number; thirdPlace?: boolean },
+) {
+  const blocked = await requireAdmin(actor);
+  if (blocked) return blocked;
+  const comp = await prisma.competition.findUnique({
+    where: { id: input.competitionId },
+    include: {
+      matches: { select: { id: true, cupRound: true, cupThirdPlace: true, status: true, scheduledAt: true } },
+    },
+  });
+  if (!comp) return err("Competition not found.");
+  if (comp.type !== "CUP" && comp.type !== "LEAGUE_CUP")
+    return err("Only cup competitions have legs and a third-place match.");
+  if (input.legsPerTie === undefined && input.thirdPlace === undefined) return err("Nothing to change.");
+
+  const data: { legsPerTie?: number; thirdPlace?: boolean } = {};
+  // A LEAGUE_CUP's groups squat on cupRound 1, so its knockout draw starts at 2.
+  const knockoutRound = comp.type === "CUP" ? 1 : 2;
+  const hasDraw = comp.matches.some((m) => (m.cupRound ?? 0) >= knockoutRound);
+
+  if (input.legsPerTie !== undefined) {
+    const legs = input.legsPerTie === 2 ? 2 : 1;
+    if (legs !== comp.legsPerTie) {
+      if (hasDraw)
+        return err(
+          comp.type === "CUP"
+            ? "The draw has already been made — a cup can't switch between one and two legs once fixtures exist."
+            : "The knockout draw has already been made — legs per tie can't change now.",
+        );
+      data.legsPerTie = legs;
+    }
+  }
+
+  if (input.thirdPlace !== undefined && input.thirdPlace !== comp.thirdPlace) {
+    if (comp.type !== "CUP") return err("Only a straight knockout cup plays a third-place match.");
+    if (input.thirdPlace === false) {
+      const spare = comp.matches.find((m) => m.cupThirdPlace);
+      if (spare) {
+        // Legs are a JSON payload plus denormalised `legMatchIds`, so single
+        // bets and acca legs both have to be checked.
+        const bets = await prisma.bet.count({
+          where: { OR: [{ matchId: spare.id }, { legMatchIds: { has: spare.id } }] },
+        });
+        if (spare.status !== "DRAFT" || spare.scheduledAt || bets > 0)
+          return err("The third-place match already has a kick-off, bets or a result — it can't be removed.");
+        // Every relation to a match cascades, so the rosters go with it.
+        await prisma.match.delete({ where: { id: spare.id } });
+      }
+    }
+    data.thirdPlace = input.thirdPlace === true;
+  }
+
+  if (Object.keys(data).length === 0) return ok(undefined);
+  await prisma.competition.update({ where: { id: comp.id }, data });
+  return ok(undefined);
+}
+
 export async function createCompetition(
   actor: Actor,
   input: {
@@ -334,6 +425,10 @@ export async function createCompetition(
     topAdvancing?: number;
     roundsCount?: number;
     countdownSecs?: number;
+    /** CUP: 1 or 2 legs per tie. Two legs settle on aggregate (no away goals). */
+    legsPerTie?: number;
+    /** CUP: play a third-place match between the semi-final losers. */
+    thirdPlace?: boolean;
   },
 ) {
   const blocked = await requireAdmin(actor);
@@ -345,6 +440,8 @@ export async function createCompetition(
   if (teamIds.length < 2) return err("A competition needs at least 2 teams.");
   if (input.type === "CUP" && teamIds.length % 2 !== 0)
     return err("Knockout cups need an even number of teams (2, 4, 8, 16…).");
+  const legsPerTie = input.type === "CUP" || input.type === "LEAGUE_CUP" ? (input.legsPerTie === 2 ? 2 : 1) : 1;
+  const thirdPlace = input.type === "CUP" && input.thirdPlace === true;
   if (input.type === "LEAGUE_CUP") {
     if (!input.groupsCount || !input.teamsPerGroup || !input.topAdvancing)
       return err("Group competitions need groups count, teams per group, and top N advancing.");
@@ -373,6 +470,9 @@ export async function createCompetition(
           topAdvancing: input.topAdvancing ?? null,
           roundsCount: input.roundsCount ?? null,
           countdownSecs: input.countdownSecs ?? null,
+          // A two-team "cup" is just the final — one leg regardless of the setting.
+          legsPerTie: teamIds.length <= 2 ? 1 : legsPerTie,
+          thirdPlace,
         },
       });
       for (const [i, teamId] of teamIds.entries()) {
@@ -500,7 +600,7 @@ async function syncRosterFromTeams(tx: Prisma.TransactionClient, matchId: string
   }
 }
 
-async function createFixture(tx: Prisma.TransactionClient, opts: { competitionId: string; home: { id: string; name: string }; away: { id: string; name: string }; cupRound?: number; countdownSeconds?: number }) {
+async function createFixture(tx: Prisma.TransactionClient, opts: { competitionId: string; home: { id: string; name: string }; away: { id: string; name: string }; cupRound?: number; cupTie?: string | null; cupLeg?: number | null; cupThirdPlace?: boolean; countdownSeconds?: number }) {
   const code = await createMatchCode(tx);
   const match = await tx.match.create({
     data: {
@@ -511,6 +611,9 @@ async function createFixture(tx: Prisma.TransactionClient, opts: { competitionId
       awayTeamId: opts.away.id,
       competitionId: opts.competitionId,
       cupRound: opts.cupRound ?? null,
+      cupTie: opts.cupTie ?? null,
+      cupLeg: opts.cupLeg ?? null,
+      cupThirdPlace: opts.cupThirdPlace ?? false,
       refereeId: null,
       status: "DRAFT",
       countdownSeconds: opts.countdownSeconds ?? 15,
@@ -518,6 +621,49 @@ async function createFixture(tx: Prisma.TransactionClient, opts: { competitionId
   });
   await syncRosterFromTeams(tx, match.id, opts.home.id, opts.away.id);
   return match;
+}
+
+/**
+ * Create one knockout tie: a single match, or two legs with home advantage
+ * swapped for the return. Both legs share a `cupTie` id so the bracket can add
+ * them up when it decides who advances.
+ */
+async function createTie(
+  tx: Prisma.TransactionClient,
+  opts: {
+    competitionId: string;
+    home: { id: string; name: string };
+    away: { id: string; name: string };
+    cupRound: number;
+    legsPerTie: number;
+    countdownSeconds: number;
+  },
+) {
+  const legs = opts.legsPerTie >= 2 ? 2 : 1;
+  // Leg 1 is at the first-named team's ground, leg 2 swings it round. The tie
+  // id is leg one's own match id, so there's no id generator to import here.
+  const first = await createFixture(tx, {
+    competitionId: opts.competitionId,
+    home: opts.home,
+    away: opts.away,
+    cupRound: opts.cupRound,
+    cupTie: null,
+    cupLeg: legs === 2 ? 1 : null,
+    countdownSeconds: opts.countdownSeconds,
+  });
+  if (legs === 2) {
+    await tx.match.update({ where: { id: first.id }, data: { cupTie: first.id } });
+    await createFixture(tx, {
+      competitionId: opts.competitionId,
+      home: opts.away,
+      away: opts.home,
+      cupRound: opts.cupRound,
+      cupTie: first.id,
+      cupLeg: 2,
+      countdownSeconds: opts.countdownSeconds,
+    });
+  }
+  return first;
 }
 
 /**
@@ -690,19 +836,23 @@ export async function generateCupRound(actor: Actor, input: { competitionId: str
       }
 
       if (qualifiers.length < 2) return err("Not enough teams advanced to build a knockout round.");
+      const legsPerTie = comp.legsPerTie >= 2 && qualifiers.length > 2 ? 2 : 1;
+      let created = 0;
       await prisma.$transaction(async (tx) => {
         const count = Math.floor(qualifiers.length / 2);
         for (let k = 0; k < count; k++) {
-          await createFixture(tx, {
+          await createTie(tx, {
             competitionId: comp.id,
             home: qualifiers[k],
             away: qualifiers[qualifiers.length - 1 - k],
             cupRound: 2,
+            legsPerTie,
             countdownSeconds: cd,
           });
+          created += legsPerTie;
         }
       });
-      return ok({ count: Math.floor(qualifiers.length / 2) });
+      return ok({ count: created, legs: legsPerTie });
     }
   }
 
@@ -721,39 +871,94 @@ export async function generateCupRound(actor: Actor, input: { competitionId: str
       // Mirror-pair the seeded list (1 vs last, 2 vs second-to-last, ...).
       pairs.push({ home: players[i].id, away: players[players.length - 1 - i].id });
     }
+    // Two legs everywhere except a tie that is already the final (2 teams).
+    const legsPerTie = comp.legsPerTie >= 2 && pairs.length > 1 ? 2 : 1;
+    let created = 0;
     for (const p of pairs) {
       const home = teamById.get(p.home);
       const away = teamById.get(p.away);
       if (!home || !away) continue;
       await prisma.$transaction(async (tx) => {
-        await createFixture(tx, { competitionId: comp.id, home: { id: home.id, name: home.name }, away: { id: away.id, name: away.name }, cupRound: 1, countdownSeconds: cd });
+        await createTie(tx, {
+          competitionId: comp.id,
+          home: { id: home.id, name: home.name },
+          away: { id: away.id, name: away.name },
+          cupRound: 1,
+          legsPerTie,
+          countdownSeconds: cd,
+        });
       });
+      created += legsPerTie;
     }
-    return ok({ count: pairs.length, byes });
+    return ok({ count: created, byes, legs: legsPerTie });
   }
 
-  // Advance from the finished matches of the latest round.
-  const maxRound = Math.max(...comp.matches.map((m) => m.cupRound ?? 0));
-  const roundMatches = comp.matches.filter((m) => m.cupRound === maxRound);
+  // Advance from the finished matches of the latest round. The third-place
+  // match lives in the final's round but never feeds it, so it's left out.
+  const bracketMatches = comp.matches.filter((m) => !m.cupThirdPlace);
+  if (bracketMatches.length === 0) return err("No fixtures to advance from.");
+  const maxRound = Math.max(...bracketMatches.map((m) => m.cupRound ?? 0));
+  const roundMatches = bracketMatches.filter((m) => m.cupRound === maxRound);
   if (roundMatches.length === 0) return err("No fixtures to advance from.");
-  if (!roundMatches.every((m) => m.status === "FINISHED"))
-    return err("Finish every match in the current round before generating the next.");
 
-  const entrants: { id: string; name: string }[] = [];
+  // Group the round's fixtures into ties — a two-legged tie shares a `cupTie`,
+  // a one-legged one stands alone keyed on its own match id.
+  const tieGroups = new Map<string, typeof roundMatches>();
   for (const m of roundMatches) {
-    if (m.homeScore === m.awayScore) {
-      if (!m.penaltyShootout || m.penaltyShootout.status !== "COMPLETE" || !m.penaltyShootout.winner)
-        return err(`Round ${maxRound} has a drawn match (${m.homeName} v ${m.awayName}). Use penalties to decide the winner.`);
-      const penWinner = m.penaltyShootout.winner === "HOME"
-        ? { id: m.homeTeamId!, name: m.homeName }
-        : { id: m.awayTeamId!, name: m.awayName };
-      entrants.push(penWinner);
-    } else {
-      entrants.push(m.homeScore > m.awayScore ? { id: m.homeTeamId!, name: m.homeName } : { id: m.awayTeamId!, name: m.awayName });
+    const key = m.cupTie ?? m.id;
+    const list = tieGroups.get(key);
+    if (list) list.push(m);
+    else tieGroups.set(key, [m]);
+  }
+
+  const winners: { id: string; name: string }[] = [];
+  const losers: { id: string; name: string }[] = [];
+  for (const legs of tieGroups.values()) {
+    if (!legs.every((m) => m.status === "FINISHED")) {
+      const left = legs.filter((m) => m.status !== "FINISHED").length;
+      return err(
+        `Finish every match in round ${maxRound} first — ${legs.length} leg${legs.length === 1 ? "" : "s"}, ${left} still to play.`,
+      );
     }
+    legs.sort((a, b) => (a.cupLeg ?? 1) - (b.cupLeg ?? 1) || a.createdAt.getTime() - b.createdAt.getTime());
+
+    const teamA = { id: legs[0].homeTeamId!, name: legs[0].homeName };
+    const teamB = { id: legs[0].awayTeamId!, name: legs[0].awayName };
+
+    // Aggregate across the legs — no away-goals rule, just total goals.
+    let aGoals = 0;
+    let bGoals = 0;
+    for (const m of legs) {
+      const aIsHome = m.homeTeamId === teamA.id;
+      aGoals += aIsHome ? m.homeScore : m.awayScore;
+      bGoals += aIsHome ? m.awayScore : m.homeScore;
+    }
+
+    if (aGoals !== bGoals) {
+      winners.push(aGoals > bGoals ? teamA : teamB);
+      losers.push(aGoals > bGoals ? teamB : teamA);
+      continue;
+    }
+
+    // Level on aggregate: the shootout on the deciding (second) leg settles it.
+    // For a one-legged tie that leg is the match itself.
+    const decider = legs[legs.length - 1];
+    const so = decider.penaltyShootout;
+    if (!so || so.status !== "COMPLETE" || !so.winner) {
+      return legs.length > 1
+        ? err(
+            `${teamA.name} v ${teamB.name} is level at ${aGoals}–${bGoals} on aggregate. There are no away goals — settle it by penalties on the second leg.`,
+          )
+        : err(`Round ${maxRound} has a drawn match (${decider.homeName} v ${decider.awayName}). Use penalties to decide the winner.`);
+    }
+    const penId = so.winner === "HOME" ? decider.homeTeamId! : decider.awayTeamId!;
+    const penName = so.winner === "HOME" ? decider.homeName : decider.awayName;
+    winners.push({ id: penId, name: penName });
+    losers.push(penId === teamA.id ? teamB : teamA);
   }
 
   // After round 1, fold in the seeded teams that had a bye (still alive).
+  const entrants = [...winners];
   if (maxRound === 1) {
     const byes = nextPowerOfTwo(comp.teams.length) - comp.teams.length;
     if (byes > 0) {
@@ -774,19 +979,43 @@ export async function generateCupRound(actor: Actor, input: { competitionId: str
   // Re-seed entrants for the bracket so early rounds don't pair 1v2.
   const seedMap = new Map(comp.teams.map((ct) => [ct.teamId, ct.seed ?? 99]));
   entrants.sort((a, b) => (seedMap.get(a.id) ?? 99) - (seedMap.get(b.id) ?? 99));
+
+  // The final is always one match; two legs run from the first round onwards.
+  const legsForNext = entrants.length === 2 ? 1 : comp.legsPerTie >= 2 ? 2 : 1;
   const count = Math.floor(entrants.length / 2);
+  let created = 0;
   for (let i = 0; i < count; i++) {
     await prisma.$transaction(async (tx) => {
-      await createFixture(tx, {
+      await createTie(tx, {
         competitionId: comp.id,
         home: entrants[i],
         away: entrants[entrants.length - 1 - i],
         cupRound: nextRound,
+        legsPerTie: legsForNext,
         countdownSeconds: cd,
       });
     });
+    created += legsForNext;
   }
-  return ok({ count });
+
+  // Third-place match: the two semi-final losers meet once, alongside the final.
+  let thirdPlace = false;
+  if (comp.thirdPlace && entrants.length === 2 && losers.length === 2) {
+    await prisma.$transaction(async (tx) => {
+      await createFixture(tx, {
+        competitionId: comp.id,
+        home: losers[0],
+        away: losers[1],
+        cupRound: nextRound,
+        cupThirdPlace: true,
+        countdownSeconds: cd,
+      });
+    });
+    thirdPlace = true;
+    created += 1;
+  }
+
+  return ok({ count: created, legs: legsForNext, thirdPlace, round: nextRound });
 }
 
 /* ------------------------------ group + cup ------------------------------ */

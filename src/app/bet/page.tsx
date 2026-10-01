@@ -5,9 +5,9 @@ import { formGuides, oddsForMatches } from "@/lib/bet/odds";
 import { ensureWallet } from "@/lib/bet/wallet";
 import { PublicShell } from "@/components/site";
 import { Badge } from "@/components/ui";
-import { BetTerminal, type BetMatch, type BetRow, type BetLegRow, type LeaderRow, type TxnRow } from "@/components/bet";
+import { BetTerminal, RedeemLookup, type BetMatch, type BetRow, type BetLegRow, type LeaderRow, type TxnRow } from "@/components/bet";
 import { selectionLabel } from "@/lib/bet/labels";
-import { selectionOutcomes } from "@/lib/bet/engine";
+import { selectionResults } from "@/lib/bet/engine";
 import { MathBlock } from "@/components/MathText";
 
 export const dynamic = "force-dynamic";
@@ -134,7 +134,7 @@ export default async function BetPage() {
           : [{ matchId: b.matchId, market: b.market, selection: b.selection }];
       return { b, rawLegs, selections };
     });
-    const outcomes = await selectionOutcomes(prisma, parsed.flatMap((p) => p.selections));
+    const outcomes = await selectionResults(prisma, parsed.flatMap((p) => p.selections));
 
     let cursor = 0;
     bets = parsed.map(({ b, rawLegs, selections }) => {
@@ -150,7 +150,8 @@ export default async function BetPage() {
             selection: l.selection ?? "",
             label: l.label || selectionLabel(l.market ?? "", l.selection ?? ""),
             odds: Number(l.odds ?? 0),
-            status: slice[i] ?? "PENDING",
+            status: slice[i]?.status ?? "PENDING",
+            score: slice[i]?.score ?? null,
           }))
         : [
             {
@@ -161,6 +162,7 @@ export default async function BetPage() {
               label: selectionLabel(b.market, b.selection),
               odds: Number(b.odds),
               status: b.status,
+              score: slice[0]?.score ?? null,
             },
           ];
 
@@ -232,6 +234,8 @@ export default async function BetPage() {
             claimedToday={claimedToday}
           />
         </div>
+
+        <RedeemLookup />
 
         <section className="mt-10 rounded-2xl border border-line bg-white p-5">
           <h2 className="text-sm font-black uppercase tracking-wider text-fg">How the odds are priced</h2>

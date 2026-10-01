@@ -137,7 +137,12 @@ model Match {
   homeTeam      Team?        @relation("TeamHomeMatches", fields: [homeTeamId], references: [id], onDelete: SetNull)
   awayTeamId    String?
   awayTeam      Team?        @relation("TeamAwayMatches", fields: [awayTeamId], references: [id], onDelete: SetNull)
-  cupRound      Int? // knockout round index, 1-based (1 = first round)
+  cupRound      Int?    // knockout round index, 1-based (1 = first round)
+  // Two-legged ties: both legs share a `cupTie`, and `cupLeg` says which one
+  // this is. `cupThirdPlace` marks the one-off match for the semi-final losers.
+  cupTie        String?
+  cupLeg        Int?
+  cupThirdPlace Boolean @default(false)
 
   // "20 prepared questions, 10 played": the played set is Rounds 1..10,
   // which reference the prepared bank. A round can only be created while in DRAFT.
@@ -546,7 +551,12 @@ model Competition {
   topAdvancing  Int? // LEAGUE_CUP: top N from each group advance
   roundsCount   Int? // LEAGUE: number of rounds
   countdownSecs Int? // match countdown seconds override
-  createdAt     DateTime @default(now())
+  // CUP: one or two legs per tie. Two legs settle on aggregate — no away-goals
+  // rule; a level aggregate is decided by a penalty shootout on the second leg.
+  legsPerTie   Int     @default(1)
+  // CUP: play a third-place match between the semi-final losers.
+  thirdPlace   Boolean @default(false)
+  createdAt    DateTime @default(now())
 
   teams          CompetitionTeam[]
   matches        Match[]

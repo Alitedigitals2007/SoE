@@ -1,6 +1,7 @@
 "use server";
 
 import { Prisma } from "@prisma/client";
+import { prisma } from "@/lib/prisma";
 import {
   addCompetitionTeam,
   addTeamMember,
@@ -23,12 +24,14 @@ import {
   removeTeamMember,
   scheduleLeagueWave,
   setCompetitionStatus,
+  setCupFormat,
   setFantasyPicks,
   setTeamCaptain,
   setTeamImage,
   teamStats,
   transferTeamMember,
   type Actor,
+  type StandingRow,
 } from "@/lib/platform/engine";
 import { currentActor } from "@/lib/session";
 import type { ActionResult } from "@/lib/domain";
@@ -126,8 +129,69 @@ export async function generateCupRoundAction(input: { competitionId: string }) {
   return runEngine((a) => generateCupRound(a, input));
 }
 
+/** Change a cup's legs-per-tie or third-place match after creation. */
+export async function setCupFormatAction(input: {
+  competitionId: string;
+  legsPerTie?: number;
+  thirdPlace?: boolean;
+}) {
+  return runEngine((a) => setCupFormat(a, input));
+}
+
 export async function generateGroupFixturesAction(input: { competitionId: string }) {
   return runEngine((a) => generateGroupFixtures(a, input));
+}
+
+/**
+ * The competitions an admin can lift a team list from — the wizard's
+ * "pick from a league's standings" browser.
+ */
+export async function pickSourceCompetitionsAction(): Promise<
+  ActionResult<{ id: string; name: string; season: string; type: string; teamCount: number }[]>
+> {
+  const actor = await currentActor();
+  if (!actor) return { ok: false, error: "Sign in to continue." };
+  if (actor.role !== "ADMIN") return { ok: false, error: "Only admins can do that." };
+  try {
+    const comps = await prisma.competition.findMany({
+      orderBy: [{ season: "desc" }, { name: "asc" }],
+      select: {
+        id: true,
+        name: true,
+        season: true,
+        type: true,
+        status: true,
+        _count: { select: { teams: true } },
+      },
+    });
+    return {
+      ok: true,
+      data: comps.map((c) => ({
+        id: c.id,
+        name: c.name,
+        season: c.season,
+        type: c.type,
+        status: c.status,
+        teamCount: c._count.teams,
+      })),
+    };
+  } catch (e) {
+    console.error("pickSourceCompetitionsAction failed", e);
+    return { ok: false, error: "Could not list competitions." };
+  }
+}
+
+/** Standings of an existing competition, in table order, for picking teams. */
+export async function competitionStandingsAction(competitionId: string): Promise<ActionResult<StandingRow[]>> {
+  const actor = await currentActor();
+  if (!actor) return { ok: false, error: "Sign in to continue." };
+  if (actor.role !== "ADMIN") return { ok: false, error: "Only admins can do that." };
+  try {
+    return { ok: true, data: await leagueStandings(competitionId, { live: true }) };
+  } catch (e) {
+    console.error("competitionStandingsAction failed", e);
+    return { ok: false, error: "Could not read that competition's standings." };
+  }
 }
 
 export async function assignRefereeAction(input: { matchId: string; refereeId: string | null }) {
