@@ -106,3 +106,24 @@ export async function createWizardCompetitionAction(input: {
     return { ok: false, error: `Could not create competition — ${msg.slice(0, 200)}` };
   }
 }
+
+/**
+ * Backfill automatic Player of the Match for finished matches that predate
+ * the performance-based system (and any match whose scores were later
+ * corrected). Safe to run repeatedly, it recomputes and overwrites.
+ */
+export async function backfillMotmAction(): Promise<ActionResult<{ filled: number; considered: number }>> {
+  const actor = await currentActor();
+  if (!actor) return { ok: false, error: "Sign in to continue." };
+  if (actor.role !== "ADMIN") return { ok: false, error: "Only admins can run the MOTM backfill." };
+  try {
+    const { backfillMotm } = await import("@/lib/match/motm");
+    const considered = await prisma.match.count({ where: { status: "FINISHED", motmComputedAt: null } });
+    const filled = await backfillMotm();
+    return { ok: true, data: { filled, considered } };
+  } catch (e) {
+    console.error("backfillMotmAction failed", e);
+    return { ok: false, error: "Could not run the MOTM backfill." };
+  }
+}
+

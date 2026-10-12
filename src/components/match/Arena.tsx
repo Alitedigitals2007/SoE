@@ -26,7 +26,7 @@ import { useMatchState, type LiveMode } from "@/components/match/useMatchState";
 import { Badge, Button, Card, CardHeader, EmptyState, Select, Spinner, cn } from "@/components/ui";
 import { matchesReference, normalizeAnswer } from "@/lib/normalize";
 import { MathText } from "@/components/MathText";
-import { PotmVote } from "@/components/match/PotmVote";
+import { MotmPanel } from "@/components/match/MotmPanel";
 import {
   HALFTIME_SECONDS,
   INCIDENT_ACTIONS,
@@ -239,7 +239,7 @@ function ArenaInner({
           {snapshot.status === "FINISHED" && snapshot.penaltyShootout ? (
             <>
               <PenaltyShootoutCard snapshot={snapshot} onError={onError} />
-              <PotmVote matchId={snapshot.matchId} snapshot={snapshot} />
+              <MotmPanel snapshot={snapshot} />
             </>
           ) : snapshot.status === "FINISHED" && snapshot.summary ? (
             <FullTime summary={snapshot.summary} snapshot={snapshot} onError={onError} />
@@ -849,6 +849,14 @@ function LockedStage({
                     <span className="flex min-w-0 items-baseline gap-2">
                       <span className="text-xs font-semibold text-subtle">#{i + 1}</span>
                       <span className="truncate font-medium text-fg"><MathText>{a.answer}</MathText></span>
+                      {a.breached ? (
+                        <span
+                          className="shrink-0 rounded bg-danger/15 px-1.5 py-0.5 text-[10px] font-black text-danger"
+                          title="This player has a conduct incident this match — awarding them the goal records a foul instead"
+                        >
+                          ⚠ breach — no goal
+                        </span>
+                      ) : null}
                       {isReferee && round.correctAnswer && matchesReference(a.answer, round.correctAnswer) ? (
                         <span
                           className="shrink-0 rounded bg-success/15 px-1.5 py-0.5 text-[10px] font-bold text-success"
@@ -958,11 +966,11 @@ function DecidedStage({
     <Card>
       <div className="p-5">
         {isGoal && round.winnerName ? (
-          <div className="animate-soe-pop rounded-lg border border-gold/40 bg-gold/15 p-6 text-center">
-            <p className="text-4xl">⚽</p>
-            <h2 className="mt-1 text-2xl font-black uppercase tracking-wide text-gold-strong">GOAL!</h2>
-            <p className="mt-1 text-xl font-bold text-fg">{round.winnerName}</p>
-            <p className="text-sm text-muted">
+          <div className="animate-soe-pop relative overflow-hidden rounded-lg border border-gold/40 bg-gold/15 p-6 text-center">
+            <GoalCelebration />
+            <h2 className="relative mt-1 text-2xl font-black uppercase tracking-wide text-gold-strong">GOAL!</h2>
+            <p className="relative mt-1 text-xl font-bold text-fg">{round.winnerName}</p>
+            <p className="relative text-sm text-muted">
               {round.winnerTeam === "HOME" ? snapshot.homeName : snapshot.awayName} · Answer:{" "}
               <span className="font-semibold text-fg"><MathText>{round.winnerAnswer}</MathText></span>
             </p>
@@ -1156,6 +1164,42 @@ function IntegrityBoard({
 }
 
 /* ------------------------- player + referee helpers ------------------------ */
+
+/** Confetti specs are index-derived (no Math.random) so SSR/client agree. */
+const CONFETTI = Array.from({ length: 16 }, (_, i) => ({
+  drift: ((i * 37) % 90) - 45,
+  dur: 2 + ((i * 13) % 12) / 10,
+  delay: ((i * 7) % 10) / 10,
+  color: ["bg-gold", "bg-brand", "bg-danger", "bg-white"][i % 4],
+  left: (i * 6.25) % 100,
+}));
+
+/** 3D goal celebration: a ball spiralling in from deep plus raining confetti. */
+function GoalCelebration() {
+  return (
+    <div
+      aria-hidden
+      className="pointer-events-none absolute inset-0 overflow-hidden"
+      style={{ perspective: "700px" }}
+    >
+      <span className="soe-3d-ball absolute left-1/2 top-1/2 -ml-6 -mt-6 text-5xl drop-shadow-[0_10px_18px_rgba(11,32,48,.45)]">
+        ⚽
+      </span>
+      {CONFETTI.map((p, i) => (
+        <span
+          key={i}
+          className={`soe-confetti-piece absolute top-0 h-2.5 w-1.5 rounded-sm ${p.color}`}
+          style={{
+            left: `${p.left}%`,
+            ["--drift" as string]: `${p.drift}px`,
+            ["--dur" as string]: `${p.dur}s`,
+            ["--delay" as string]: `${p.delay}s`,
+          }}
+        />
+      ))}
+    </div>
+  );
+}
 
 function AnswerForm({ code, onError }: { code: string; onError: (e: string | null) => void }) {
   const [value, setValue] = React.useState("");
@@ -1950,6 +1994,22 @@ function FullTime({
           ) : (
             <p className="mt-2 text-sm text-subtle">No goals — a goalless draw.</p>
           )}
+
+          <h3 className="mt-4 text-xs font-bold uppercase tracking-wider text-gold">Assists</h3>
+          {summary.assisters.length ? (
+            <ul className="mt-2 space-y-1 text-sm">
+              {summary.assisters.map((a) => (
+                <li key={a.name} className="flex justify-between border-b border-line/60 py-1.5">
+                  <span className="font-medium text-fg">🅰 {a.name}</span>
+                  <span className="text-muted">
+                    {a.assists} assist{a.assists === 1 ? "" : "s"}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="mt-2 text-sm text-subtle">No assists were credited.</p>
+          )}
         </section>
 
         <section className="space-y-4">
@@ -1969,7 +2029,7 @@ function FullTime({
               <ul className="mt-1 space-y-1 text-sm">
                 {summary.cards.map((c, i) => (
                   <li key={i} className="flex items-center gap-2">
-                    <span aria-hidden>{c.action === "RED_CARD" ? "🟥" : "🟨"}</span>
+                    <span aria-hidden className="soe-3d-card text-lg">{c.action === "RED_CARD" ? "🟥" : "🟨"}</span>
                     <span className="font-medium text-fg">{c.name}</span>
                     <span className="text-xs text-subtle">{c.action === "RED_CARD" ? "Red" : "Yellow"}</span>
                   </li>
@@ -2029,7 +2089,7 @@ function FullTime({
         </ol>
       </div>
     </Card>
-    <PotmVote matchId={snapshot.matchId} snapshot={snapshot} />
+    <MotmPanel snapshot={snapshot} />
     </>
   );
 }

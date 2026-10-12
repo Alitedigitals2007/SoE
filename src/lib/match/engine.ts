@@ -12,6 +12,7 @@ import { notifyAllUsers, notifyUsers } from "@/lib/notify";
 import { GOAL_POINTS } from "@/lib/platform/engine";
 import { emitSettleNotices, settleMatchBets, type SettleNotice } from "@/lib/bet/engine";
 import { applyWalletChanges } from "@/lib/bet/wallet";
+import { computeAndStoreMotm } from "@/lib/match/motm";
 import type { ActionResult, ErrResult, Role, TeamSide as TeamSideView } from "@/lib/domain";
 import {
   HALFTIME_AFTER_QUESTION,
@@ -463,6 +464,7 @@ export async function adminOverrideScore(
         actor.userId,
       );
       settleNotices = await settleMatchBets(tx, match.id);
+      if (finishing || match.status === "FINISHED") await computeAndStoreMotm(tx, match.id);
     },
     TX_OPTS,
   );
@@ -534,6 +536,7 @@ export async function adminEditGoalRound(
         );
         await bumpVersion(tx, match.id);
         settleNotices = await settleMatchBets(tx, match.id);
+        if (match.status === "FINISHED") await computeAndStoreMotm(tx, match.id);
       },
       TX_OPTS,
     );
@@ -548,6 +551,15 @@ export async function adminEditGoalRound(
   if (!sub) return err("That answer does not belong to this question.");
   const scorerSlot = match.roster.find((r) => r.id === sub.playerId);
   if (!scorerSlot) return err("Could not find the scoring player.");
+
+  // Conduct rule: a player flagged with a breach during this match can't be
+  // awarded a goal here either — pick another submission or record no goal.
+  const breach = await prisma.conductIncident.findFirst({
+    where: { matchId: match.id, playerId: scorerSlot.id },
+    select: { id: true },
+  });
+  if (breach)
+    return err("Foul — that player is under a conduct flag this match, so no goal can be given to their answer.");
 
   // Optional assist: another player on the SAME team as the scorer.
   let assistSlotId: string | null = null;
@@ -588,6 +600,7 @@ export async function adminEditGoalRound(
       );
       await bumpVersion(tx, match.id);
       goalNotices = await settleMatchBets(tx, match.id);
+      if (match.status === "FINISHED") await computeAndStoreMotm(tx, match.id);
     },
     TX_OPTS,
   );
@@ -1043,6 +1056,40 @@ export async function decideRound(
   const scorerSlot = await prisma.matchPlayer.findUnique({ where: { id: sub.playerId } });
   if (!scorerSlot) return err("Could not find the scoring player.");
   const scorerTeam = scorerSlot.team;
+
+  // Conduct rule: a player flagged with a breach during this match can't be
+  // awarded a goal — the referee's pick is recorded as a foul instead.
+  const breach = await prisma.conductIncident.findFirst({
+    where: { matchId: match.id, playerId: scorerSlot.id },
+    select: { id: true, action: true },
+  });
+  if (breach) {
+    await prisma.$transaction(
+      async (tx) => {
+        await tx.round.update({
+          where: { id: locked.id },
+          data: { status: "DECIDED", decision: "NO_GOAL", decidedAt: new Date(), goalSubmissionId: null, assistPlayerId: null },
+        });
+        await tx.match.update({
+          where: { id: match.id },
+          data: { currentRound: { increment: 1 } },
+        });
+        await appendTimeline(
+          tx,
+          match.id,
+          "NO_GOAL",
+          `Foul — ${rosterNameOf(match, sub.playerId)} is under a conduct flag`,
+          `Goal disallowed (${breach.action === "RED_CARD" ? "red card" : breach.action === "YELLOW_CARD" ? "yellow card" : "warning"}) · Answer: ${sub.answer}`,
+          actor.userId,
+        );
+        await bumpVersion(tx, match.id);
+        if (match.currentRound + 1 >= HALFTIME_AFTER_QUESTION) await beginHalftime(tx, match.id, actor.userId);
+      },
+      TX_OPTS,
+    );
+    await publishMatchUpdate(match.code);
+    return err("Foul — that player is under a conduct flag this match, so no goal can be given to their answer.");
+  }
 
   // Fantasy managers credited in the transaction below — notified after commit.
   const fantasyNotifyIds: string[] = [];
@@ -1552,7 +1599,10 @@ export async function endMatch(actor: Actor, input: { code: string }): Promise<A
   if (match.status !== "LIVE") return err("This match is not live.");
   if (match.currentRound < 10) return err("All ten questions must be played before full time.");
 
-  let settleNotices: SettleNotice[] = [];
+  const settled: { notices: SettleNotice[]; motm: { userId: string; name: string; points: number } | null } = {
+    notices: [],
+    motm: null,
+  };
   await prisma.$transaction(
     async (tx) => {
       await tx.match.update({
@@ -1561,11 +1611,23 @@ export async function endMatch(actor: Actor, input: { code: string }): Promise<A
       });
       await appendTimeline(tx, match.id, "FULL_TIME", "Full-time", `${match.homeScore}–${match.awayScore}`, actor.userId);
       await bumpVersion(tx, match.id);
-      settleNotices = await settleMatchBets(tx, match.id);
+      settled.notices = await settleMatchBets(tx, match.id);
+      settled.motm = await computeAndStoreMotm(tx, match.id);
     },
     TX_OPTS,
   );
-  await emitSettleNotices(settleNotices);
+  await emitSettleNotices(settled.notices);
+  if (settled.motm) {
+    const motm = settled.motm;
+    try {
+      await notifyUsers([motm.userId], {
+        icon: "🏅",
+        title: "Player of the Match!",
+        body: `${motm.points} performance points — the standout display of the game.`,
+        link: `/match/${match.code}`,
+      });
+    } catch { /* best effort */ }
+  }
   await publishMatchUpdate(match.code);
   const decided = match.rounds.filter((r) => r.status === "DECIDED").length;
   const scoreline = `${match.homeName} ${match.homeScore}–${match.awayScore} ${match.awayName}`;
@@ -1583,7 +1645,7 @@ export async function endMatch(actor: Actor, input: { code: string }): Promise<A
         ``,
         highlights.length ? highlights.join("\n") : "No highlights were recorded.",
         ``,
-        "This match report was posted automatically at full time. Vote for the Player of the Match on the match page.",
+        "This match report was posted automatically at full time. The Player of the Match is decided automatically from performance.",
       ].join("\n");
       await prisma.newsPost.create({
         data: {
@@ -1601,7 +1663,7 @@ export async function endMatch(actor: Actor, input: { code: string }): Promise<A
     await notifyAllUsers({
       icon: "🏁",
       title: `Full-time: ${scoreline}`,
-      body: `The match report is live — vote for your Player of the Match.`,
+      body: `The match report is live — see who took the automatic Player of the Match.`,
       link: `/match/${match.code}`,
     });
   } catch { /* best effort */ }

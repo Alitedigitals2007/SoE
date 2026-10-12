@@ -20,6 +20,7 @@ const ADMIN_SECTIONS = [
   { href: "/admin/teams", label: "Teams" },
   { href: "/admin/competitions", label: "Competitions" },
   { href: "/admin/users", label: "Accounts" },
+  { href: "/admin/complaints", label: "Complaints" },
   { href: "/admin/news", label: "News" },
   { href: "/admin/imports", label: "Imports" },
   { href: "/admin/data", label: "Data" },

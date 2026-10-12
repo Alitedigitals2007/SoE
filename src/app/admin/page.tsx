@@ -1,13 +1,15 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { Badge, Card, CardHeader } from "@/components/ui";
+import { MotmBackfillButton } from "@/components/admin/MotmBackfill";
 
 export const dynamic = "force-dynamic";
 
 export default async function AdminHome() {
-  const [userCounts, matchCounts, recent] = await Promise.all([
+  const [userCounts, matchCounts, openComplaints, recent] = await Promise.all([
     prisma.user.groupBy({ by: ["role"], _count: { _all: true } }),
     prisma.match.groupBy({ by: ["status"], _count: { _all: true } }),
+    prisma.complaint.count({ where: { status: "OPEN" } }),
     prisma.match.findMany({
       orderBy: { createdAt: "desc" },
       take: 6,
@@ -34,10 +36,11 @@ export default async function AdminHome() {
           </Link>
         </div>
 
-        <div className="mt-6 grid gap-3 sm:grid-cols-3">
+        <div className="mt-6 grid gap-3 sm:grid-cols-4">
           <StatCard label="Referees" value={count("REFEREE")} to="/admin/users" />
           <StatCard label="Players" value={count("PLAYER")} to="/admin/users" />
           <StatCard label="Matches" value={matchCount("DRAFT") + matchCount("LIVE") + matchCount("FINISHED")} to="/admin/matches" />
+          <StatCard label="Open complaints" value={openComplaints} to="/admin/complaints" />
         </div>
 
         <div className="mt-6 grid gap-4 lg:grid-cols-2">
@@ -99,8 +102,13 @@ export default async function AdminHome() {
               <section>
                 <p className="px-1 pb-1 text-[10px] font-black uppercase tracking-widest text-subtle">Site</p>
                 <div className="flex flex-col gap-2">
+                  <ActionLink href="/admin/complaints" label="Player complaints" hint="Review, resolve or dismiss" />
                   <ActionLink href="/admin/news" label="Newsroom" hint="Write and publish public posts" />
                   <ActionLink href="/admin/data" label="Data browser" hint="Users, teams, matches, goals — read-only" />
+                </div>
+                <div className="mt-2 px-1">
+                  <MotmBackfillButton />
+                  <p className="text-[10px] text-subtle">Computes the automatic Player of the Match for finished games that predate it.</p>
                 </div>
               </section>
             </div>

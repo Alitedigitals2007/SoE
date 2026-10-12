@@ -159,6 +159,8 @@ export interface AnswerView {
   pasted?: boolean;
   /** referee/admin only: server flagged this as potentially AI-generated */
   aiDetected?: boolean;
+  /** referee only — the answering player has a conduct flag (breach rule) */
+  breached?: boolean;
 }
 
 /** One anti-copy breach, as shown on the referee's integrity board. */
@@ -246,6 +248,8 @@ export interface MatchSummary {
   homeScore: number;
   awayScore: number;
   scorers: { name: string; team: TeamSide; goals: number }[];
+  /** Players credited with assists, best first. */
+  assisters: { name: string; team: TeamSide; assists: number }[];
   noGoalQuestions: number;
   questionsPlayed: number;
   cards: { name: string; team: TeamSide; action: IncidentAction }[];
@@ -298,11 +302,20 @@ export interface MatchSnapshot {
   /** visible to referee/admin; empty for others */
   pendingRequests: SubRequestView[];
   summary: MatchSummary | null;
-  potm: {
-    votedFor: string | null;
-    closedAt: string | null;
-    results: { playerId: string; playerName: string; votes: number }[];
-  };
+  /** User ids with a conduct incident in this match — the breach rule. */
+  breachedUserIds: string[];
+  /** Automatic Player of the Match, computed from performance at full time. */
+  motm: {
+    userId: string;
+    name: string;
+    imageUrl: string | null;
+    points: number;
+    goals: number;
+    assists: number;
+    yellowCards: number;
+    redCards: number;
+    decidingGoal: boolean;
+  } | null;
   competitionType: "LEAGUE" | "CUP" | null;
   cupRound: number | null;
   penaltyShootout: PenaltyShootoutView | null;

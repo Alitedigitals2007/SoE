@@ -27,6 +27,9 @@ model User {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
+  // Profile photo (data URL, resized client-side) — null = initials fallback.
+  imageUrl String?
+
   // Virtual-points wallet. null = wallet not opened yet (welcome bonus is
   // credited with a WELCOME ledger entry on first use).
   virtualPoints Int?
@@ -45,6 +48,46 @@ model User {
   notifications    Notification[]
   walletTxs        WalletTransaction[]
   bets             Bet[]
+  complaints       Complaint[]
+  resolvedComplaints Complaint[] @relation("ComplaintResolver")
+  motmMatches      Match[]               @relation("MatchMotm")
+}
+
+/**
+ * -------------------------------- Complaints -------------------------------
+ */
+
+enum ComplaintType {
+  MATCH_DECISION // referee call the player disagrees with
+  PLAYER_CONDUCT // behaviour of another player
+  TECHNICAL // app bug / something not working
+  OTHER // anything else
+}
+
+enum ComplaintStatus {
+  OPEN // filed, waiting on an admin
+  RESOLVED // handled — see the admin note
+  DISMISSED // reviewed and rejected — see the admin note
+}
+
+model Complaint {
+  id        String          @id @default(cuid())
+  userId    String
+  user      User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      ComplaintType
+  matchId   String? // the fixture it is about, when it is about one
+  match     Match?          @relation(fields: [matchId], references: [id], onDelete: SetNull)
+  subject   String          @db.VarChar(120)
+  message   String          @db.VarChar(2000)
+  status    ComplaintStatus @default(OPEN)
+  adminNote String?         @db.VarChar(1000)
+  resolvedBy String?
+  resolvedByUser User?      @relation("ComplaintResolver", fields: [resolvedBy], references: [id], onDelete: SetNull)
+  resolvedAt DateTime?
+  createdAt DateTime        @default(now())
+
+  @@index([status, createdAt])
+  @@index([userId, createdAt])
 }
 
 /**
@@ -158,6 +201,12 @@ model Match {
   homeScore Int @default(0)
   awayScore Int @default(0)
 
+  // Automatic Player of the Match, computed from performance at full time.
+  motmUserId     String?
+  motmUser       User?     @relation("MatchMotm", fields: [motmUserId], references: [id], onDelete: SetNull)
+  motmScore      Int? // performance points the winner earned
+  motmComputedAt DateTime?
+
   roster          MatchPlayer[]
   questions       Question[]
   rounds          Round[]
@@ -170,10 +219,12 @@ model Match {
   chatMessages    ChatMessage[]
   penaltyShootout PenaltyShootout?
   bets            Bet[]
+  complaints      Complaint[]
   createdAt       DateTime              @default(now())
   updatedAt       DateTime              @updatedAt
 
   @@index([refereeId])
+  @@index([motmUserId])
 }
 
 /**

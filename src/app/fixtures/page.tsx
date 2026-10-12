@@ -27,6 +27,7 @@ export default async function FixturesPage({
       orderBy: { startedAt: "asc" },
       skip: (livePage - 1) * PAGE_SIZE,
       take: PAGE_SIZE,
+      include: { competition: { select: { name: true, type: true } } },
     }),
     prisma.match.count({ where: { status: "LIVE" } }),
     prisma.match.findMany({
@@ -34,6 +35,7 @@ export default async function FixturesPage({
       orderBy: { scheduledAt: "asc" },
       skip: (upcomingPage - 1) * PAGE_SIZE,
       take: PAGE_SIZE,
+      include: { competition: { select: { name: true, type: true } } },
     }),
     prisma.match.count({ where: { status: "DRAFT", scheduledAt: { not: null } } }),
     prisma.match.findMany({
@@ -41,6 +43,7 @@ export default async function FixturesPage({
       orderBy: { finishedAt: "desc" },
       skip: (resultPage - 1) * PAGE_SIZE,
       take: PAGE_SIZE,
+      include: { competition: { select: { name: true, type: true } } },
     }),
     prisma.match.count({ where: { status: "FINISHED" } }),
   ]);
@@ -95,7 +98,18 @@ function FixturesGroup({
   defaultOpen,
 }: {
   title: string;
-  matches: { id: string; code: string; homeName: string; awayName: string; homeScore: number; awayScore: number; status: string; scheduledAt: Date | null }[];
+  matches: {
+    id: string;
+    code: string;
+    homeName: string;
+    awayName: string;
+    homeScore: number;
+    awayScore: number;
+    status: string;
+    scheduledAt: Date | null;
+    cupRound: number | null;
+    competition: { name: string; type: string } | null;
+  }[];
   tone: "success" | "warning" | "neutral";
   live?: boolean;
   page: number;
@@ -132,6 +146,17 @@ function FixturesGroup({
             href={`/match/${m.code}`}
             className="block rounded-xl border border-line bg-white px-4 py-3 shadow-sm transition-all hover:-translate-y-0.5 hover:border-brand/40 hover:shadow-md"
           >
+            {m.competition ? (
+              <p className="mb-1.5 flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider text-gold-strong">
+                <span aria-hidden>{m.competition.type === "CUP" ? "🏆" : "📊"}</span>
+                {m.competition.name}
+                {m.competition.type === "CUP" && m.cupRound ? (
+                  <span className="rounded bg-gold/15 px-1.5 py-0.5 text-[9px] text-gold-strong">Round {m.cupRound}</span>
+                ) : null}
+              </p>
+            ) : (
+              <p className="mb-1.5 text-[10px] font-black uppercase tracking-wider text-subtle">Friendly</p>
+            )}
             <div className="flex items-center justify-between gap-3">
               <p className="flex min-w-0 flex-1 items-center justify-between gap-2 text-sm font-semibold text-fg">
                 <span className="min-w-0 flex-1 truncate text-right">{m.homeName}</span>

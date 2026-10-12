@@ -1,5 +1,6 @@
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { scoreMotm } from "@/lib/match/motm";
 import type {
   AnswerView,
   IncidentAction,
@@ -39,6 +40,9 @@ export const matchInclude = {
           },
         },
       },
+      assistPlayer: {
+        include: { user: { select: { id: true, name: true } } },
+      },
     },
   },
   timeline: { orderBy: { seq: "asc" as const } },
@@ -71,11 +75,7 @@ export const matchInclude = {
       round: { select: { number: true } },
     },
   },
-  potmVotes: {
-    include: {
-      player: { select: { id: true, name: true } },
-    },
-  },
+  motmUser: { select: { id: true, name: true, imageUrl: true } },
 } satisfies Prisma.MatchInclude;
 
 export type MatchFull = Prisma.MatchGetPayload<{ include: typeof matchInclude }>;
@@ -98,6 +98,7 @@ function roundToView(
   round: MatchFull["rounds"][number],
   isReferee: boolean,
   roster: RosterSlotView[],
+  breachedUserIds: string[],
 ): RoundView {
   const answers: AnswerView[] = round.submissions.map((s) => {
     const slot = roster.find((r) => r.userId === s.player.userId);
@@ -108,12 +109,13 @@ function roundToView(
       playerName: isReferee ? s.player.user.name : undefined,
       team: isReferee && slot ? slot.team : undefined,
       at: s.submittedAt.toISOString(),
-      winner: round.goalSubmissionId === s.id,
+        winner: round.goalSubmissionId === s.id,
       // The paste badge is a referee's-eye signal only: spectators see the
       // answer text but are told nothing about how it got typed.
       pasted: isReferee ? s.pasted : undefined,
       // AI detection is also referee-only: players don't know they were flagged.
       aiDetected: isReferee ? s.aiDetected : undefined,
+      breached: isReferee && breachedUserIds.includes(s.player.userId),
     };
   });
 
@@ -191,8 +193,11 @@ export function buildSnapshot(
     elapsedSec: elapsedSecondsSince(match.startedAt, e.createdAt),
   }));
 
+  // Breach rule: any player with a conduct incident in this match.
+  const breachedUserIds = [...new Set(match.incidents.map((i) => i.player.userId))];
+
   const round: RoundView | null = activeRound
-    ? roundToView(activeRound, isReferee, roster)
+    ? roundToView(activeRound, isReferee, roster, breachedUserIds)
     : null;
 
   const liveOpenRound =
@@ -304,7 +309,8 @@ export function buildSnapshot(
             };
           })
         : [],
-    potm: buildPotm(match, viewer.userId),
+    breachedUserIds,
+    motm: buildMotm(match),
     competitionType: (match.competition?.type === "LEAGUE" || match.competition?.type === "CUP") ? match.competition.type : null,
     cupRound: match.cupRound ?? null,
     penaltyShootout,
@@ -368,6 +374,22 @@ function buildSummary(
     else scorerMap.set(key, { ...g });
   }
 
+  // Assists: every decided goal round may credit an assist player.
+  const assistMap = new Map<string, { name: string; team: TeamSide; assists: number }>();
+  for (const r of match.rounds) {
+    if (r.status !== "DECIDED" || r.decision !== "GOAL" || !r.assistPlayer) continue;
+    const key = r.assistPlayer.user.id;
+    const existing = assistMap.get(key);
+    if (existing) existing.assists += 1;
+    else
+      assistMap.set(key, {
+        name: r.assistPlayer.user.name,
+        team: r.assistPlayer.team as TeamSide,
+        assists: 1,
+      });
+  }
+  const assisters = [...assistMap.values()].sort((a, b) => b.assists - a.assists || a.name.localeCompare(b.name));
+
   const decidedRounds = match.rounds.filter((r) => r.status === "DECIDED");
   const noGoalCount = decidedRounds.filter((r) => r.decision === "NO_GOAL").length;
   const questionsPlayed = decidedRounds.length;
@@ -415,6 +437,7 @@ function buildSummary(
     homeScore: match.homeScore,
     awayScore: match.awayScore,
     scorers,
+    assisters,
     noGoalQuestions: noGoalCount,
     questionsPlayed,
     cards,
@@ -429,29 +452,20 @@ function buildSummary(
   };
 }
 
-function buildPotm(
-  match: MatchFull,
-  viewerUserId: string | null,
-): MatchSnapshot["potm"] {
-  const votes = match.potmVotes ?? [];
-  const votedFor = viewerUserId
-    ? votes.find((v) => v.userId === viewerUserId)?.playerId ?? null
-    : null;
-
-  const countMap = new Map<string, { playerId: string; playerName: string; votes: number }>();
-  for (const v of votes) {
-    const existing = countMap.get(v.playerId);
-    if (existing) {
-      existing.votes++;
-    } else {
-      countMap.set(v.playerId, {
-        playerId: v.playerId,
-        playerName: v.player.name,
-        votes: 1,
-      });
-    }
-  }
-
-  const results = [...countMap.values()].sort((a, b) => b.votes - a.votes);
-  return { votedFor, closedAt: match.potmClosedAt ? match.potmClosedAt.toISOString() : null, results };
+function buildMotm(match: MatchFull): MatchSnapshot["motm"] {
+  if (!match.motmUser || match.motmScore == null) return null;
+  const candidate = scoreMotm({
+    homeScore: match.homeScore,
+    awayScore: match.awayScore,
+    roster: match.roster.map((r) => ({ userId: r.userId, team: r.team, user: r.user })),
+    rounds: match.rounds.map((r) => ({
+      decision: r.decision,
+      goalSubmission: r.goalSubmission ? { player: { userId: r.goalSubmission.player.userId } } : null,
+      assistPlayer: r.assistPlayer ? { userId: r.assistPlayer.userId } : null,
+    })),
+    incidents: match.incidents.map((i) => ({ action: i.action, player: { userId: i.player.userId } })),
+  }).find((c) => c.userId === match.motmUser!.id);
+  if (!candidate) return null;
+  const { userId, name, points, ...breakdown } = candidate;
+  return { userId, name, imageUrl: match.motmUser.imageUrl, points, ...breakdown };
 }
