@@ -21,7 +21,7 @@ import {
   setTeamImageAction,
   transferTeamMemberAction,
 } from "@/app/actions/platform";
-import { Button, Card, CardHeader, cn, Field, Input, Select } from "@/components/ui";
+import { Button, Card, CardHeader, cn, Field, Input, Select, Badge } from "@/components/ui";
 
 type Notice = { kind: "ok" | "err"; text: string } | null;
 
@@ -625,54 +625,71 @@ export function FixtureRefereeRow({
 }) {
   const { flash } = useFlash();
   const [value, setValue] = React.useState(match.refereeId ?? "");
+  const statusLabel = match.status === "LIVE" ? "Live" : match.status === "FINISHED" ? "Finished" : match.status === "DRAFT" ? "Setup" : match.status;
+  const statusTone = match.status === "LIVE" ? "success" : match.status === "FINISHED" ? "neutral" : "warning";
+
   return (
-    <div className="flex flex-wrap items-center gap-3 rounded-xl border border-line bg-white px-4 py-3">
-      <div className="min-w-0 flex-1">
-        <p className="truncate font-semibold text-fg">
-          {match.homeName} <span className="text-subtle">{match.status === "FINISHED" ? `${match.homeScore}–${match.awayScore}` : "v"}</span> {match.awayName}
-        </p>
-        <p className="text-xs text-subtle">
-          Code {match.code}
-          {match.cupThirdPlace
-            ? " · Third-place match"
-            : match.cupRound
-              ? ` · Cup round ${match.cupRound}${match.cupLeg ? ` · leg ${match.cupLeg} of 2` : ""}`
-              : ""} · <span className={cn("font-semibold", match.status === "LIVE" ? "text-success" : match.status === "DRAFT" ? "text-warning" : "text-muted")}>{match.status}</span>
-          {match.scheduledAt ? (
-            <span className="ml-1">
-              · ⏱ {new Date(new Date(match.scheduledAt).getTime() + 3600_000).toISOString().slice(11, 16)} WAT
+    <div className="group rounded-xl border-2 border-fg/15 bg-bg-elevated p-4 shadow-[3px_3px_0_rgba(11,32,48,.06)] transition-all hover:-translate-y-0.5 hover:border-brand/40 hover:shadow-md">
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-2">
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-bold text-fg truncate">
+            {match.homeName} <span className="text-muted">v</span> {match.awayName}
+          </p>
+          <p className="text-xs text-subtle">
+            Code {match.code}
+            {match.cupThirdPlace
+              ? " · Third-place match"
+              : match.cupRound
+              ? ` · Round ${match.cupRound}${match.cupLeg ? ` · leg ${match.cupLeg} of 2` : ""}`
+              : ""} · <span className={cn("font-semibold", match.status === "LIVE" ? "text-success" : match.status === "DRAFT" ? "text-warning" : "text-muted")}>{statusLabel}</span>
+            {match.scheduledAt ? (
+              <span className="ml-1">
+                · ⏱ {new Date(new Date(match.scheduledAt).getTime() + 3600_000).toISOString().slice(11, 16)} WAT
+              </span>
+            ) : null}
+          </p>
+        </div>
+        <div className="flex items-center gap-2 text-right">
+          {match.status === "FINISHED" ? (
+            <span className="text-xl font-black tabular-nums text-fg">
+              {match.homeScore} <span className="text-subtle">–</span> {match.awayScore}
             </span>
-          ) : null}
-        </p>
+          ) : (
+            <span className="text-xl font-black tabular-nums text-muted">vs</span>
+          )}
+        </div>
       </div>
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-wrap items-center gap-3 pt-2 border-t border-line/60">
         {match.status !== "FINISHED" ? (
-          <Select
-            aria-label="Referee"
-            title="Referee"
-            className="w-40 py-1 text-xs"
-            value={value}
-            onChange={(e) => setValue(e.target.value)}
-            onBlur={() => {
-              if (value !== (match.refereeId ?? "")) void assignRefereeAction({ matchId: match.id, refereeId: value || null }).then((r) => flash(r, "Referee updated."));
-            }}
-          >
-            <option value="">No referee</option>
-            {referees.map((r) => (
-              <option key={r.id} value={r.id}>
-                {r.name}
-              </option>
-            ))}
-          </Select>
-        ) : null}
-        {match.status === "DRAFT" ? (
-          <a href={`/admin/matches/${match.code}/setup`} className="rounded-lg bg-surface px-3 py-1.5 text-xs font-semibold text-fg hover:bg-line">
-            Setup →
-          </a>
-        ) : null}
-        <a href={`/match/${match.code}`} className="rounded-lg bg-surface px-3 py-1.5 text-xs font-semibold text-fg hover:bg-line">
-          Open
-        </a>
+          <>
+            <Select
+              aria-label="Referee"
+              className="w-48 py-1 text-xs"
+              value={value}
+              onChange={(e) => setValue(e.target.value)}
+              onBlur={() => {
+                if (value !== (match.refereeId ?? "")) void assignRefereeAction({ matchId: match.id, refereeId: value || null }).then((r) => flash(r, "Referee updated."));
+              }}
+            >
+              <option value="">No referee</option>
+              {referees.map((r) => (
+                <option key={r.id} value={r.id}>
+                  {r.name}
+                </option>
+              ))}
+            </Select>
+            {match.status === "DRAFT" ? (
+              <a href={`/admin/matches/${match.code}/setup`} className="rounded-lg bg-surface px-3 py-1.5 text-xs font-semibold text-fg hover:bg-line">
+                Setup →
+              </a>
+            ) : null}
+            <a href={`/match/${match.code}`} className="rounded-lg bg-surface px-3 py-1.5 text-xs font-semibold text-fg hover:bg-line">
+              Open
+            </a>
+          </>
+        ) : (
+          <Badge tone={statusTone as never}>{statusLabel}</Badge>
+        )}
       </div>
     </div>
   );

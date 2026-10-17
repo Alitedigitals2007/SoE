@@ -22,6 +22,7 @@ const ADMIN_SECTIONS = [
   { href: "/admin/users", label: "Accounts" },
   { href: "/admin/complaints", label: "Complaints" },
   { href: "/admin/news", label: "News" },
+  { href: "/admin/transfers", label: "Transfers" },
   { href: "/admin/imports", label: "Imports" },
   { href: "/admin/data", label: "Data" },
 ] as const;

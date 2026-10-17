@@ -105,6 +105,7 @@ export default async function AdminHome() {
                   <ActionLink href="/admin/complaints" label="Player complaints" hint="Review, resolve or dismiss" />
                   <ActionLink href="/admin/news" label="Newsroom" hint="Write and publish public posts" />
                   <ActionLink href="/admin/data" label="Data browser" hint="Users, teams, matches, goals — read-only" />
+                  <ActionLink href="/admin/transfers" label="Transfer requests" hint="Review captain transfer requests" />
                 </div>
                 <div className="mt-2 px-1">
                   <MotmBackfillButton />

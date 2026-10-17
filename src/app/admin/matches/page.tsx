@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { Suspense } from "react";
 import { prisma } from "@/lib/prisma";
-import { Badge, Card, CardHeader } from "@/components/ui";
+import { Badge, Card, CardHeader, Input } from "@/components/ui";
 import { StatusBadge } from "../page";
 import { UrlPagination } from "@/components/UrlPagination";
 
@@ -12,13 +12,25 @@ const PAGE_SIZE = 12;
 export default async function AdminMatchesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ page?: string }>;
+  searchParams: Promise<{ page?: string; q?: string }>;
 }) {
   const sp = await searchParams;
   const page = Math.max(1, Number(sp.page) || 1);
+  const q = (sp.q ?? "").trim();
+
+  const where = q
+    ? {
+        OR: [
+          { code: { contains: q, mode: "insensitive" as const } },
+          { homeName: { contains: q, mode: "insensitive" as const } },
+          { awayName: { contains: q, mode: "insensitive" as const } },
+        ],
+      }
+    : {};
 
   const [matches, total] = await Promise.all([
     prisma.match.findMany({
+      where,
       orderBy: { createdAt: "desc" },
       skip: (page - 1) * PAGE_SIZE,
       take: PAGE_SIZE,
@@ -27,7 +39,7 @@ export default async function AdminMatchesPage({
         _count: { select: { roster: true } },
       },
     }),
-    prisma.match.count(),
+    prisma.match.count({ where }),
   ]);
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
@@ -45,10 +57,27 @@ export default async function AdminMatchesPage({
           </Link>
         </div>
 
+        <form action="/admin/matches" method="get" className="mt-4 flex gap-2 max-w-2xl">
+          <Input
+            name="q"
+            value={q}
+            placeholder="Search by code, home or away team…"
+            className="max-w-md"
+          />
+          <button className="rounded-xl px-4 py-2.5 bg-fg text-white font-semibold hover:bg-brand transition-colors">
+            Search
+          </button>
+          {q && (
+            <Link href="/admin/matches" className="rounded-xl px-4 py-2.5 bg-surface text-fg font-semibold hover:bg-line transition-colors">
+              Clear
+            </Link>
+          )}
+        </form>
+
         <Card className="mt-5">
           <CardHeader title={`All matches (${total})`} />
           {matches.length === 0 ? (
-            <p className="p-6 text-sm text-muted">No matches yet.</p>
+            <p className="p-6 text-sm text-muted">{q ? "No matches match your search." : "No matches yet."}</p>
           ) : (
             <ul className="divide-y divide-line/70">
               {matches.map((m) => (

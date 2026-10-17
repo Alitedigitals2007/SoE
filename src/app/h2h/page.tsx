@@ -1,6 +1,5 @@
 "use client";
 
-import { notFound } from "next/navigation";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { prisma } from "@/lib/prisma";
@@ -86,7 +85,8 @@ export default function H2HPage() {
         const resolvedA = teams.find((t) => t.id === aId) ?? null;
         const resolvedB = teams.find((t) => t.id === bId) ?? null;
         if (!resolvedA || !resolvedB) {
-          notFound();
+          if (!cancelled) setMatchesError("One of the selected teams no longer exists.");
+          if (!cancelled) setMatchesLoaded(true);
           return;
         }
 

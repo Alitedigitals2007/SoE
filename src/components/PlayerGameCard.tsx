@@ -36,6 +36,14 @@ function marketValueOf(stats: PlayerStats): number {
   return ratingOf(stats) * 10;
 }
 
+function ringFor(rarity: Rarity): string {
+  if (rarity === "common") return "ring-2 ring-white/35";
+  if (rarity === "rare") return "ring-4 ring-info/50";
+  if (rarity === "epic") return "ring-4 ring-warning/50";
+  if (rarity === "legendary") return "ring-4 ring-gold/50";
+  return "ring-4 ring-danger/50";
+}
+
 export function PlayerGameCard({
   name,
   imageUrl,
@@ -84,8 +92,8 @@ export function PlayerGameCard({
           </div>
 
           <div className="mt-2 flex items-center justify-center">
-            <div className="rounded-full ring-4 ring-white/25">
-              <Avatar name={name} src={imageUrl} size={96} className="!ring-0" />
+            <div className={cn("rounded-full p-1", ringFor(rarity))}>
+              <Avatar name={name} src={imageUrl} size={96} className="!ring-0 rounded-full" />
             </div>
           </div>
 
@@ -125,49 +133,50 @@ export function PlayerGameCard({
         {/* ---------------------------- BACK ----------------------------- */}
         <div
           className={cn(
-            "player-card-face player-card-back absolute inset-0 rounded-3xl p-5 shadow-[0_18px_40px_rgba(11,32,48,.35)] [transform:rotateY(180deg)]",
+            "player-card-face player-card-back absolute inset-0 rounded-3xl p-6 shadow-[0_20px_50px_rgba(11,32,48,.4)] [transform:rotateY(180deg)]",
             style.border,
             rarity === "mythic" ? "border-4" : "border-2",
+            rarity === "common" ? "bg-white/5" : rarity === "rare" ? "bg-white/10" : "bg-white/15",
           )}
         >
-          <div className="flex items-start justify-between mb-2">
-            <p className="text-[10px] font-black uppercase tracking-widest text-gold-strong">Full performance</p>
-            <Badge tone={style.tone}>{style.label}</Badge>
+          <div className="flex items-start justify-between mb-3">
+            <span className="text-[10px] font-black uppercase tracking-widest text-muted opacity-80">Full performance</span>
+            <Badge tone={style.tone} className="shadow-sm">{style.label}</Badge>
           </div>
-          <p className="truncate text-lg font-black text-fg mb-3">{name}</p>
+          <p className="truncate text-xl font-black text-fg mb-4">{name}</p>
 
-          <dl className="mt-3 space-y-1.5 text-sm">
+          <dl className="space-y-2">
             {[
-              { label: "Matches played", value: matches },
-              { label: "Goals", value: `${stats.goals}${stats.goalShare !== null ? ` · ${stats.goalShare}% of side` : ""}` },
-              { label: "Assists", value: `${stats.assists}${stats.assistShare !== null ? ` · ${stats.assistShare}% of side` : ""}` },
-              { label: "Side goals", value: stats.teamGoals },
-              { label: "Side assists", value: stats.teamAssists },
-              { label: "MOTM awards", value: stats.motm },
-              { label: "Yellow cards", value: stats.yellowCards },
-              { label: "Red cards", value: stats.redCards },
-              { label: "Warnings", value: stats.warnings },
-              { label: "Rating", value: rating },
+              { label: "Matches played", value: String(matches) },
+              { label: "Goals", value: `${stats.goals}${stats.goalShare !== null ? ` · ${stats.goalShare}%` : ""}` },
+              { label: "Assists", value: `${stats.assists}${stats.assistShare !== null ? ` · ${stats.assistShare}%` : ""}` },
+              { label: "Side goals", value: String(stats.teamGoals) },
+              { label: "Side assists", value: String(stats.teamAssists) },
+              { label: "MOTM awards", value: String(stats.motm) },
+              { label: "Yellow cards", value: String(stats.yellowCards) },
+              { label: "Red cards", value: String(stats.redCards) },
+              { label: "Warnings", value: String(stats.warnings) },
+              { label: "Rating", value: String(rating) },
               { label: "Rarity", value: style.label },
               { label: "Value", value: `${value} pts` },
             ].map((row) => (
-            <div key={row.label} className="flex justify-between border-b border-white/20 py-1.5">
-              <dt className="text-muted">{row.label}</dt>
-              <dd className="font-bold tabular-nums text-white">{row.value}</dd>
-            </div>
+              <div key={row.label} className="flex justify-between border-b border-white/25 py-1.5 last:border-0">
+                <dt className="text-muted text-sm">{row.label}</dt>
+                <dd className="font-black tabular-nums text-white">{row.value}</dd>
+              </div>
             ))}
           </dl>
 
-          <div className="mt-3 flex flex-wrap gap-1.5">
-            <Badge tone={stats.goalShare !== null ? "gold" : "neutral"} className="!text-[10px]">
+          <div className="mt-5 flex flex-wrap gap-1.5">
+            <Badge tone={stats.goalShare !== null ? "gold" : "neutral"} className="!text-[10px] shadow-sm">
               Goal contribution {stats.goalShare !== null ? `${stats.goalShare}%` : "—"}
             </Badge>
-            <Badge tone={stats.assistShare !== null ? "info" : "neutral"} className="!text-[10px]">
+            <Badge tone={stats.assistShare !== null ? "info" : "neutral"} className="!text-[10px] shadow-sm">
               Assist contribution {stats.assistShare !== null ? `${stats.assistShare}%` : "—"}
             </Badge>
           </div>
 
-          <p className="mt-3 text-center text-[10px] text-subtle">Tap to flip back</p>
+          <p className="mt-5 text-center text-[10px] text-muted opacity-70">Tap to flip back</p>
         </div>
       </button>
     </div>
