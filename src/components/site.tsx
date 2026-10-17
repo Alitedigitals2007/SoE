@@ -1,12 +1,20 @@
 import * as React from "react";
 import Link from "next/link";
 import { auth } from "@/auth";
-import { signOutAction } from "@/app/actions/auth";
 import { homePath } from "@/lib/authz";
 import { unreadCount } from "@/lib/notify";
-import { NAV, PRIMARY_NAV, SECONDARY_NAV } from "@/lib/nav";
+import { NAV } from "@/lib/nav";
 import { cn } from "@/components/ui";
 import { MobileNav } from "@/components/nav";
+import { DesktopNav } from "@/components/DesktopNav";
+import { UserMenu } from "@/components/UserMenu";
+
+const ROLE_LABEL = {
+  ADMIN: "Admin",
+  REFEREE: "Referee",
+  PLAYER: "Player",
+  USER: "Fan",
+} as const;
 
 export function SiteLogo({ href = "/", tone = "default" }: { href?: string; tone?: "default" | "inverse" }) {
   return (
@@ -38,33 +46,7 @@ export async function SiteHeader() {
       <div className="mx-auto flex h-[4.75rem] max-w-7xl items-center justify-between gap-4 px-4">
         <SiteLogo />
 
-        <nav className="hidden items-center gap-1 lg:flex" aria-label="Primary">
-          {PRIMARY_NAV.map((n) => (
-            <Link
-              key={n.href}
-              href={n.href}
-              className="rounded-lg px-2.5 py-2 text-[.72rem] font-black uppercase tracking-wider text-muted transition-all hover:-translate-y-0.5 hover:bg-fg hover:text-white"
-            >
-              {n.label}
-            </Link>
-          ))}
-          <details className="relative group" >
-            <summary className="rounded-lg px-2.5 py-2 text-[.72rem] font-black uppercase tracking-wider text-muted transition-all hover:-translate-y-0.5 hover:bg-fg hover:text-white list-none cursor-pointer">
-              More
-            </summary>
-            <div className="absolute left-0 mt-1 w-48 rounded-xl border-2 border-fg bg-bg-elevated shadow-lg py-2 z-50 animate-pop">
-              {SECONDARY_NAV.map((n) => (
-                <Link
-                  key={n.href}
-                  href={n.href}
-                  className="block rounded-lg px-3 py-1.5 text-xs font-black uppercase tracking-wider text-muted transition-colors hover:bg-fg hover:text-white"
-                >
-                  {n.label}
-                </Link>
-              ))}
-            </div>
-          </details>
-        </nav>
+        <DesktopNav />
 
         <div className="flex items-center gap-2">
           {user ? (
@@ -81,26 +63,11 @@ export async function SiteHeader() {
                   </span>
                 ) : null}
               </Link>
-              <Link
-                href={roleHome}
-                className="inline-flex h-10 items-center rounded-lg border-2 border-fg bg-bg-elevated px-3 text-xs font-black uppercase tracking-wider text-fg shadow-[2px_2px_0_rgba(11,32,48,.12)] transition-all hover:-translate-y-0.5 hover:bg-surface"
-              >
-                Dashboard
-              </Link>
-              <Link
-                href="/account"
-                className="inline-flex h-10 items-center rounded-lg px-3 text-xs font-black uppercase tracking-wider text-muted transition-colors hover:bg-surface hover:text-fg"
-              >
-                Account
-              </Link>
-              <form action={signOutAction}>
-                <button
-                  type="submit"
-                  className="inline-flex h-10 items-center rounded-lg px-3 text-xs font-black uppercase tracking-wider text-muted transition-colors hover:bg-surface hover:text-fg"
-                >
-                  Sign out
-                </button>
-              </form>
+              <UserMenu
+                name={user.name ?? "Account"}
+                roleHome={roleHome}
+                roleLabel={ROLE_LABEL[user.role]}
+              />
             </>
           ) : (
             <>

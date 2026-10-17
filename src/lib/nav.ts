@@ -19,5 +19,8 @@ export const SECONDARY_NAV: NavItem[] = [
 
 export const NAV = [...PRIMARY_NAV, ...SECONDARY_NAV];
 
+/** Kept inline on the mobile strip — four links plus a "More" button. */
+export const MOBILE_PRIMARY = ["/fixtures", "/live", "/competitions", "/players"] as const;
+
 /** Hidden behind the mobile "More" menu so the strip never scrolls. */
-export const MOBILE_MORE = ["/competitions", "/teams", "/players", "/compare"] as const;
+export const MOBILE_MORE = ["/teams", "/news", "/compare", "/h2h", "/transfer", "/fantasy", "/bet"] as const;
