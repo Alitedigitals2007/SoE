@@ -33,6 +33,87 @@ function teamRating(matches: H2HMatch[], teamId: string): number {
   return rating;
 }
 
+type SideStats = {
+  wins: number;
+  draws: number;
+  losses: number;
+  goalsFor: number;
+  goalsAgainst: number;
+  cleanSheets: number;
+  biggestWin: string | null;
+  form: Array<"W" | "D" | "L">;
+};
+
+function sideStats(matches: H2HMatch[], teamId: string): SideStats {
+  let wins = 0;
+  let draws = 0;
+  let losses = 0;
+  let goalsFor = 0;
+  let goalsAgainst = 0;
+  let cleanSheets = 0;
+  let bestMargin = 0;
+  let biggestWin: string | null = null;
+  const form: Array<"W" | "D" | "L"> = [];
+  for (const m of matches) {
+    const isHome = m.homeTeamId === teamId;
+    const gf = isHome ? m.homeScore : m.awayScore;
+    const ga = isHome ? m.awayScore : m.homeScore;
+    goalsFor += gf;
+    goalsAgainst += ga;
+    let result: "W" | "D" | "L";
+    if (gf > ga) {
+      wins += 1;
+      result = "W";
+    } else if (gf === ga) {
+      draws += 1;
+      result = "D";
+    } else {
+      losses += 1;
+      result = "L";
+    }
+    if (form.length < 5) form.push(result);
+    if (ga === 0) cleanSheets += 1;
+    if (gf > ga && gf - ga > bestMargin) {
+      bestMargin = gf - ga;
+      biggestWin = `${gf}–${ga}`;
+    }
+  }
+  return { wins, draws, losses, goalsFor, goalsAgainst, cleanSheets, biggestWin, form };
+}
+
+type CompareRow = {
+  label: string;
+  a: number | string;
+  b: number | string;
+  lowerBetter?: boolean;
+  signed?: boolean;
+};
+
+function winnerOf(row: CompareRow): "a" | "b" | null {
+  if (typeof row.a !== "number" || typeof row.b !== "number") return null;
+  if (row.a === row.b || row.lowerBetter === undefined) return null;
+  const aBetter = row.lowerBetter ? row.a < row.b : row.a > row.b;
+  return aBetter ? "a" : "b";
+}
+
+function formatCell(row: CompareRow, v: number | string): string {
+  if (row.signed && typeof v === "number" && v > 0) return `+${v}`;
+  return String(v);
+}
+
+function FormChip({ r }: { r: "W" | "D" | "L" }) {
+  return (
+    <span
+      className={cn(
+        "grid size-5 place-items-center rounded text-[10px] font-black text-white",
+        r === "W" ? "bg-success" : r === "D" ? "bg-warning" : "bg-danger",
+      )}
+    >
+      {r}
+    </span>
+  );
+}
+
 export function H2HClient({
   teams,
   teamAId,
@@ -77,28 +158,51 @@ export function H2HClient({
   const tb = teams.find((t) => t.id === bId) ?? null;
 
   let rec: { aWins: number; bWins: number; draws: number; aGoals: number; bGoals: number } | null = null;
+  let aStats: SideStats | null = null;
+  let bStats: SideStats | null = null;
   let ra = 0;
   let rb = 0;
   if (ta && tb && ta.id !== tb.id) {
-    let aWins = 0;
-    let bWins = 0;
-    let draws = 0;
-    let aGoals = 0;
-    let bGoals = 0;
-    for (const m of matches) {
-      const aSide = m.homeTeamId === ta.id ? "HOME" : "AWAY";
-      const aGf = aSide === "HOME" ? m.homeScore : m.awayScore;
-      const aGa = aSide === "HOME" ? m.awayScore : m.homeScore;
-      aGoals += aGf;
-      bGoals += aGa;
-      if (aGf > aGa) aWins += 1;
-      else if (aGf === aGa) draws += 1;
-      else bWins += 1;
-    }
-    rec = { aWins, bWins, draws, aGoals, bGoals };
+    aStats = sideStats(matches, ta.id);
+    bStats = sideStats(matches, tb.id);
+    rec = {
+      aWins: aStats.wins,
+      bWins: bStats.wins,
+      draws: aStats.draws,
+      aGoals: aStats.goalsFor,
+      bGoals: bStats.goalsFor,
+    };
     ra = teamRating(matches, ta.id);
     rb = teamRating(matches, tb.id);
   }
+
+  const avg = (goals: number, played: number) => (played > 0 ? (goals / played).toFixed(1) : "0.0");
+
+  const compareRows: CompareRow[] =
+    aStats && bStats
+      ? [
+          { label: "Wins", a: aStats.wins, b: bStats.wins, lowerBetter: false },
+          { label: "Draws", a: aStats.draws, b: bStats.draws },
+          { label: "Losses", a: aStats.losses, b: bStats.losses, lowerBetter: true },
+          { label: "Goals scored", a: aStats.goalsFor, b: bStats.goalsFor, lowerBetter: false },
+          { label: "Goals conceded", a: aStats.goalsAgainst, b: bStats.goalsAgainst, lowerBetter: true },
+          {
+            label: "Goal difference",
+            a: aStats.goalsFor - aStats.goalsAgainst,
+            b: bStats.goalsFor - bStats.goalsAgainst,
+            lowerBetter: false,
+            signed: true,
+          },
+          {
+            label: "Goals / match",
+            a: avg(aStats.goalsFor, matches.length),
+            b: avg(bStats.goalsFor, matches.length),
+            lowerBetter: false,
+          },
+          { label: "Clean sheets", a: aStats.cleanSheets, b: bStats.cleanSheets, lowerBetter: false },
+          { label: "Biggest win", a: aStats.biggestWin ?? "—", b: bStats.biggestWin ?? "—" },
+        ]
+      : [];
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-10">
@@ -159,28 +263,82 @@ export function H2HClient({
 
         {rec && ta && tb ? (
           <>
-            <div className="mt-6 grid gap-4 sm:grid-cols-3">
-              <div className="rounded-2xl border-2 border-teama/60 bg-teama/20 p-4 text-center">
-                <p className="text-xs font-black uppercase tracking-wider text-teama">{ta.name}</p>
-                <p className="text-2xl font-black tabular-nums text-teama">{ra}</p>
-                <p className="text-[10px] text-muted">rating</p>
-              </div>
-              <div className="rounded-2xl border-2 border-line-strong bg-surface p-4 text-center">
-                <p className="text-xs font-black uppercase tracking-wider text-muted">Record</p>
-                <div className="mt-1 flex items-center justify-center gap-2 text-xl font-black tabular-nums text-fg">
-                  <span className="text-success">{rec.aWins}</span>
-                  <span className="text-muted">–</span>
-                  <span className="text-warning">{rec.draws}</span>
-                  <span className="text-muted">–</span>
-                  <span className="text-danger">{rec.bWins}</span>
+            <div className="mt-6 overflow-hidden rounded-2xl border-2 border-line-strong bg-bg-elevated">
+              <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 border-b-2 border-line/70 bg-surface px-4 py-4">
+                <div className="min-w-0">
+                  <p className="truncate text-xs font-black uppercase tracking-wider text-teama">{ta.name}</p>
+                  <p className="text-3xl font-black tabular-nums text-fg">{ra}</p>
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-subtle">rating</p>
                 </div>
-                <p className="mt-1 text-[10px] text-muted">{rec.aGoals}–{rec.bGoals} goals</p>
+                <div className="w-28 text-center sm:w-40">
+                  <p className="text-[10px] font-black uppercase tracking-wider text-subtle">Head to head</p>
+                  <p className="text-xl font-black tabular-nums text-fg">
+                    <span className="text-success">{rec.aWins}</span>
+                    <span className="text-muted">–</span>
+                    <span className="text-warning">{rec.draws}</span>
+                    <span className="text-muted">–</span>
+                    <span className="text-danger">{rec.bWins}</span>
+                  </p>
+                  <p className="text-[10px] text-muted">
+                    {matches.length} {matches.length === 1 ? "match" : "matches"}
+                  </p>
+                </div>
+                <div className="min-w-0 text-right">
+                  <p className="truncate text-xs font-black uppercase tracking-wider text-teamb">{tb.name}</p>
+                  <p className="text-3xl font-black tabular-nums text-fg">{rb}</p>
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-subtle">rating</p>
+                </div>
               </div>
-              <div className="rounded-2xl border-2 border-teamb/60 bg-teamb/20 p-4 text-center">
-                <p className="text-xs font-black uppercase tracking-wider text-teamb">{tb.name}</p>
-                <p className="text-2xl font-black tabular-nums text-teamb">{rb}</p>
-                <p className="text-[10px] text-muted">rating</p>
-              </div>
+
+              {compareRows.map((row) => {
+                const w = winnerOf(row);
+                return (
+                  <div
+                    key={row.label}
+                    className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 border-b border-line/50 px-4 py-2 last:border-0"
+                  >
+                    <p
+                      className={cn(
+                        "truncate text-sm font-black tabular-nums",
+                        w === "a" ? "text-success" : w === "b" ? "text-fg/50" : "text-fg",
+                      )}
+                    >
+                      {formatCell(row, row.a)}
+                    </p>
+                    <p className="w-28 text-center text-[10px] font-black uppercase tracking-wider text-subtle sm:w-40">
+                      {row.label}
+                    </p>
+                    <p
+                      className={cn(
+                        "truncate text-right text-sm font-black tabular-nums",
+                        w === "b" ? "text-success" : w === "a" ? "text-fg/50" : "text-fg",
+                      )}
+                    >
+                      {formatCell(row, row.b)}
+                    </p>
+                  </div>
+                );
+              })}
+
+              {aStats && bStats ? (
+                <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 px-4 py-2.5">
+                  <div className="flex gap-1">
+                    {aStats.form.length === 0 ? <span className="text-sm text-muted">—</span> : null}
+                    {aStats.form.map((r, i) => (
+                      <FormChip key={i} r={r} />
+                    ))}
+                  </div>
+                  <p className="w-28 text-center text-[10px] font-black uppercase tracking-wider text-subtle sm:w-40">
+                    Form (last 5)
+                  </p>
+                  <div className="flex justify-end gap-1">
+                    {bStats.form.length === 0 ? <span className="text-sm text-muted">—</span> : null}
+                    {bStats.form.map((r, i) => (
+                      <FormChip key={i} r={r} />
+                    ))}
+                  </div>
+                </div>
+              ) : null}
             </div>
 
             <div className="mt-6 rounded-xl border border-line bg-white p-3 overflow-x-auto">
