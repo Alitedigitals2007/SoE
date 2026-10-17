@@ -1,7 +1,8 @@
 "use client";
 
+import { useState, type FormEvent } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Badge, Select, cn } from "@/components/ui";
+import { Badge, Button, Select, cn } from "@/components/ui";
 
 export type TeamOption = { id: string; name: string; slug: string; code: string };
 
@@ -49,15 +50,22 @@ export function H2HClient({
   const aId = teamAId ?? undefined;
   const bId = teamBId ?? undefined;
 
-  function setTeam(key: "teamA" | "teamB", value: string) {
+  const [aSel, setASel] = useState(teamAId ?? "");
+  const [bSel, setBSel] = useState(teamBId ?? "");
+
+  function onSearch(e: FormEvent) {
+    e.preventDefault();
     const params = new URLSearchParams(searchParams.toString());
-    if (value) params.set(key, value);
-    else params.delete(key);
-    if (key === "teamB" && value) params.delete("teamA");
+    if (aSel) params.set("teamA", aSel);
+    else params.delete("teamA");
+    if (bSel) params.set("teamB", bSel);
+    else params.delete("teamB");
     router.push(`/h2h?${params.toString()}`);
   }
 
   function clearTeams() {
+    setASel("");
+    setBSel("");
     const params = new URLSearchParams(searchParams.toString());
     params.delete("teamA");
     params.delete("teamB");
@@ -100,10 +108,10 @@ export function H2HClient({
       </p>
 
       <div className="mt-6 rounded-2xl border-2 border-fg/15 bg-bg-elevated p-5">
-        <form className="grid gap-3 sm:grid-cols-[1fr_auto_1fr_auto] items-end" onSubmit={(e) => e.preventDefault()}>
+        <form className="grid gap-3 sm:grid-cols-[1fr_auto_1fr] items-end" onSubmit={onSearch}>
           <Select
-            value={aId ?? ""}
-            onChange={(e) => setTeam("teamA", e.target.value)}
+            value={aSel}
+            onChange={(e) => setASel(e.target.value)}
             aria-label="Team A"
           >
             <option value="">Team A</option>
@@ -115,8 +123,8 @@ export function H2HClient({
           </Select>
           <span className="text-[10px] font-black uppercase tracking-widest text-subtle self-end">v</span>
           <Select
-            value={bId ?? ""}
-            onChange={(e) => setTeam("teamB", e.target.value)}
+            value={bSel}
+            onChange={(e) => setBSel(e.target.value)}
             aria-label="Team B"
           >
             <option value="">Team B</option>
@@ -126,15 +134,23 @@ export function H2HClient({
               </option>
             ))}
           </Select>
-          {aId && bId && aId !== bId ? (
-            <button
-              type="button"
-              onClick={clearTeams}
-              className="text-xs font-bold underline underline-offset-2 hover:text-brand"
-            >
-              Clear
-            </button>
-          ) : null}
+          <div className="flex flex-wrap items-center gap-3 sm:col-span-3">
+            <Button type="submit" disabled={!aSel || !bSel || aSel === bSel}>
+              Search
+            </Button>
+            {aId || bId || aSel || bSel ? (
+              <button
+                type="button"
+                onClick={clearTeams}
+                className="text-xs font-bold underline underline-offset-2 hover:text-brand"
+              >
+                Clear
+              </button>
+            ) : null}
+            {aSel && bSel && aSel === bSel ? (
+              <span className="text-xs font-semibold text-danger">Pick two different teams.</span>
+            ) : null}
+          </div>
         </form>
 
         {showForm ? (

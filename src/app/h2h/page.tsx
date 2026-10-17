@@ -60,6 +60,7 @@ export default async function H2HPage({
   return (
     <PublicShell>
       <H2HClient
+        key={`${aId ?? ""}-${bId ?? ""}`}
         teams={teams}
         teamAId={aId ?? null}
         teamBId={bId ?? null}
