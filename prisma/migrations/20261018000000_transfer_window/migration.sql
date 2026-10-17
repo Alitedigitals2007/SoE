@@ -1,12 +1,24 @@
 -- Migration: add TransferWindow + TransferListing (admin-managed transfer windows)
+--
+-- Idempotent on purpose: databases that got these objects through `prisma db push`
+-- (or a partially applied earlier attempt) already have the enum types/tables, so
+-- every statement is guarded and safe to re-run.
 
--- 1. Enum types
-CREATE TYPE "TransferWindowStatus" AS ENUM ('DRAFT', 'OPEN', 'CLOSED');
+-- 1. Enum types (PostgreSQL has no CREATE TYPE IF NOT EXISTS, so guard with a DO block)
+DO $$ BEGIN
+    CREATE TYPE "TransferWindowStatus" AS ENUM ('DRAFT', 'OPEN', 'CLOSED');
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
 
-CREATE TYPE "TransferListingStatus" AS ENUM ('LISTED', 'SOLD', 'WITHDRAWN');
+DO $$ BEGIN
+    CREATE TYPE "TransferListingStatus" AS ENUM ('LISTED', 'SOLD', 'WITHDRAWN');
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
 
 -- 2. TransferWindow table
-CREATE TABLE "TransferWindow" (
+CREATE TABLE IF NOT EXISTS "TransferWindow" (
     "id" TEXT NOT NULL,
     "season" TEXT NOT NULL,
     "name" TEXT NOT NULL,
@@ -18,11 +30,11 @@ CREATE TABLE "TransferWindow" (
     CONSTRAINT "TransferWindow_pkey" PRIMARY KEY ("id")
 );
 
-CREATE INDEX "TransferWindow_status_idx" ON "TransferWindow"("status");
-CREATE INDEX "TransferWindow_season_idx" ON "TransferWindow"("season");
+CREATE INDEX IF NOT EXISTS "TransferWindow_status_idx" ON "TransferWindow"("status");
+CREATE INDEX IF NOT EXISTS "TransferWindow_season_idx" ON "TransferWindow"("season");
 
 -- 3. TransferListing table
-CREATE TABLE "TransferListing" (
+CREATE TABLE IF NOT EXISTS "TransferListing" (
     "id" TEXT NOT NULL,
     "windowId" TEXT NOT NULL,
     "playerId" TEXT NOT NULL,
@@ -52,6 +64,6 @@ CREATE TABLE "TransferListing" (
         ON DELETE SET NULL ON UPDATE CASCADE
 );
 
-CREATE INDEX "TransferListing_windowId_status_idx" ON "TransferListing"("windowId", "status");
-CREATE INDEX "TransferListing_playerId_idx" ON "TransferListing"("playerId");
-CREATE INDEX "TransferListing_teamId_status_idx" ON "TransferListing"("teamId", "status");
+CREATE INDEX IF NOT EXISTS "TransferListing_windowId_status_idx" ON "TransferListing"("windowId", "status");
+CREATE INDEX IF NOT EXISTS "TransferListing_playerId_idx" ON "TransferListing"("playerId");
+CREATE INDEX IF NOT EXISTS "TransferListing_teamId_status_idx" ON "TransferListing"("teamId", "status");
