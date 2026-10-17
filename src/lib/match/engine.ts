@@ -790,6 +790,224 @@ async function syncClubCaptain(
   await tx.teamPlayer.updateMany({ where: { teamId, userId }, data: { isCaptain: true } });
 }
 
+/* ----------------------------- setup shortcuts ----------------------------- */
+
+/**
+ * One-click setup: trims each side to its first five starters (by shirt
+ * number), keeps the squad captain when they make the cut, and moves bank
+ * questions into any empty played slots. Admin or the assigned referee.
+ */
+export async function autoCompleteSetup(
+  actor: Actor,
+  input: { code: string },
+): Promise<ActionResult<{ starters: number; captains: number; slotsFilled: number; sidesSkipped: string[] }>> {
+  const match = await assertReferee(actor, input.code);
+  if (match.status !== "DRAFT") return err("Setup is locked once the match starts.");
+
+  const sidesSkipped: string[] = [];
+  const lineups: { side: TeamSideView; starterIds: string[]; captainUserId: string }[] = [];
+
+  for (const side of ["HOME", "AWAY"] as const) {
+    const roster = match.roster.filter((r) => r.team === side).sort((a, b) => a.number - b.number);
+    if (roster.length < 5) {
+      sidesSkipped.push(teamNameOf(match, side));
+      continue;
+    }
+    const starterIds = roster.slice(0, 5).map((r) => r.userId);
+    const existingCaptain = roster.find((r) => r.isCaptain);
+    const captainUserId =
+      existingCaptain && starterIds.includes(existingCaptain.userId) ? existingCaptain.userId : starterIds[0];
+    lineups.push({ side, starterIds, captainUserId });
+  }
+
+  // Fill empty played slots from the question bank, in bank order.
+  const bank = match.questions.filter((q) => q.roundNumber == null);
+  const usedSlots = new Set(match.rounds.filter((r) => r.status === "PENDING").map((r) => r.number));
+  const emptySlots: number[] = [];
+  for (let n = 1; n <= 10; n++) if (!usedSlots.has(n)) emptySlots.push(n);
+  const placements = bank.slice(0, emptySlots.length).map((q, i) => ({ questionId: q.id, slot: emptySlots[i] }));
+
+  if (lineups.length === 0 && placements.length === 0)
+    return err("Nothing to auto-fill — add players on each side and questions to the bank first.");
+
+  await prisma.$transaction(async (tx) => {
+    for (const lineup of lineups) {
+      const roster = match.roster.filter((r) => r.team === lineup.side);
+      for (const slot of roster) {
+        await tx.matchPlayer.update({
+          where: { id: slot.id },
+          data: {
+            role: lineup.starterIds.includes(slot.userId) ? "STARTER" : "SUB",
+            isCaptain: slot.userId === lineup.captainUserId,
+          },
+        });
+      }
+      await syncClubCaptain(tx, match, lineup.side, lineup.captainUserId);
+    }
+    for (const { questionId, slot } of placements) {
+      await tx.round.create({ data: { matchId: match.id, number: slot, questionId } });
+      await tx.question.update({ where: { id: questionId }, data: { roundNumber: slot } });
+    }
+    await tx.match.update({ where: { id: match.id }, data: { version: { increment: 1 } } });
+  }, TX_OPTS);
+
+  await publishMatchUpdate(match.code);
+  return ok({
+    starters: lineups.reduce((sum, l) => sum + l.starterIds.length, 0),
+    captains: lineups.length,
+    slotsFilled: placements.length,
+    sidesSkipped,
+  });
+}
+
+/**
+ * Copies questions from another match into this match's bank, skipping exact
+ * duplicates and auto-slotting into the first open played slots.
+ */
+export async function importQuestions(
+  actor: Actor,
+  input: { code: string; sourceCode: string },
+): Promise<ActionResult<{ added: number; skipped: number; slotsFilled: number }>> {
+  const match = await assertReferee(actor, input.code);
+  if (match.status !== "DRAFT") return err("Questions can only be imported before kick-off.");
+
+  const source = await prisma.match.findUnique({
+    where: { code: input.sourceCode.trim().toUpperCase() },
+    include: { questions: { orderBy: { order: "asc" } } },
+  });
+  if (!source) return err("That source match was not found.");
+  if (source.id === match.id) return err("Pick a different match to import from.");
+  if (source.questions.length === 0) return err("That match has no questions to import.");
+
+  const room = 20 - match.questions.length;
+  if (room <= 0) return err("This match already has the full bank of 20 questions.");
+
+  const normalize = (t: string) => t.trim().toLowerCase().replace(/\s+/g, " ");
+  const existing = new Set(match.questions.map((q) => normalize(q.text)));
+  const take = source.questions.filter((q) => !existing.has(normalize(q.text))).slice(0, room);
+  if (take.length === 0) return err("Every question in that match is already in this bank.");
+
+  const used = new Set(match.rounds.filter((r) => r.status === "PENDING").map((r) => r.number));
+  let cursor = 1;
+  const nextOpen = () => {
+    while (cursor <= 10 && used.has(cursor)) cursor++;
+    return cursor <= 10 ? cursor++ : null;
+  };
+
+  let order = match.questions.at(-1)?.order ?? 0;
+  let slotsFilled = 0;
+  await prisma.$transaction(async (tx) => {
+    for (const q of take) {
+      order++;
+      const created = await tx.question.create({
+        data: { matchId: match.id, order, text: q.text, referenceAnswer: q.referenceAnswer },
+      });
+      const slot = nextOpen();
+      if (slot != null) {
+        await tx.round.create({ data: { matchId: match.id, number: slot, questionId: created.id } });
+        await tx.question.update({ where: { id: created.id }, data: { roundNumber: slot } });
+        slotsFilled++;
+      }
+    }
+    await tx.match.update({ where: { id: match.id }, data: { version: { increment: 1 } } });
+  }, TX_OPTS);
+
+  await publishMatchUpdate(match.code);
+  return ok({ added: take.length, skipped: source.questions.length - take.length, slotsFilled });
+}
+
+/**
+ * Adds several players to one side at once, assigning the next free shirt
+ * numbers (1–8) in the order given.
+ */
+export async function bulkAddPlayers(
+  actor: Actor,
+  input: { code: string; team: TeamSideView; userIds: string[] },
+): Promise<ActionResult<{ added: number }>> {
+  if (actor.role !== "ADMIN") return err("Only an admin can manage rosters.");
+  const match = await loadMatchFor(input.code);
+  if (!match) return err("Match not found.");
+  if (match.status !== "DRAFT") return err("The roster is locked once a match leaves setup.");
+
+  const ids = [...new Set(input.userIds.filter(Boolean))];
+  if (ids.length === 0) return err("Select at least one player.");
+
+  const side = match.roster.filter((r) => r.team === input.team);
+  const free: number[] = [];
+  for (let n = 1; n <= 8; n++) if (!side.some((r) => r.number === n)) free.push(n);
+  if (ids.length > free.length)
+    return err(
+      `Only ${free.length} shirt${free.length === 1 ? "" : "s"} free on ${teamNameOf(match, input.team)} — ${ids.length} player(s) selected.`,
+    );
+
+  const users = await prisma.user.findMany({ where: { id: { in: ids } } });
+  const valid = new Set(users.filter((u) => u.role === "PLAYER").map((u) => u.id));
+  const rosterIds = new Set(match.roster.map((r) => r.userId));
+  const toAdd = ids.filter((id) => valid.has(id) && !rosterIds.has(id));
+  if (toAdd.length === 0) return err("None of the selected players can be added (not player accounts or already in this match).");
+
+  await prisma.$transaction(async (tx) => {
+    for (let i = 0; i < toAdd.length; i++) {
+      await tx.matchPlayer.create({
+        data: { matchId: match.id, userId: toAdd[i], team: input.team, number: free[i] },
+      });
+    }
+    await tx.match.update({ where: { id: match.id }, data: { version: { increment: 1 } } });
+  }, TX_OPTS);
+
+  await publishMatchUpdate(match.code);
+  return ok({ added: toAdd.length });
+}
+
+/**
+ * Creates a fresh DRAFT copy of a match (same teams/names, referee and
+ * countdown). Club rosters auto-load again; questions are not copied.
+ */
+export async function rematch(
+  actor: Actor,
+  input: { code: string },
+): Promise<ActionResult<{ code: string }>> {
+  if (actor.role !== "ADMIN") return err("Only an admin can create a rematch.");
+  const source = await prisma.match.findUnique({ where: { code: input.code.trim().toUpperCase() } });
+  if (!source) return err("Match not found.");
+
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const code = generateMatchCode();
+    try {
+      await prisma.$transaction(async (tx) => {
+        const created = await tx.match.create({
+          data: {
+            code,
+            homeName: source.homeName,
+            awayName: source.awayName,
+            homeTeamId: source.homeTeamId,
+            awayTeamId: source.awayTeamId,
+            refereeId: source.refereeId,
+            countdownSeconds: source.countdownSeconds,
+          },
+        });
+        if (source.homeTeamId && source.awayTeamId) {
+          const [home, away] = await Promise.all([
+            tx.team.findUnique({ where: { id: source.homeTeamId }, include: { members: { orderBy: { number: "asc" } } } }),
+            tx.team.findUnique({ where: { id: source.awayTeamId }, include: { members: { orderBy: { number: "asc" } } } }),
+          ]);
+          const rows: { userId: string; team: "HOME" | "AWAY"; number: number; isCaptain: boolean }[] = [];
+          for (const m of home?.members ?? []) rows.push({ userId: m.userId, team: "HOME", number: m.number, isCaptain: m.isCaptain });
+          for (const m of away?.members ?? []) rows.push({ userId: m.userId, team: "AWAY", number: m.number, isCaptain: m.isCaptain });
+          for (const row of rows) {
+            await tx.matchPlayer.create({ data: { matchId: created.id, ...row } });
+          }
+        }
+      }, TX_OPTS);
+      return ok({ code });
+    } catch (e) {
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") continue;
+      throw e;
+    }
+  }
+  return err("Could not allocate a match code, please retry.");
+}
+
 /* -------------------------------- kick-off --------------------------------- */
 
 export async function kickOff(

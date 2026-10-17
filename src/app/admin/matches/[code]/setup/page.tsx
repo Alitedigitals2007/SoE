@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui";
 import { SetupChecklist, SetupStep } from "@/components/SetupProgress";
 import { StatusBadge } from "../../../page";
 import { RosterManager, ScheduleEditor, type AvailablePlayer, type RosterPlayer } from "@/components/admin";
-import { LineupManager, QuestionsManager, type LineupPlayer, type QRow } from "@/components/referee";
+import { LineupManager, QuestionsManager, SetupAutoComplete, type LineupPlayer, type PreviousLineup, type QRow, type QuestionSource } from "@/components/referee";
 import type { TeamSide } from "@/lib/domain";
 
 export const dynamic = "force-dynamic";
@@ -39,6 +39,52 @@ export default async function AdminMatchSetupPage({ params }: { params: Promise<
     orderBy: { name: "asc" },
     select: { id: true, name: true, email: true },
   });
+
+  const [previousRaw, sourceRows] = await Promise.all([
+    prisma.match.findFirst({
+      where: {
+        id: { not: match.id },
+        OR: [
+          { homeName: match.homeName, awayName: match.awayName },
+          { homeName: match.awayName, awayName: match.homeName },
+        ],
+        roster: { some: { role: "STARTER" } },
+      },
+      orderBy: { createdAt: "desc" },
+      select: {
+        homeName: true,
+        roster: { select: { userId: true, team: true, role: true, isCaptain: true } },
+      },
+    }),
+    prisma.match.findMany({
+      where: { id: { not: match.id }, questions: { some: {} } },
+      orderBy: { createdAt: "desc" },
+      take: 8,
+      select: { code: true, homeName: true, awayName: true, _count: { select: { questions: true } } },
+    }),
+  ]);
+
+  const sources: QuestionSource[] = sourceRows.map((s) => ({
+    code: s.code,
+    label: `${s.homeName} v ${s.awayName} · ${s._count.questions} question(s)`,
+    count: s._count.questions,
+  }));
+
+  // Previous meeting line-ups (sides swapped when the teams met the other way round).
+  const previous: PreviousLineup | null = previousRaw
+    ? (() => {
+        const swapped = previousRaw.homeName !== match.homeName;
+        const sideOf = (side: TeamSide) => {
+          const rows = previousRaw.roster.filter((r) => r.team === (swapped ? (side === "HOME" ? "AWAY" : "HOME") : side));
+          const starterIds = rows.filter((r) => r.role === "STARTER").map((r) => r.userId);
+          const captainId = rows.find((r) => r.isCaptain)?.userId ?? null;
+          return starterIds.length > 0 ? { starterIds, captainId } : undefined;
+        };
+        const home = sideOf("HOME");
+        const away = sideOf("AWAY");
+        return home || away ? { HOME: home, AWAY: away } : null;
+      })()
+    : null;
 
   const roster: RosterPlayer[] = match.roster.map((r) => ({
     userId: r.userId,
@@ -82,8 +128,9 @@ export default async function AdminMatchSetupPage({ params }: { params: Promise<
   const captainsReady = (["HOME", "AWAY"] as const).every((s) =>
     match.roster.some((r) => r.team === s && r.isCaptain),
   );
-  const lineupReady = homeStarters >= 5 && awayStarters >= 5 && captainsReady;
-  const questionsReady = match.questions.length >= 10;
+  const lineupReady = homeStarters === 5 && awayStarters === 5 && captainsReady;
+  const placedQuestions = match.questions.filter((q) => q.roundNumber != null).length;
+  const questionsReady = placedQuestions >= 10;
 
   const missing: string[] = [];
   if (!rosterReady)
@@ -95,7 +142,7 @@ export default async function AdminMatchSetupPage({ params }: { params: Promise<
         : "Pick a captain for each side.",
     );
   if (!questionsReady)
-    missing.push(`Place 10 questions into slots 1–10 (${match.questions.length}/10 placed).`);
+    missing.push(`Place 10 questions into slots 1–10 (${placedQuestions}/10 placed).`);
 
   return (
     <>
@@ -146,10 +193,11 @@ export default async function AdminMatchSetupPage({ params }: { params: Promise<
         <nav className="mt-6 grid gap-2 sm:grid-cols-3" aria-label="Setup progress">
           <SetupStep href="#players" n={1} label="Players" detail={`${homeCount}/8 · ${awayCount}/8`} done={rosterReady} />
           <SetupStep href="#lineup" n={2} label="Starters & captain" detail={`${homeStarters}/5 · ${awayStarters}/5`} done={lineupReady} />
-          <SetupStep href="#questions" n={3} label="Questions" detail={`${match.questions.length}/10`} done={questionsReady} />
+          <SetupStep href="#questions" n={3} label="Questions" detail={`${placedQuestions}/10`} done={questionsReady} />
         </nav>
 
         <SetupChecklist missing={missing} />
+        <SetupAutoComplete code={match.code} missing={missing} />
 
         <div className="mt-6 space-y-6">
           <section id="players" className="scroll-mt-24 rounded-2xl border-2 border-fg/15 bg-bg-elevated p-5 shadow-[4px_4px_0_rgba(11,32,48,.08)]">
@@ -186,6 +234,7 @@ export default async function AdminMatchSetupPage({ params }: { params: Promise<
               homeName={match.homeName}
               awayName={match.awayName}
               teams={{ HOME: playersFor("HOME"), AWAY: playersFor("AWAY") }}
+              previous={previous}
             />
           </section>
 
@@ -198,7 +247,7 @@ export default async function AdminMatchSetupPage({ params }: { params: Promise<
                 Add prepared questions and place ten of them into slots 1–10 — those are the ones played live.
               </p>
             </div>
-            <QuestionsManager code={match.code} questions={questions} />
+            <QuestionsManager code={match.code} questions={questions} sources={sources} />
           </section>
         </div>
 

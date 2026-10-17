@@ -9,9 +9,12 @@ import {
   adminRemovePlayer,
   adminSubstitute,
   addQuestion,
+  autoCompleteSetup,
+  bulkAddPlayers,
   decideRound,
   decideSubstitution,
   endMatch,
+  importQuestions,
   issueIntegrityAction as issueIntegrityEngine,
   kickOff,
   lockAndReveal,
@@ -20,6 +23,7 @@ import {
   pauseMatch,
   postponeMatch,
   recordIncident,
+  rematch,
   removeQuestion,
   reportIntegrity,
   requestSubstitution,
@@ -194,6 +198,33 @@ export async function setLineupAction(input: {
   starterIds: string[];
 }): Promise<ActionResult> {
   return runEngine((actor) => setLineup(actor, input));
+}
+
+/* ----------------------------- setup shortcuts ----------------------------- */
+
+export async function autoCompleteSetupAction(
+  code: string,
+): Promise<ActionResult<{ starters: number; captains: number; slotsFilled: number; sidesSkipped: string[] }>> {
+  return runEngine((actor) => autoCompleteSetup(actor, { code }));
+}
+
+export async function importQuestionsAction(input: {
+  code: string;
+  sourceCode: string;
+}): Promise<ActionResult<{ added: number; skipped: number; slotsFilled: number }>> {
+  return runEngine((actor) => importQuestions(actor, input));
+}
+
+export async function bulkAddPlayersAction(input: {
+  code: string;
+  team: "HOME" | "AWAY";
+  userIds: string[];
+}): Promise<ActionResult<{ added: number }>> {
+  return runEngine((actor) => bulkAddPlayers(actor, input));
+}
+
+export async function rematchAction(code: string): Promise<ActionResult<{ code: string }>> {
+  return runEngine((actor) => rematch(actor, { code }));
 }
 
 export async function kickOffAction(code: string): Promise<ActionResult> {

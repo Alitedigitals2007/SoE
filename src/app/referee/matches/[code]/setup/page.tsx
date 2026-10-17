@@ -4,7 +4,7 @@ import { requireRole } from "@/lib/authz";
 import { prisma } from "@/lib/prisma";
 import { TopBar } from "@/components/app";
 import { Badge } from "@/components/ui";
-import { LineupManager, QuestionsManager, type LineupPlayer, type QRow } from "@/components/referee";
+import { LineupManager, QuestionsManager, SetupAutoComplete, type LineupPlayer, type PreviousLineup, type QRow, type QuestionSource } from "@/components/referee";
 import { SetupChecklist, SetupStep } from "@/components/SetupProgress";
 import type { Role, TeamSide } from "@/lib/domain";
 
@@ -24,6 +24,51 @@ export default async function RefereeSetupPage({ params }: { params: Promise<{ c
   if (!match) notFound();
   if (match.refereeId !== user.id) return <NotYourMatch name={user.name} role={user.role} />;
   if (match.status !== "DRAFT") return <AlreadyLive name={user.name} role={user.role} code={match.code} status={match.status} />;
+
+  const [previousRaw, sourceRows] = await Promise.all([
+    prisma.match.findFirst({
+      where: {
+        id: { not: match.id },
+        OR: [
+          { homeName: match.homeName, awayName: match.awayName },
+          { homeName: match.awayName, awayName: match.homeName },
+        ],
+        roster: { some: { role: "STARTER" } },
+      },
+      orderBy: { createdAt: "desc" },
+      select: {
+        homeName: true,
+        roster: { select: { userId: true, team: true, role: true, isCaptain: true } },
+      },
+    }),
+    prisma.match.findMany({
+      where: { id: { not: match.id }, questions: { some: {} } },
+      orderBy: { createdAt: "desc" },
+      take: 8,
+      select: { code: true, homeName: true, awayName: true, _count: { select: { questions: true } } },
+    }),
+  ]);
+
+  const sources: QuestionSource[] = sourceRows.map((s) => ({
+    code: s.code,
+    label: `${s.homeName} v ${s.awayName} · ${s._count.questions} question(s)`,
+    count: s._count.questions,
+  }));
+
+  const previous: PreviousLineup | null = previousRaw
+    ? (() => {
+        const swapped = previousRaw.homeName !== match.homeName;
+        const sideOf = (side: TeamSide) => {
+          const rows = previousRaw.roster.filter((r) => r.team === (swapped ? (side === "HOME" ? "AWAY" : "HOME") : side));
+          const starterIds = rows.filter((r) => r.role === "STARTER").map((r) => r.userId);
+          const captainId = rows.find((r) => r.isCaptain)?.userId ?? null;
+          return starterIds.length > 0 ? { starterIds, captainId } : undefined;
+        };
+        const home = sideOf("HOME");
+        const away = sideOf("AWAY");
+        return home || away ? { HOME: home, AWAY: away } : null;
+      })()
+    : null;
 
   const questions: QRow[] = match.questions.map((q) => ({
     id: q.id,
@@ -51,8 +96,9 @@ export default async function RefereeSetupPage({ params }: { params: Promise<{ c
   const captainsReady = (["HOME", "AWAY"] as const).every((s) =>
     match.roster.some((r) => r.team === s && r.isCaptain),
   );
-  const lineupReady = homeStarters >= 5 && awayStarters >= 5 && captainsReady;
-  const questionsReady = match.questions.length >= 10;
+  const lineupReady = homeStarters === 5 && awayStarters === 5 && captainsReady;
+  const placedQuestions = match.questions.filter((q) => q.roundNumber != null).length;
+  const questionsReady = placedQuestions >= 10;
 
   const missing: string[] = [];
   if (!lineupReady)
@@ -62,7 +108,7 @@ export default async function RefereeSetupPage({ params }: { params: Promise<{ c
         : "Pick a captain for each side.",
     );
   if (!questionsReady)
-    missing.push(`Place 10 questions into slots 1–10 (${match.questions.length}/10 placed).`);
+    missing.push(`Place 10 questions into slots 1–10 (${placedQuestions}/10 placed).`);
 
   return (
     <>
@@ -81,15 +127,16 @@ export default async function RefereeSetupPage({ params }: { params: Promise<{ c
         </div>
 
         <nav className="mt-6 grid gap-2 sm:grid-cols-2" aria-label="Setup progress">
-          <SetupStep href="#questions" n={1} label="Questions" detail={`${match.questions.length}/10`} done={questionsReady} />
+          <SetupStep href="#questions" n={1} label="Questions" detail={`${placedQuestions}/10`} done={questionsReady} />
           <SetupStep href="#lineup" n={2} label="Starters & captain" detail={`${homeStarters}/5 · ${awayStarters}/5`} done={lineupReady} />
         </nav>
 
         <SetupChecklist missing={missing} />
+        <SetupAutoComplete code={match.code} missing={missing} />
 
         <div className="mt-6 space-y-6">
           <div id="questions" className="scroll-mt-24">
-            <QuestionsManager code={match.code} questions={questions} />
+            <QuestionsManager code={match.code} questions={questions} sources={sources} />
           </div>
           <div id="lineup" className="scroll-mt-24">
             <LineupManager
@@ -97,6 +144,7 @@ export default async function RefereeSetupPage({ params }: { params: Promise<{ c
               homeName={match.homeName}
               awayName={match.awayName}
               teams={{ HOME: playersFor("HOME"), AWAY: playersFor("AWAY") }}
+              previous={previous}
             />
           </div>
         </div>

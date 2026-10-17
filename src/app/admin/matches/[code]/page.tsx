@@ -6,6 +6,7 @@ import {
   AdminTabs,
   GoalRoundsEditor,
   PostponeEditor,
+  RematchButton,
   RosterManager,
   ScheduleEditor,
   ScoreOverrideEditor,
@@ -161,6 +162,7 @@ export default async function AdminMatchPage({ params }: { params: Promise<{ cod
           <div className="flex flex-wrap items-center gap-2">
             <StatusBadge status={match.status} />
             <Badge tone="neutral">{match.countdownSeconds}s / question</Badge>
+            <RematchButton code={match.code} />
             {!started ? (
               <Link href={`/admin/matches/${match.code}/setup`} className="inline-flex h-10 items-center rounded-lg brand-gradient px-4 text-sm font-semibold text-white hover:brightness-105">
                 Setup match →

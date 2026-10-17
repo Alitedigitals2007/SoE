@@ -4,6 +4,8 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import {
   addQuestionAction,
+  autoCompleteSetupAction,
+  importQuestionsAction,
   kickOffAction,
   removeQuestionAction,
   setLineupAction,
@@ -20,9 +22,31 @@ type Notice = { kind: "ok" | "err"; text: string } | null;
 
 export type QRow = { id: string; order: number; text: string; referenceAnswer: string; roundNumber: number | null };
 
+export type QuestionSource = { code: string; label: string; count: number };
+
 const SLOT_OPTIONS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
 
-export function QuestionsManager({ code, questions }: { code: string; questions: QRow[] }) {
+/** Splits one line into question/answer: `q | a`, tab, or CSV (quoted or plain). */
+function splitQuestionLine(line: string): [string, string] | null {
+  const quoted = line.match(/^"((?:[^"]|"")*)"\s*[,\t|]\s*"((?:[^"]|"")*)"\s*$/);
+  if (quoted) return [quoted[1].replace(/""/g, '"'), quoted[2].replace(/""/g, '"')];
+  const sep = line.includes("|") ? "|" : line.includes("\t") ? "\t" : line.includes(",") ? "," : null;
+  if (!sep) return null;
+  const idx = line.indexOf(sep);
+  return [line.slice(0, idx), line.slice(idx + sep.length)];
+}
+
+const normalizeQuestion = (t: string) => t.trim().toLowerCase().replace(/\s+/g, " ");
+
+export function QuestionsManager({
+  code,
+  questions,
+  sources = [],
+}: {
+  code: string;
+  questions: QRow[];
+  sources?: QuestionSource[];
+}) {
   const router = useRouter();
   const [notice, setNotice] = React.useState<Notice>(null);
   const [text, setText] = React.useState("");
@@ -30,6 +54,8 @@ export function QuestionsManager({ code, questions }: { code: string; questions:
   const [editing, setEditing] = React.useState<string | null>(null);
   const [bulk, setBulk] = React.useState("");
   const [bulkBusy, setBulkBusy] = React.useState(false);
+  const [sourceCode, setSourceCode] = React.useState("");
+  const [importing, setImporting] = React.useState(false);
 
   function flash(r: { ok: boolean; error?: string }, t: string) {
     if (r.ok) {
@@ -51,9 +77,9 @@ export function QuestionsManager({ code, questions }: { code: string; questions:
       .map((l) => l.trim())
       .filter(Boolean)
       .forEach((line, idx) => {
-        const parts = line.split("|").map((s) => s.trim());
-        const questionText = parts[0] ?? "";
-        const answer = parts.length > 1 ? parts[1] : "";
+        const parts = splitQuestionLine(line);
+        const questionText = (parts?.[0] ?? "").trim();
+        const answer = (parts?.[1] ?? "").trim();
         if (!questionText || !answer) {
           errors.push(`Line ${idx + 1}: use  Question | Answer  and fill both sides.`);
         } else {
@@ -65,31 +91,83 @@ export function QuestionsManager({ code, questions }: { code: string; questions:
 
   async function submitBulk() {
     if (bulkBusy) return;
-    const { errors, items } = parseBulk(bulk);
-    if (items.length === 0) {
+    const { errors, items: parsed } = parseBulk(bulk);
+    if (parsed.length === 0) {
       setNotice({ kind: "err", text: errors[0] ?? "Paste at least one question." });
       return;
     }
-    if (inBank + items.length > 20) {
-      setNotice({ kind: "err", text: `Only ${20 - inBank} more question(s) fit in the bank (you pasted ${items.length}).` });
+    const seen = new Set(questions.map((q) => normalizeQuestion(q.text)));
+    const fresh: { text: string; ref: string }[] = [];
+    let duplicates = 0;
+    for (const item of parsed) {
+      const key = normalizeQuestion(item.text);
+      if (seen.has(key)) {
+        duplicates++;
+        continue;
+      }
+      seen.add(key);
+      fresh.push(item);
+    }
+    if (fresh.length === 0) {
+      setNotice({ kind: "err", text: "Every pasted question is already in the bank." });
+      return;
+    }
+    if (inBank + fresh.length > 20) {
+      setNotice({ kind: "err", text: `Only ${20 - inBank} more question(s) fit in the bank (you pasted ${fresh.length}).` });
       return;
     }
     setBulkBusy(true);
     let added = 0;
     let failed = 0;
-    for (const item of items) {
+    for (const item of fresh) {
       const r = await addQuestionAction({ code, text: item.text, referenceAnswer: item.ref });
       if (r.ok) added++;
       else failed++;
     }
     setBulkBusy(false);
     setBulk("");
+    const dupNote = duplicates > 0 ? ` ${duplicates} duplicate(s) skipped.` : "";
     setNotice(
       failed === 0
-        ? { kind: "ok", text: `Added ${added} question(s). They auto-slot into the first open played slots.` }
-        : { kind: "err", text: `${added} added, ${failed} failed. Fix those lines and try again.` },
+        ? { kind: "ok", text: `Added ${added} question(s); they auto-slot into the first open played slots.${dupNote}` }
+        : { kind: "err", text: `${added} added, ${failed} failed. Fix those lines and try again.${dupNote}` },
     );
     router.refresh();
+  }
+
+  function importFromMatch() {
+    if (!sourceCode || importing) return;
+    setImporting(true);
+    setNotice(null);
+    void importQuestionsAction({ code, sourceCode })
+      .then((r) => {
+        if (r.ok) {
+          setNotice({
+            kind: "ok",
+            text: `Imported ${r.data.added} question(s) — ${r.data.slotsFilled} slotted${r.data.skipped > 0 ? `, ${r.data.skipped} skipped` : ""}.`,
+          });
+          setSourceCode("");
+          router.refresh();
+        } else {
+          setNotice({ kind: "err", text: r.error });
+        }
+      })
+      .finally(() => setImporting(false));
+  }
+
+  function loadFile(file: File) {
+    void file.text().then((raw) => {
+      const converted = raw
+        .split(/\r?\n/)
+        .map((l) => l.trim())
+        .filter(Boolean)
+        .map((line) => {
+          const parts = splitQuestionLine(line);
+          return parts ? `${parts[0].trim()} | ${parts[1].trim()}` : line;
+        })
+        .join("\n");
+      setBulk((prev) => (prev ? `${prev}\n${converted}` : converted));
+    });
   }
 
   return (
@@ -128,12 +206,37 @@ export function QuestionsManager({ code, questions }: { code: string; questions:
 
       {notice ? <NoticeLine notice={notice} /> : null}
 
+      {sources.length > 0 ? (
+        <div className="flex flex-wrap items-end gap-2 border-b border-line p-4">
+          <label className="flex flex-col gap-1 text-xs font-semibold uppercase tracking-wider text-muted">
+            Reuse questions from a past match
+            <Select
+              value={sourceCode}
+              onChange={(e) => setSourceCode(e.target.value)}
+              className="h-9 w-72 py-1 text-xs"
+            >
+              <option value="">Pick a match…</option>
+              {sources.map((s) => (
+                <option key={s.code} value={s.code}>
+                  {s.label}
+                </option>
+              ))}
+            </Select>
+          </label>
+          <Button size="sm" variant="secondary" disabled={!sourceCode} loading={importing} onClick={importFromMatch}>
+            Import questions
+          </Button>
+          <p className="basis-full text-xs text-subtle">Copies into the bank and slots them 1–10 — duplicates are skipped.</p>
+        </div>
+      ) : null}
+
       <div className="border-b border-line p-4">
         <details>
           <summary className="cursor-pointer text-sm font-bold text-brand">⚡ Bulk import — paste many at once</summary>
           <p className="mt-2 text-xs text-muted">
-            One question per line, separated by a pipe: <code className="rounded bg-surface px-1 py-0.5">What is the SI unit of force? | Newton</code>.
-            They auto-slot into the first open played slots (1–10).
+            One question per line as <code className="rounded bg-surface px-1 py-0.5">Question | Answer</code>, a tab, or CSV
+            (<code className="rounded bg-surface px-1 py-0.5">&quot;Question&quot;,&quot;Answer&quot;</code>). Duplicates are
+            skipped; new ones auto-slot into the first open played slots (1–10).
           </p>
           <textarea
             value={bulk}
@@ -147,6 +250,19 @@ export function QuestionsManager({ code, questions }: { code: string; questions:
             <Button variant="secondary" size="sm" disabled={!bulk.trim() || bulkBusy} loading={bulkBusy} onClick={() => void submitBulk()}>
               Import questions
             </Button>
+            <label className="inline-flex h-9 cursor-pointer items-center rounded-lg border-2 border-line bg-surface px-3 text-xs font-semibold text-muted hover:border-brand/40 hover:text-fg">
+              📄 Load from file (.txt/.csv)
+              <input
+                type="file"
+                accept=".txt,.csv,text/plain,text/csv"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) loadFile(file);
+                  e.target.value = "";
+                }}
+              />
+            </label>
             <span className="text-xs text-subtle">{inBank}/20 used</span>
           </div>
         </details>
@@ -259,16 +375,20 @@ function EditQuestionForm({
 
 export type LineupPlayer = { userId: string; name: string; number: number; role: "STARTER" | "SUB" | "OUT"; isCaptain: boolean };
 
+export type PreviousLineup = Partial<Record<TeamSide, { starterIds: string[]; captainId: string | null }>>;
+
 export function LineupManager({
   code,
   homeName,
   awayName,
   teams,
+  previous,
 }: {
   code: string;
   homeName: string;
   awayName: string;
   teams: Record<TeamSide, LineupPlayer[]>;
+  previous?: PreviousLineup | null;
 }) {
   const router = useRouter();
   const [notice, setNotice] = React.useState<Notice>(null);
@@ -291,8 +411,8 @@ export function LineupManager({
     <div className="space-y-4">
       {notice ? <NoticeLine notice={notice} /> : null}
       <div className="grid gap-4 md:grid-cols-2">
-        <TeamLineupEditor side="HOME" name={homeName} tone="teama" code={code} players={teams.HOME} flash={flash} />
-        <TeamLineupEditor side="AWAY" name={awayName} tone="teamb" code={code} players={teams.AWAY} flash={flash} />
+        <TeamLineupEditor side="HOME" name={homeName} tone="teama" code={code} players={teams.HOME} flash={flash} previous={previous?.HOME} />
+        <TeamLineupEditor side="AWAY" name={awayName} tone="teamb" code={code} players={teams.AWAY} flash={flash} previous={previous?.AWAY} />
       </div>
 
       <Card>
@@ -341,6 +461,7 @@ function TeamLineupEditor({
   code,
   players,
   flash,
+  previous,
 }: {
   side: TeamSide;
   name: string;
@@ -348,11 +469,15 @@ function TeamLineupEditor({
   code: string;
   players: LineupPlayer[];
   flash: (r: { ok: boolean; error?: string }, t: string) => void;
+  previous?: { starterIds: string[]; captainId: string | null };
 }) {
-  const [selected, setSelected] = React.useState<string[]>(() => players.filter((p) => p.role === "STARTER").map((p) => p.userId));
+  const sorted = [...players].sort((a, b) => a.number - b.number);
+  const [selected, setSelected] = React.useState<string[]>(() => {
+    const starters = sorted.filter((p) => p.role === "STARTER");
+    return (starters.length > 5 ? starters.slice(0, 5) : starters).map((p) => p.userId);
+  });
   const [captain, setCaptain] = React.useState<string>(() => players.find((p) => p.isCaptain)?.userId ?? "");
   const [busy, setBusy] = React.useState(false);
-  const sorted = [...players].sort((a, b) => a.number - b.number);
   const toneText = tone === "teama" ? "text-teama" : "text-teamb";
   const toneOn = tone === "teama" ? "border-teama/60 bg-teama/10" : "border-teamb/60 bg-teamb/10";
 
@@ -367,6 +492,22 @@ function TeamLineupEditor({
     });
   }
 
+  function applySquadDefaults() {
+    const firstFive = sorted.slice(0, 5).map((p) => p.userId);
+    setSelected(firstFive);
+    const squadCaptain = players.find((p) => p.isCaptain);
+    setCaptain(squadCaptain && firstFive.includes(squadCaptain.userId) ? squadCaptain.userId : firstFive[0] ?? "");
+  }
+
+  function applyLastMeeting() {
+    if (!previous) return;
+    const rosterIds = new Set(players.map((p) => p.userId));
+    const valid = previous.starterIds.filter((id) => rosterIds.has(id)).slice(0, 5);
+    if (valid.length === 0) return;
+    setSelected(valid);
+    setCaptain(previous.captainId && valid.includes(previous.captainId) ? previous.captainId : valid[0]);
+  }
+
   return (
     <Card className={cn("h-fit", "border")}>
       <CardHeader title={name} description={side === "HOME" ? "Team A · pick 5 starters and the captain" : "Team B · pick 5 starters and the captain"} aside={<Badge tone={tone as never}>{selected.length}/5</Badge>} />
@@ -375,6 +516,16 @@ function TeamLineupEditor({
           <p className="text-sm text-subtle">No players assigned yet — the admin fills the roster.</p>
         ) : (
           <>
+            <div className="mb-3 flex flex-wrap gap-1.5">
+              <Button size="sm" variant="ghost" onClick={applySquadDefaults} disabled={players.length < 5}>
+                Squad default (first 5)
+              </Button>
+              {previous ? (
+                <Button size="sm" variant="ghost" onClick={applyLastMeeting}>
+                  ◀ Copy last meeting
+                </Button>
+              ) : null}
+            </div>
             <ul className="space-y-1.5">
               {sorted.map((p) => {
                 const on = selected.includes(p.userId);
@@ -431,6 +582,53 @@ function TeamLineupEditor({
         )}
       </div>
     </Card>
+  );
+}
+
+/** One-click setup completion for admins/referees — visible while anything is missing. */
+export function SetupAutoComplete({ code, missing }: { code: string; missing: string[] }) {
+  const router = useRouter();
+  const [notice, setNotice] = React.useState<Notice>(null);
+  const [busy, setBusy] = React.useState(false);
+  if (missing.length === 0) return null;
+
+  return (
+    <div className="mt-3 rounded-xl border-2 border-brand/30 bg-brand/5 px-4 py-3">
+      <div className="flex flex-wrap items-center gap-3">
+        <p className="text-sm text-muted">
+          In a hurry? Auto-fill starters (first 5 by shirt), captains and empty question slots — then review before kick-off.
+        </p>
+        <Button
+          variant="secondary"
+          size="sm"
+          className="ml-auto"
+          loading={busy}
+          onClick={() => {
+            if (busy) return;
+            setBusy(true);
+            setNotice(null);
+            void autoCompleteSetupAction(code)
+              .then((r) => {
+                if (r.ok) {
+                  const bits = [
+                    `${r.data.starters} starters · ${r.data.captains} captain(s)`,
+                    `${r.data.slotsFilled} question slot(s) filled`,
+                  ];
+                  if (r.data.sidesSkipped.length > 0) bits.push(`skipped ${r.data.sidesSkipped.join(" & ")} (under 5 players)`);
+                  setNotice({ kind: "ok", text: `Auto-filled ${bits.join(" · ")}.` });
+                  router.refresh();
+                } else {
+                  setNotice({ kind: "err", text: r.error });
+                }
+              })
+              .finally(() => setBusy(false));
+          }}
+        >
+          ⚡ Auto-complete setup
+        </Button>
+      </div>
+      {notice ? <div className="mt-2"><NoticeLine notice={notice} /></div> : null}
+    </div>
   );
 }
 

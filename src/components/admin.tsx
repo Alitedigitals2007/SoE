@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { addPlayerAction, createMatchAction, postponeMatchAction, removePlayerAction, setMatchScheduleAction, adminEditGoalRoundAction, adminOverrideScoreAction } from "@/app/actions/match";
+import { addPlayerAction, bulkAddPlayersAction, createMatchAction, postponeMatchAction, rematchAction, removePlayerAction, setMatchScheduleAction, adminEditGoalRoundAction, adminOverrideScoreAction } from "@/app/actions/match";
 import { assignRefereeAction } from "@/app/actions/platform";
 import { createUserAction, updateUserAction } from "@/app/actions/admin";
 import { Badge, Button, Card, CardHeader, cn, Field, Input, Select } from "@/components/ui";
@@ -354,6 +354,9 @@ export function CreateMatchForm({ referees, teams }: { referees: RefereeOption[]
           </Field>
           <Field label="Kick-off (Nigeria time)" htmlFor="kickoff" hint="Optional — leave blank to start whenever you're ready.">
             <Input id="kickoff" type="datetime-local" value={kickoff} onChange={(e) => setKickoff(e.target.value)} />
+            <div className="mt-1.5">
+              <SchedulePresets onPick={setKickoff} />
+            </div>
           </Field>
         </div>
 
@@ -436,6 +439,46 @@ function utcIsoToNigeriaLocal(iso: string): string {
   return shifted.toISOString().slice(0, 16);
 }
 
+/** "Now" in Nigeria wall-clock, formatted for a datetime-local input. */
+function nowWatLocal(): string {
+  return utcIsoToNigeriaLocal(new Date().toISOString());
+}
+
+/** Nigeria wall-clock `hours` from now (default 1), for the datetime-local input. */
+function inHoursWatLocal(hours: number): string {
+  return utcIsoToNigeriaLocal(new Date(Date.now() + hours * 3600_000).toISOString());
+}
+
+/** Tomorrow at the given Nigeria wall-clock hour, for the datetime-local input. */
+function tomorrowAtWatLocal(hour: number): string {
+  const wat = new Date(Date.now() + 3600_000);
+  wat.setUTCDate(wat.getUTCDate() + 1);
+  wat.setUTCHours(hour, 0, 0, 0);
+  return wat.toISOString().slice(0, 16);
+}
+
+function SchedulePresets({ onPick }: { onPick: (value: string) => void }) {
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      <PresetChip label="Now" onClick={() => onPick(nowWatLocal())} />
+      <PresetChip label="+1 hour" onClick={() => onPick(inHoursWatLocal(1))} />
+      <PresetChip label="Tomorrow 6pm" onClick={() => onPick(tomorrowAtWatLocal(18))} />
+    </div>
+  );
+}
+
+function PresetChip({ label, onClick }: { label: string; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="rounded-full border border-line-strong bg-surface px-2.5 py-1 text-[11px] font-semibold text-muted transition-colors hover:border-brand/50 hover:text-fg"
+    >
+      {label}
+    </button>
+  );
+}
+
 export function ScheduleEditor({ code, scheduledAt, refereeId, referees }: { code: string; scheduledAt: string | null; refereeId: string | null; referees: RefereeOption[] }) {
   const [value, setValue] = React.useState(scheduledAt ? utcIsoToNigeriaLocal(scheduledAt) : "");
   const [refId, setRefId] = React.useState(refereeId ?? "");
@@ -473,6 +516,7 @@ export function ScheduleEditor({ code, scheduledAt, refereeId, referees }: { cod
         <Field label="Kick-off date & time" hint={busy ? "Saving…" : "Leave blank for 'start whenever ready'."}>
           <Input type="datetime-local" value={value} onChange={(e) => setValue(e.target.value)} />
         </Field>
+        <SchedulePresets onPick={setValue} />
         <Button variant="secondary" onClick={() => save(value)}>
           Save schedule
         </Button>
@@ -531,6 +575,9 @@ export function RosterManager({
   const [team, setTeam] = React.useState<TeamSide>("HOME");
   const [playerId, setPlayerId] = React.useState("");
   const [number, setNumber] = React.useState(1);
+  const [fillTeam, setFillTeam] = React.useState<TeamSide>("HOME");
+  const [fillIds, setFillIds] = React.useState<string[]>([]);
+  const [filling, setFilling] = React.useState(false);
   const locked = status !== "DRAFT";
 
   function flash(r: { ok: boolean; error?: string }, t: string) {
@@ -540,6 +587,21 @@ export function RosterManager({
     } else {
       setNotice({ kind: "err", text: r.error ?? "Action failed." });
     }
+  }
+
+  function submitFill() {
+    if (filling || fillIds.length === 0) return;
+    setFilling(true);
+    void bulkAddPlayersAction({ code, team: fillTeam, userIds: fillIds })
+      .then((r) => {
+        if (r.ok) {
+          setFillIds([]);
+          flash(r, `Added ${r.data.added} player(s) with auto shirt numbers.`);
+        } else {
+          flash(r, "");
+        }
+      })
+      .finally(() => setFilling(false));
   }
 
   const taken = (t: TeamSide) => roster.filter((p) => p.team === t).map((p) => p.number);
@@ -600,6 +662,54 @@ export function RosterManager({
             </div>
           </form>
         )}
+        {!locked && available.length > 0 ? (
+          <details className="border-t border-line p-4">
+            <summary className="cursor-pointer text-sm font-bold text-brand">⚡ Quick fill — add several players at once</summary>
+            <p className="mt-2 text-xs text-muted">
+              Tick players and they join the chosen side with the next free shirt numbers (1–8).
+            </p>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <Select value={fillTeam} onChange={(e) => setFillTeam(e.target.value as TeamSide)} className="w-44">
+                <option value="HOME">{homeName}</option>
+                <option value="AWAY">{awayName}</option>
+              </Select>
+              <span className="text-xs text-subtle">{fillIds.length} selected</span>
+              <Button
+                size="sm"
+                variant="secondary"
+                className="ml-auto"
+                disabled={fillIds.length === 0}
+                loading={filling}
+                onClick={submitFill}
+              >
+                Add selected
+              </Button>
+            </div>
+            <ul className="mt-3 max-h-56 space-y-0.5 overflow-y-auto rounded-lg border border-line p-2">
+              {available.map((p) => {
+                const on = fillIds.includes(p.id);
+                return (
+                  <li key={p.id}>
+                    <label
+                      className={cn(
+                        "flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm",
+                        on ? "bg-brand/10 text-fg" : "text-muted hover:bg-surface",
+                      )}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={on}
+                        onChange={() => setFillIds((prev) => (on ? prev.filter((x) => x !== p.id) : [...prev, p.id]))}
+                        className="size-4 accent-brand"
+                      />
+                      <span className="min-w-0 flex-1 truncate font-medium">{p.name}</span>
+                    </label>
+                  </li>
+                );
+              })}
+            </ul>
+          </details>
+        ) : null}
       </Card>
 
       <div className="grid gap-4 md:grid-cols-2">
@@ -653,6 +763,40 @@ function RosterColumn({
       {side === "HOME" && <p className={cn("px-4 pb-2 text-[10px] font-bold uppercase tracking-widest", toneClass)}>Shirt 1–8 · 5 starters by referee</p>}
       {side === "AWAY" && <p className={cn("px-4 pb-2 text-[10px] font-bold uppercase tracking-widest", toneClass)}>Shirt 1–8 · 5 starters by referee</p>}
     </Card>
+  );
+}
+
+/** Clones a match into a fresh draft with rosters reloaded from the clubs. */
+export function RematchButton({ code }: { code: string }) {
+  const router = useRouter();
+  const [busy, setBusy] = React.useState(false);
+  const [notice, setNotice] = React.useState<Notice>(null);
+  return (
+    <span className="inline-flex flex-wrap items-center gap-2">
+      <Button
+        size="sm"
+        variant="secondary"
+        loading={busy}
+        onClick={() => {
+          if (busy) return;
+          setBusy(true);
+          setNotice(null);
+          void rematchAction(code)
+            .then((r) => {
+              if (r.ok) {
+                router.push(`/admin/matches/${r.data.code}/setup`);
+              } else {
+                setNotice({ kind: "err", text: r.error });
+                setBusy(false);
+              }
+            })
+            .catch(() => setBusy(false));
+        }}
+      >
+        🔁 Rematch
+      </Button>
+      {notice ? <NoticeLine notice={notice} /> : null}
+    </span>
   );
 }
 
