@@ -17,9 +17,10 @@ const RARITY: Record<Rarity, { label: string; tone: "neutral" | "info" | "warnin
   mythic: { label: "Mythic", tone: "danger", border: "border-danger/80", glow: "shadow-[0_0_36px_rgba(190,30,45,.75)]" },
 };
 
-/** Performance-driven rating: uncapped — can fall below 60 or rise above 99. */
+/** Performance-driven rating, clamped to 40–115. */
 function ratingOf(stats: PlayerStats): number {
-  return stats.goals * 3 + stats.assists * 2 + stats.motm * 5 - stats.redCards * 2 - stats.yellowCards;
+  const raw = stats.goals * 3 + stats.assists * 2 + stats.motm * 5 - stats.redCards * 2 - stats.yellowCards;
+  return Math.min(115, Math.max(40, raw));
 }
 
 function rarityOf(rating: number): Rarity {
@@ -30,6 +31,11 @@ function rarityOf(rating: number): Rarity {
   return "common";
 }
 
+/** Market value derived purely from on-pitch performance (virtual points). */
+function marketValueOf(stats: PlayerStats): number {
+  return ratingOf(stats) * 10;
+}
+
 export function PlayerGameCard({
   name,
   imageUrl,
@@ -37,7 +43,6 @@ export function PlayerGameCard({
   matches,
   wins,
   stats,
-  marketValue,
 }: {
   name: string;
   imageUrl: string | null;
@@ -45,12 +50,11 @@ export function PlayerGameCard({
   matches: number;
   wins: number;
   stats: PlayerStats;
-  /** Transfer-market value in virtual points — separate from the account wallet. */
-  marketValue?: number;
 }) {
   const rating = ratingOf(stats);
   const rarity = rarityOf(rating);
   const style = RARITY[rarity];
+  const value = marketValueOf(stats);
   const [flipped, setFlipped] = React.useState(false);
 
   return (
@@ -85,13 +89,13 @@ export function PlayerGameCard({
             </div>
           </div>
 
-          <p className="mt-3 text-center text-xl font-black uppercase leading-tight tracking-wide">{name}</p>
-          <p className="mt-0.5 text-center text-[11px] font-semibold uppercase tracking-widest text-white/75">
+          <p className="mt-3 text-center text-xl font-black uppercase leading-tight tracking-wide truncate max-w-[160px] mx-auto">{name}</p>
+          <p className="mt-0.5 text-center text-[11px] font-semibold uppercase tracking-widest text-white/75 truncate max-w-[160px] mx-auto">
             {teams[0]?.name ?? "Free agent"}
             {teams.length > 1 ? ` +${teams.length - 1}` : ""}
           </p>
 
-          <div className="mt-4 grid grid-cols-4 gap-2 rounded-xl bg-white/10 p-3 text-center">
+          <div className="mt-4 grid grid-cols-4 gap-2 rounded-xl bg-white/15 p-3 text-center border border-white/20">
             {[
               { label: "Goals", value: stats.goals },
               { label: "Assists", value: stats.assists },
@@ -99,15 +103,15 @@ export function PlayerGameCard({
               { label: "Wins", value: wins },
             ].map((s) => (
               <div key={s.label}>
-                <p className="text-lg font-black tabular-nums">{s.value}</p>
-                <p className="text-[9px] font-bold uppercase tracking-widest text-white/70">{s.label}</p>
+                <p className="text-lg font-black tabular-nums text-white">{s.value}</p>
+                <p className="text-[9px] font-bold uppercase tracking-widest text-white/80">{s.label}</p>
               </div>
             ))}
           </div>
 
-          <div className="mt-3 rounded-xl border-2 border-white/20 bg-white/10 px-3 py-2 text-center">
-            <p className="text-[10px] font-black uppercase tracking-widest text-white/70">Value</p>
-            <p className="text-sm font-black tabular-nums text-white">{marketValue ?? 0} pts</p>
+          <div className="mt-3 rounded-xl border-2 border-white/30 bg-white/20 px-3 py-2 text-center">
+            <p className="text-[10px] font-black uppercase tracking-widest text-white/80">Value</p>
+            <p className="text-sm font-black tabular-nums text-white">{value} pts</p>
           </div>
 
           <div className="mt-2 flex items-center justify-center gap-2">
@@ -119,9 +123,18 @@ export function PlayerGameCard({
         </div>
 
         {/* ---------------------------- BACK ----------------------------- */}
-        <div className="player-card-face player-card-back absolute inset-0 rounded-3xl p-5 shadow-[0_18px_40px_rgba(11,32,48,.25)] [transform:rotateY(180deg)]">
-          <p className="text-[10px] font-black uppercase tracking-widest text-gold-strong">Full performance</p>
-          <p className="truncate text-lg font-black text-fg">{name}</p>
+        <div
+          className={cn(
+            "player-card-face player-card-back absolute inset-0 rounded-3xl p-5 shadow-[0_18px_40px_rgba(11,32,48,.35)] [transform:rotateY(180deg)]",
+            style.border,
+            rarity === "mythic" ? "border-4" : "border-2",
+          )}
+        >
+          <div className="flex items-start justify-between mb-2">
+            <p className="text-[10px] font-black uppercase tracking-widest text-gold-strong">Full performance</p>
+            <Badge tone={style.tone}>{style.label}</Badge>
+          </div>
+          <p className="truncate text-lg font-black text-fg mb-3">{name}</p>
 
           <dl className="mt-3 space-y-1.5 text-sm">
             {[
@@ -136,12 +149,12 @@ export function PlayerGameCard({
               { label: "Warnings", value: stats.warnings },
               { label: "Rating", value: rating },
               { label: "Rarity", value: style.label },
-              { label: "Value", value: `${marketValue ?? 0} pts` },
+              { label: "Value", value: `${value} pts` },
             ].map((row) => (
-              <div key={row.label} className="flex justify-between border-b border-line/60 py-1">
-                <dt className="text-muted">{row.label}</dt>
-                <dd className="font-bold tabular-nums text-fg">{row.value}</dd>
-              </div>
+            <div key={row.label} className="flex justify-between border-b border-white/20 py-1.5">
+              <dt className="text-muted">{row.label}</dt>
+              <dd className="font-bold tabular-nums text-white">{row.value}</dd>
+            </div>
             ))}
           </dl>
 

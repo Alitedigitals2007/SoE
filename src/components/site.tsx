@@ -4,7 +4,7 @@ import { auth } from "@/auth";
 import { signOutAction } from "@/app/actions/auth";
 import { homePath } from "@/lib/authz";
 import { unreadCount } from "@/lib/notify";
-import { NAV } from "@/lib/nav";
+import { NAV, PRIMARY_NAV, SECONDARY_NAV } from "@/lib/nav";
 import { cn } from "@/components/ui";
 import { MobileNav } from "@/components/nav";
 
@@ -39,7 +39,7 @@ export async function SiteHeader() {
         <SiteLogo />
 
         <nav className="hidden items-center gap-1 lg:flex" aria-label="Primary">
-          {NAV.map((n) => (
+          {PRIMARY_NAV.map((n) => (
             <Link
               key={n.href}
               href={n.href}
@@ -48,6 +48,22 @@ export async function SiteHeader() {
               {n.label}
             </Link>
           ))}
+          <details className="relative group" >
+            <summary className="rounded-lg px-2.5 py-2 text-[.72rem] font-black uppercase tracking-wider text-muted transition-all hover:-translate-y-0.5 hover:bg-fg hover:text-white list-none cursor-pointer">
+              More
+            </summary>
+            <div className="absolute left-0 mt-1 w-48 rounded-xl border-2 border-fg bg-bg-elevated shadow-lg py-2 z-50 animate-pop">
+              {SECONDARY_NAV.map((n) => (
+                <Link
+                  key={n.href}
+                  href={n.href}
+                  className="block rounded-lg px-3 py-1.5 text-xs font-black uppercase tracking-wider text-muted transition-colors hover:bg-fg hover:text-white"
+                >
+                  {n.label}
+                </Link>
+              ))}
+            </div>
+          </details>
         </nav>
 
         <div className="flex items-center gap-2">

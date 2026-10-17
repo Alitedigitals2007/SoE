@@ -57,7 +57,6 @@ export default async function PlayerDetail({ params }: { params: Promise<{ id: s
             matches={stats.matches}
             wins={stats.wins}
             stats={full}
-            marketValue={user.marketValue ?? 0}
           />
 
           <section className="rounded-2xl border-2 border-fg/15 bg-bg-elevated p-5">

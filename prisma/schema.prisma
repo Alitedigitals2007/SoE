@@ -54,6 +54,9 @@ model User {
   bets             Bet[]
   transferListings TransferListing[] @relation("TransferListingPlayer")
   boughtListings   TransferListing[] @relation("TransferBuyer")
+  transferRequestsAsCaptain TransferRequest[] @relation("TransferRequestCaptain")
+  transferRequestsAsPlayer  TransferRequest[] @relation("TransferRequestPlayer")
+  transferDecisions         TransferRequest[] @relation("TransferRequestDecider")
   complaints       Complaint[]
   resolvedComplaints Complaint[] @relation("ComplaintResolver")
   motmMatches      Match[]               @relation("MatchMotm")
@@ -559,6 +562,8 @@ model Team {
   homeMatches        Match[]           @relation("TeamHomeMatches")
   awayMatches        Match[]           @relation("TeamAwayMatches")
   transferListings   TransferListing[] @relation("TransferListingTeam")
+  transferRequestsFrom TransferRequest[] @relation("TransferRequestFromTeam")
+  transferRequestsTo   TransferRequest[] @relation("TransferRequestToTeam")
 
   @@index([slug])
 }
@@ -632,6 +637,41 @@ model TransferListing {
   @@index([windowId, status])
   @@index([playerId])
   @@index([teamId, status])
+}
+
+/**
+ * A captain-initiated transfer request: a club captain asks to move one of
+ * their players to another club. An admin must verify/approve, then the
+ * player themselves accepts or declines before the move is executed.
+ */
+enum TransferRequestStatus {
+  PENDING        // captain requested, awaiting admin review
+  ADMIN_APPROVED // admin cleared it, awaiting player decision
+  PLAYER_ACCEPTED // player accepted; transfer executed
+  REJECTED       // rejected by admin or declined by player
+  CANCELLED      // withdrawn by the captain before admin review
+}
+
+model TransferRequest {
+  id          String               @id @default(cuid())
+  captainId   String
+  captain     User                 @relation("TransferRequestCaptain", fields: [captainId], references: [id], onDelete: Cascade)
+  playerId    String
+  player      User                 @relation("TransferRequestPlayer", fields: [playerId], references: [id], onDelete: Cascade)
+  fromTeamId  String
+  fromTeam    Team                 @relation("TransferRequestFromTeam", fields: [fromTeamId], references: [id], onDelete: Cascade)
+  toTeamId    String
+  toTeam      Team                 @relation("TransferRequestToTeam", fields: [toTeamId], references: [id], onDelete: Cascade)
+  status      TransferRequestStatus @default(PENDING)
+  adminNote   String?              @db.VarChar(1000)
+  decidedBy   String?              // admin who approved/rejected
+  decidedByUser User?             @relation("TransferRequestDecider", fields: [decidedBy], references: [id], onDelete: SetNull)
+  decidedAt   DateTime?
+  createdAt   DateTime             @default(now())
+
+  @@index([captainId, status])
+  @@index([playerId, status])
+  @@index([status])
 }
 
 /**
