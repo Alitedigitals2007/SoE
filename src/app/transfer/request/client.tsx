@@ -3,6 +3,7 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { createTransferRequestAction, getCaptainTransferRequestsAction, getMyCaptainTeamsAction, getTeamMembersAction } from "@/app/actions/transfer";
+import { getActiveTransferWindowAction } from "@/app/actions/transferWindow";
 import { Button, Card, CardHeader, cn, Field, Select, Badge } from "@/components/ui";
 
 type RequestRow = {
@@ -16,12 +17,14 @@ type RequestRow = {
 
 type MyTeam = { id: string; name: string; code: string };
 type MyPlayer = { id: string; name: string; imageUrl: string | null };
+type WindowInfo = { id: string; season: string; name: string; closeAt: Date | null };
 
 export function TransferRequestClient() {
   const router = useRouter();
   const [teams, setTeams] = React.useState<MyTeam[]>([]);
   const [players, setPlayers] = React.useState<MyPlayer[]>([]);
   const [requests, setRequests] = React.useState<RequestRow[]>([]);
+  const [windowInfo, setWindowInfo] = React.useState<WindowInfo | null>(null);
   const [fromTeamId, setFromTeamId] = React.useState("");
   const [toTeamId, setToTeamId] = React.useState("");
   const [playerId, setPlayerId] = React.useState("");
@@ -32,10 +35,15 @@ export function TransferRequestClient() {
   React.useEffect(() => {
     let cancelled = false;
     (async () => {
-      const [t, r] = await Promise.all([getMyCaptainTeamsAction(), getCaptainTransferRequestsAction()]);
+      const [t, r, w] = await Promise.all([
+        getMyCaptainTeamsAction(),
+        getCaptainTransferRequestsAction(),
+        getActiveTransferWindowAction(),
+      ]);
       if (!cancelled) {
         setTeams((t.ok ? t.data : []) as MyTeam[]);
         setRequests((r.ok ? r.data : []) as RequestRow[]);
+        setWindowInfo((w.ok ? w.data : null) as WindowInfo | null);
         setLoaded(true);
       }
     })();
@@ -91,12 +99,33 @@ export function TransferRequestClient() {
         approved, the player can accept or decline the move.
       </p>
 
+      {windowInfo ? (
+        <p className="mt-4 rounded-lg border border-success/40 bg-success/10 px-3 py-2 text-sm text-success">
+          Transfer window open: <span className="font-bold">{windowInfo.season} {windowInfo.name}</span>
+          {windowInfo.closeAt
+            ? ` — closes ${new Date(windowInfo.closeAt).toLocaleString(undefined, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}`
+            : ""}
+          .
+        </p>
+      ) : (
+        <p className="mt-4 rounded-lg border border-warning/40 bg-warning/10 px-3 py-2 text-sm text-warning">
+          The transfer window is currently closed. Requests can only be sent while an admin has a window open.
+        </p>
+      )}
+
       <div className="mt-6 grid gap-4 lg:grid-cols-2">
         <Card className="lg:col-span-2">
-          <CardHeader title="New transfer request" description="Pick your team, the player, and the destination club." />
+          <CardHeader
+            title="New transfer request"
+            description={
+              windowInfo
+                ? "Pick your team, the player, and the destination club."
+                : "Waiting for the next transfer window to open."
+            }
+          />
           <form className="space-y-4 p-4 sm:grid-cols-3 sm:gap-4" onSubmit={onSubmit}>
             <Field label="Your team (from)">
-              <Select value={fromTeamId} onChange={(e) => setFromTeamId(e.target.value)} required>
+              <Select value={fromTeamId} onChange={(e) => setFromTeamId(e.target.value)} required disabled={!windowInfo}>
                 <option value="">Choose your team…</option>
                 {teams.map((t) => (
                   <option key={t.id} value={t.id}>
@@ -106,7 +135,7 @@ export function TransferRequestClient() {
               </Select>
             </Field>
             <Field label="Player to transfer">
-              <Select value={playerId} onChange={(e) => setPlayerId(e.target.value)} required disabled={!fromTeamId}>
+              <Select value={playerId} onChange={(e) => setPlayerId(e.target.value)} required disabled={!fromTeamId || !windowInfo}>
                 <option value="">Choose a player…</option>
                 {players.map((p) => (
                   <option key={p.id} value={p.id}>{p.name}</option>
@@ -114,7 +143,7 @@ export function TransferRequestClient() {
               </Select>
             </Field>
             <Field label="Destination team (to)">
-              <Select value={toTeamId} onChange={(e) => setToTeamId(e.target.value)} required disabled={!fromTeamId}>
+              <Select value={toTeamId} onChange={(e) => setToTeamId(e.target.value)} required disabled={!fromTeamId || !windowInfo}>
                 <option value="">Choose destination…</option>
                 {teams.filter((t) => t.id !== fromTeamId).map((t) => (
                   <option key={t.id} value={t.id}>{t.name} ({t.code})</option>
@@ -123,7 +152,7 @@ export function TransferRequestClient() {
             </Field>
             {notice ? <div className="sm:col-span-3"><NoticeLine notice={notice} /></div> : null}
             <div className="sm:col-span-3 flex items-end">
-              <Button type="submit" loading={busy} disabled={!fromTeamId || !toTeamId || !playerId || busy}>
+              <Button type="submit" loading={busy} disabled={!windowInfo || !fromTeamId || !toTeamId || !playerId || busy}>
                 Send request
               </Button>
             </div>

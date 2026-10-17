@@ -247,6 +247,34 @@ body {
   transform-style: preserve-3d;
 }
 
+/* Goal flash + expanding 3D rings */
+@keyframes soe-goal-flash {
+  0% { opacity: 0.5; }
+  100% { opacity: 0; }
+}
+.soe-goal-flash {
+  animation: soe-goal-flash 0.9s ease-out both;
+}
+@keyframes soe-goal-ring {
+  0% { transform: translate(-50%, -50%) scale(0.2); opacity: 0.9; }
+  100% { transform: translate(-50%, -50%) scale(3.4); opacity: 0; }
+}
+.soe-goal-ring {
+  animation: soe-goal-ring 1.1s ease-out both;
+}
+.soe-goal-ring-2 {
+  animation: soe-goal-ring 1.3s ease-out 0.18s both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .soe-goal-flash,
+  .soe-goal-ring,
+  .soe-goal-ring-2 {
+    animation: none !important;
+    opacity: 0;
+  }
+}
+
 /* --------------------- 3D flip-in for panels/cards --------------------- */
 @keyframes soe-flip-in {
   0% {

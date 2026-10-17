@@ -3,6 +3,7 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { currentActor } from "@/lib/session";
+import { getOpenTransferWindow } from "@/lib/transferWindow";
 import type { ActionResult } from "@/lib/domain";
 
 async function requireActor() {
@@ -25,6 +26,9 @@ export async function createTransferRequestAction(input: {
   if (!res.ok) return res;
   const { actor } = res;
   if (actor.role !== "PLAYER") return err("Only a team captain can request a transfer.");
+
+  const window = await getOpenTransferWindow();
+  if (!window) return err("The transfer window is closed — requests can only be made while a window is open.");
 
   if (input.fromTeamId === input.toTeamId) return err("Pick a different team to transfer to.");
 
@@ -146,6 +150,9 @@ export async function playerDecideTransferRequestAction(input: {
   }
 
   // Accept: move the player to the target team (assign an available shirt number).
+  const window = await getOpenTransferWindow();
+  if (!window) return err("The transfer window is closed — the move can only be completed while a window is open.");
+
   const toMemberCount = await prisma.teamPlayer.count({ where: { teamId: request.toTeamId } });
   const toTeamName = await prisma.team.findUnique({ where: { id: request.toTeamId }, select: { name: true } });
   if (toMemberCount >= 8) return err(`${toTeamName?.name} is full.`);

@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { TopBar } from "@/components/app";
 import { Badge } from "@/components/ui";
 import { LineupManager, QuestionsManager, type LineupPlayer, type QRow } from "@/components/referee";
+import { SetupChecklist, SetupStep } from "@/components/SetupProgress";
 import type { Role, TeamSide } from "@/lib/domain";
 
 export const dynamic = "force-dynamic";
@@ -43,6 +44,26 @@ export default async function RefereeSetupPage({ params }: { params: Promise<{ c
         isCaptain: r.isCaptain,
       }));
 
+  const startersFor = (side: TeamSide) =>
+    match.roster.filter((r) => r.team === side && r.role === "STARTER").length;
+  const homeStarters = startersFor("HOME");
+  const awayStarters = startersFor("AWAY");
+  const captainsReady = (["HOME", "AWAY"] as const).every((s) =>
+    match.roster.some((r) => r.team === s && r.isCaptain),
+  );
+  const lineupReady = homeStarters >= 5 && awayStarters >= 5 && captainsReady;
+  const questionsReady = match.questions.length >= 10;
+
+  const missing: string[] = [];
+  if (!lineupReady)
+    missing.push(
+      captainsReady
+        ? `Mark 5 starters per side (${match.homeName} ${homeStarters}/5 · ${match.awayName} ${awayStarters}/5).`
+        : "Pick a captain for each side.",
+    );
+  if (!questionsReady)
+    missing.push(`Place 10 questions into slots 1–10 (${match.questions.length}/10 placed).`);
+
   return (
     <>
       <TopBar name={user.name} role={user.role} />
@@ -59,14 +80,25 @@ export default async function RefereeSetupPage({ params }: { params: Promise<{ c
           </Link>
         </div>
 
+        <nav className="mt-6 grid gap-2 sm:grid-cols-2" aria-label="Setup progress">
+          <SetupStep href="#questions" n={1} label="Questions" detail={`${match.questions.length}/10`} done={questionsReady} />
+          <SetupStep href="#lineup" n={2} label="Starters & captain" detail={`${homeStarters}/5 · ${awayStarters}/5`} done={lineupReady} />
+        </nav>
+
+        <SetupChecklist missing={missing} />
+
         <div className="mt-6 space-y-6">
-          <QuestionsManager code={match.code} questions={questions} />
-          <LineupManager
-            code={match.code}
-            homeName={match.homeName}
-            awayName={match.awayName}
-            teams={{ HOME: playersFor("HOME"), AWAY: playersFor("AWAY") }}
-          />
+          <div id="questions" className="scroll-mt-24">
+            <QuestionsManager code={match.code} questions={questions} />
+          </div>
+          <div id="lineup" className="scroll-mt-24">
+            <LineupManager
+              code={match.code}
+              homeName={match.homeName}
+              awayName={match.awayName}
+              teams={{ HOME: playersFor("HOME"), AWAY: playersFor("AWAY") }}
+            />
+          </div>
         </div>
 
         <p className="mt-6 text-xs text-subtle">

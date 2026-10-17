@@ -465,6 +465,7 @@ function MatchHeader({ snapshot, mode }: { snapshot: MatchSnapshot; mode: LiveMo
   const liveTone = live ? "success" : snapshot.status === "FINISHED" ? "neutral" : "warning";
   const liveText = live ? "LIVE" : snapshot.status === "FINISHED" ? "FULL-TIME" : "PRE-MATCH";
   const label = roundLabel(snapshot);
+  const playedRounds = Math.min(10, Math.max(0, snapshot.round ? snapshot.round.number : snapshot.currentRound));
 
   return (
     <div>
@@ -493,11 +494,18 @@ function MatchHeader({ snapshot, mode }: { snapshot: MatchSnapshot; mode: LiveMo
         </div>
       </div>
 
-      <div className="pitch-bg mt-4 overflow-hidden rounded-[1.5rem] border-2 border-fg shadow-[8px_8px_0_rgba(11,32,48,.2)]">
-        <div className="flex items-center justify-center gap-3 px-3 py-5 sm:gap-6">
+      <div className="pitch-bg relative mt-4 overflow-hidden rounded-[1.5rem] border-2 border-fg shadow-[8px_8px_0_rgba(11,32,48,.2)]">
+        <span
+          aria-hidden
+          className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_-30%,rgba(255,255,255,.28),transparent_60%)]"
+        />
+        <div className="relative flex items-center justify-center gap-3 px-3 py-5 sm:gap-8">
           <TeamName name={snapshot.homeName} team="HOME" align="right" />
-          <div className="min-w-28 shrink-0 text-center">
-            <div className="font-display text-5xl font-black tabular-nums tracking-tight text-white sm:text-7xl">
+          <div className="min-w-32 shrink-0 text-center">
+            <div
+              key={`${snapshot.homeScore}-${snapshot.awayScore}`}
+              className="animate-pop font-display text-5xl font-black tabular-nums tracking-tight text-white [text-shadow:0_3px_0_rgba(11,32,48,.45)] sm:text-7xl"
+            >
               {snapshot.homeScore}<span className="mx-1 text-white/40">–</span>{snapshot.awayScore}
             </div>
             <p className="mt-1 text-xs font-semibold uppercase tracking-widest text-white/70">{label}</p>
@@ -508,6 +516,17 @@ function MatchHeader({ snapshot, mode }: { snapshot: MatchSnapshot; mode: LiveMo
                 <KickoffCountdown scheduledAt={snapshot.scheduledAt} />
               </p>
             ) : null}
+            <div className="mt-2 flex items-center justify-center gap-1" aria-hidden>
+              {Array.from({ length: 10 }, (_, i) => (
+                <span
+                  key={i}
+                  className={cn(
+                    "h-1.5 rounded-full transition-all",
+                    i < playedRounds ? "w-4 bg-gold" : "w-3 bg-white/20",
+                  )}
+                />
+              ))}
+            </div>
           </div>
           <TeamName name={snapshot.awayName} team="AWAY" align="left" />
         </div>
@@ -545,12 +564,35 @@ function LiveChip({ mode }: { mode: LiveMode }) {
 }
 
 function TeamName({ name, team, align }: { name: string; team: TeamSide; align: "left" | "right" }) {
+  const initials =
+    name
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((w) => w[0]?.toUpperCase())
+      .join("") || "?";
   return (
-    <div className={cn("flex min-w-0 flex-col", align === "right" ? "items-end text-right" : "items-start")}>
-      <span className="text-lg font-extrabold uppercase tracking-wide text-white sm:text-2xl">{name}</span>
-      <span className={cn("text-[10px] font-bold uppercase tracking-widest", team === "HOME" ? "text-teama" : "text-teamb")}>
-        {team === "HOME" ? "Team A" : "Team B"}
+    <div
+      className={cn(
+        "flex min-w-0 items-center gap-2.5 sm:gap-3",
+        align === "right" ? "flex-row-reverse text-right" : "flex-row text-left",
+      )}
+    >
+      <span
+        aria-hidden
+        className={cn(
+          "grid size-10 shrink-0 place-items-center rounded-2xl border-2 border-white/30 text-sm font-black text-white shadow-[3px_3px_0_rgba(0,0,0,.3)] sm:size-12 sm:text-base",
+          team === "HOME" ? "bg-teama" : "bg-teamb",
+        )}
+      >
+        {initials}
       </span>
+      <div className={cn("flex min-w-0 flex-col", align === "right" ? "items-end" : "items-start")}>
+        <span className="truncate text-lg font-extrabold uppercase tracking-wide text-white sm:text-2xl">{name}</span>
+        <span className={cn("text-[10px] font-bold uppercase tracking-widest", team === "HOME" ? "text-teama" : "text-teamb")}>
+          {team === "HOME" ? "Team A" : "Team B"}
+        </span>
+      </div>
     </div>
   );
 }
@@ -966,7 +1008,7 @@ function DecidedStage({
     <Card>
       <div className="p-5">
         {isGoal && round.winnerName ? (
-          <div className="animate-soe-pop relative overflow-hidden rounded-lg border border-gold/40 bg-gold/15 p-6 text-center">
+          <div className="animate-pop relative overflow-hidden rounded-lg border border-gold/40 bg-gold/15 p-6 text-center">
             <GoalCelebration />
             <h2 className="relative mt-1 text-2xl font-black uppercase tracking-wide text-gold-strong">GOAL!</h2>
             <p className="relative mt-1 text-xl font-bold text-fg">{round.winnerName}</p>
@@ -976,7 +1018,7 @@ function DecidedStage({
             </p>
           </div>
         ) : (
-          <div className="animate-soe-pop rounded-lg border border-danger/40 bg-danger/10 p-6 text-center">
+          <div className="animate-pop rounded-lg border border-danger/40 bg-danger/10 p-6 text-center">
             <p className="text-4xl">❌</p>
             <h2 className="mt-1 text-2xl font-black uppercase tracking-wide text-danger">No goal</h2>
             <p className="mt-1 text-sm text-muted">
@@ -1182,6 +1224,9 @@ function GoalCelebration() {
       className="pointer-events-none absolute inset-0 overflow-hidden"
       style={{ perspective: "700px" }}
     >
+      <span className="soe-goal-flash absolute inset-0 bg-white" />
+      <span className="soe-goal-ring absolute left-1/2 top-1/2 size-24 rounded-full border-4 border-gold" />
+      <span className="soe-goal-ring-2 absolute left-1/2 top-1/2 size-24 rounded-full border-4 border-white/80" />
       <span className="soe-3d-ball absolute left-1/2 top-1/2 -ml-6 -mt-6 text-5xl drop-shadow-[0_10px_18px_rgba(11,32,48,.45)]">
         ⚽
       </span>

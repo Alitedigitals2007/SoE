@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { Badge } from "@/components/ui";
+import { SetupChecklist, SetupStep } from "@/components/SetupProgress";
 import { StatusBadge } from "../../../page";
 import { RosterManager, ScheduleEditor, type AvailablePlayer, type RosterPlayer } from "@/components/admin";
 import { LineupManager, QuestionsManager, type LineupPlayer, type QRow } from "@/components/referee";
@@ -70,6 +71,32 @@ export default async function AdminMatchSetupPage({ params }: { params: Promise<
   const perSide = (side: TeamSide) =>
     match.roster.filter((r) => r.team === side).length;
 
+  const homeCount = perSide("HOME");
+  const awayCount = perSide("AWAY");
+  const rosterReady = homeCount >= 5 && awayCount >= 5;
+
+  const startersFor = (side: TeamSide) =>
+    match.roster.filter((r) => r.team === side && r.role === "STARTER").length;
+  const homeStarters = startersFor("HOME");
+  const awayStarters = startersFor("AWAY");
+  const captainsReady = (["HOME", "AWAY"] as const).every((s) =>
+    match.roster.some((r) => r.team === s && r.isCaptain),
+  );
+  const lineupReady = homeStarters >= 5 && awayStarters >= 5 && captainsReady;
+  const questionsReady = match.questions.length >= 10;
+
+  const missing: string[] = [];
+  if (!rosterReady)
+    missing.push(`Collect at least 5 players per side (${match.homeName} ${homeCount}/5 · ${match.awayName} ${awayCount}/5).`);
+  if (!lineupReady)
+    missing.push(
+      captainsReady
+        ? `Mark 5 starters per side (${match.homeName} ${homeStarters}/5 · ${match.awayName} ${awayStarters}/5).`
+        : "Pick a captain for each side.",
+    );
+  if (!questionsReady)
+    missing.push(`Place 10 questions into slots 1–10 (${match.questions.length}/10 placed).`);
+
   return (
     <>
       <main className="mx-auto w-full max-w-6xl px-4 py-6">
@@ -116,14 +143,16 @@ export default async function AdminMatchSetupPage({ params }: { params: Promise<
         ) : null}
 
         {/* Stepper summary */}
-        <ol className="mt-6 flex flex-wrap items-center gap-x-6 gap-y-2 text-xs font-bold uppercase tracking-wider text-muted">
-          <Step n={1} label="Players on roster" done={perSide("HOME") >= 5 && perSide("AWAY") >= 5} />
-          <Step n={2} label="Active XI + subs + captain" done={rosterCountReady(match.roster)} />
-          <Step n={3} label="Questions (10 slots)" done={match.questions.length >= 10} />
-        </ol>
+        <nav className="mt-6 grid gap-2 sm:grid-cols-3" aria-label="Setup progress">
+          <SetupStep href="#players" n={1} label="Players" detail={`${homeCount}/8 · ${awayCount}/8`} done={rosterReady} />
+          <SetupStep href="#lineup" n={2} label="Starters & captain" detail={`${homeStarters}/5 · ${awayStarters}/5`} done={lineupReady} />
+          <SetupStep href="#questions" n={3} label="Questions" detail={`${match.questions.length}/10`} done={questionsReady} />
+        </nav>
+
+        <SetupChecklist missing={missing} />
 
         <div className="mt-6 space-y-6">
-          <section className="rounded-2xl border-2 border-fg/15 bg-bg-elevated p-5 shadow-[4px_4px_0_rgba(11,32,48,.08)]">
+          <section id="players" className="scroll-mt-24 rounded-2xl border-2 border-fg/15 bg-bg-elevated p-5 shadow-[4px_4px_0_rgba(11,32,48,.08)]">
             <div className="mb-4">
               <h2 className="font-display text-lg font-black uppercase tracking-wider text-fg">
                 <span className="mr-2 text-brand">1.</span> Players
@@ -142,13 +171,13 @@ export default async function AdminMatchSetupPage({ params }: { params: Promise<
             />
           </section>
 
-          <section className="rounded-2xl border-2 border-fg/15 bg-bg-elevated p-5 shadow-[4px_4px_0_rgba(11,32,48,.08)]">
+          <section id="lineup" className="scroll-mt-24 rounded-2xl border-2 border-fg/15 bg-bg-elevated p-5 shadow-[4px_4px_0_rgba(11,32,48,.08)]">
             <div className="mb-4">
               <h2 className="font-display text-lg font-black uppercase tracking-wider text-fg">
-                <span className="mr-2 text-brand">2.</span> Active XI, subs &amp; captain
+                <span className="mr-2 text-brand">2.</span> Starters, subs &amp; captain
               </h2>
               <p className="text-sm text-muted">
-                Mark five players <span className="font-semibold text-success">ACTIVE</span> per side (the rest are{" "}
+                Mark five players <span className="font-semibold text-success">STARTER</span> per side (the rest are{" "}
                 <span className="font-semibold text-warning">SUB</span>) and pick the captain.
               </p>
             </div>
@@ -160,7 +189,7 @@ export default async function AdminMatchSetupPage({ params }: { params: Promise<
             />
           </section>
 
-          <section className="rounded-2xl border-2 border-fg/15 bg-bg-elevated p-5 shadow-[4px_4px_0_rgba(11,32,48,.08)]">
+          <section id="questions" className="scroll-mt-24 rounded-2xl border-2 border-fg/15 bg-bg-elevated p-5 shadow-[4px_4px_0_rgba(11,32,48,.08)]">
             <div className="mb-4">
               <h2 className="font-display text-lg font-black uppercase tracking-wider text-fg">
                 <span className="mr-2 text-brand">3.</span> Questions
@@ -180,27 +209,6 @@ export default async function AdminMatchSetupPage({ params }: { params: Promise<
       </main>
     </>
   );
-}
-
-function Step({ n, label, done }: { n: number; label: string; done: boolean }) {
-  return (
-    <li className="flex items-center gap-2">
-      <span
-        className={
-          done
-            ? "grid size-6 place-items-center rounded-full bg-success text-xs text-white"
-            : "grid size-6 place-items-center rounded-full bg-surface text-xs text-muted"
-        }
-      >
-        {done ? "✓" : n}
-      </span>
-      <span className={done ? "text-success" : "text-muted"}>{label}</span>
-    </li>
-  );
-}
-
-function rosterCountReady(roster: { role: string; isCaptain: boolean }[]) {
-  return roster.filter((r) => r.isCaptain).length === 2;
 }
 
 function LockedView({
