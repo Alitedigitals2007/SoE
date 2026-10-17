@@ -14,7 +14,7 @@ export default async function PlayerDetail({ params }: { params: Promise<{ id: s
   const { id } = await params;
   const user = await prisma.user.findUnique({
     where: { id },
-    select: { id: true, name: true, imageUrl: true, role: true, teams: { include: { team: { select: { name: true, slug: true } } } } },
+    select: { id: true, name: true, imageUrl: true, role: true, marketValue: true, teams: { include: { team: { select: { name: true, slug: true } } } } },
   });
   if (!user || user.role !== "PLAYER") notFound();
   const stats = await playerStats(id);
@@ -57,6 +57,7 @@ export default async function PlayerDetail({ params }: { params: Promise<{ id: s
             matches={stats.matches}
             wins={stats.wins}
             stats={full}
+            marketValue={user.marketValue ?? 0}
           />
 
           <section className="rounded-2xl border-2 border-fg/15 bg-bg-elevated p-5">

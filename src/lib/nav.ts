@@ -6,6 +6,8 @@ export const NAV = [
   { href: "/teams", label: "Teams" },
   { href: "/players", label: "Players" },
   { href: "/compare", label: "Compare" },
+  { href: "/h2h", label: "H2H" },
+  { href: "/transfer", label: "Transfer" },
   { href: "/fantasy", label: "Fantasy" },
   { href: "/bet", label: "Bet" },
 ] as const;

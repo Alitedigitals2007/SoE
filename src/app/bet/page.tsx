@@ -5,7 +5,7 @@ import { formGuides, oddsForMatches } from "@/lib/bet/odds";
 import { ensureWallet } from "@/lib/bet/wallet";
 import { PublicShell } from "@/components/site";
 import { Badge } from "@/components/ui";
-import { BetTerminal, RedeemLookup, type BetMatch, type BetRow, type BetLegRow, type LeaderRow, type TxnRow } from "@/components/bet";
+import { CollapsibleBetPanel, RedeemLookup, type BetMatch, type BetRow, type BetLegRow, type LeaderRow, type TxnRow } from "@/components/bet";
 import { selectionLabel } from "@/lib/bet/labels";
 import { selectionResults } from "@/lib/bet/engine";
 import { MathBlock } from "@/components/MathText";
@@ -222,54 +222,58 @@ export default async function BetPage() {
           </div>
         ) : null}
 
-        <div className="mt-6">
-          <BetTerminal
-            signedIn={!!user}
-            balance={balance}
-            matches={matches}
-            bets={bets}
-            txns={txns}
-            leaderboard={leaderboard}
-            myRank={myRank}
-            claimedToday={claimedToday}
-          />
+        <div className="mt-6 grid gap-6 lg:grid-cols-[1fr_1fr]">
+          <div className="min-w-0">
+            <CollapsibleBetPanel
+              signedIn={!!user}
+              balance={balance}
+              matches={matches}
+              bets={bets}
+              txns={txns}
+              leaderboard={leaderboard}
+              myRank={myRank}
+              claimedToday={claimedToday}
+            />
+          </div>
+
+          <div className="space-y-6 min-w-0">
+            <RedeemLookup />
+
+            <section className="rounded-2xl border border-line bg-white p-5">
+              <h2 className="text-sm font-black uppercase tracking-wider text-fg">How the odds are priced</h2>
+              <p className="mt-1 text-sm text-muted">
+                Every market comes from one expected-goals model — the maths, rendered properly:
+              </p>
+              <MathBlock
+                className="mt-3 overflow-x-auto text-fg"
+                tex={String.raw`P(k) = \frac{e^{-\lambda}\lambda^{k}}{k!}, \qquad \lambda_{\text{home}} = 1.35\sqrt{\frac{p}{1-p}}, \qquad \lambda_{\text{away}} = \frac{1.35}{\sqrt{p/(1-p)}}`}
+              />
+              <MathBlock
+                className="mt-1 overflow-x-auto text-fg"
+                tex={String.raw`\text{odds} = \frac{0.94}{P}, \qquad p_{\text{home}} + p_{\text{draw}} + p_{\text{away}} = 1`}
+              />
+              <p className="mt-3 text-xs text-muted">
+                <strong className="text-fg">P(k)</strong> is the Poisson chance of exactly k goals at expected goals
+                λ; the 1X2 split comes from the standings gap (points per game) with the draw fixed at 0.27; every
+                price is the probability inverted and scaled by the 0.94 bookmaker margin, capped at 50.00.
+              </p>
+            </section>
+
+            <section className="rounded-2xl border border-line bg-white p-5">
+              <h2 className="text-sm font-black uppercase tracking-wider text-fg">How it works</h2>
+              <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-muted">
+                <li>Every new account gets <strong className="text-fg">100 virtual points</strong> — these are not real money.</li>
+                <li>Markets open on every scheduled match: <strong className="text-fg">home win / draw / away win</strong>, <strong className="text-fg">exact scores (0–0 up to 10–0)</strong>, <strong className="text-fg">over/under totals</strong> and <strong className="text-fg">both-teams-to-score</strong> — plus <strong className="text-fg">double chance</strong>, <strong className="text-fg">draw-no-bet</strong>, <strong className="text-fg">half-time result</strong>, <strong className="text-fg">half-time / full-time</strong> and <strong className="text-fg">team goal totals</strong>.</li>
+                <li>Add 2–6 selections from different matches for an <strong className="text-fg">accumulator</strong> — the odds multiply.</li>
+                <li>Stake up to <strong className="text-fg">500 points</strong> per bet (max 5 open bets per match, 10 open accumulators).</li>
+                <li>Odds are automatic — league matches use the standings, other matches standard prices; exact scores and totals run on an expected-goals model. Each card shows both teams&apos; recent form.</li>
+                <li>Betting closes at kick-off and settles at full time from the 10-question scoreline (penalty shootouts don&apos;t affect bets).</li>
+                <li>A winning bet returns <strong className="text-fg">stake × odds</strong> in points; every movement appears in your Wallet history.</li>
+                <li><strong className="text-fg">Claim 20 free points daily</strong> from the Wallet tab, and fantasy keeps paying too — every goal by a player you picked adds <strong className="text-fg">+10 points</strong> straight to your wallet.</li>
+              </ul>
+            </section>
+          </div>
         </div>
-
-        <RedeemLookup />
-
-        <section className="mt-10 rounded-2xl border border-line bg-white p-5">
-          <h2 className="text-sm font-black uppercase tracking-wider text-fg">How the odds are priced</h2>
-          <p className="mt-1 text-sm text-muted">
-            Every market comes from one expected-goals model — the maths, rendered properly:
-          </p>
-          <MathBlock
-            className="mt-3 overflow-x-auto text-fg"
-            tex={String.raw`P(k) = \frac{e^{-\lambda}\lambda^{k}}{k!}, \qquad \lambda_{\text{home}} = 1.35\sqrt{\frac{p}{1-p}}, \qquad \lambda_{\text{away}} = \frac{1.35}{\sqrt{p/(1-p)}}`}
-          />
-          <MathBlock
-            className="mt-1 overflow-x-auto text-fg"
-            tex={String.raw`\text{odds} = \frac{0.94}{P}, \qquad p_{\text{home}} + p_{\text{draw}} + p_{\text{away}} = 1`}
-          />
-          <p className="mt-3 text-xs text-muted">
-            <strong className="text-fg">P(k)</strong> is the Poisson chance of exactly k goals at expected goals
-            λ; the 1X2 split comes from the standings gap (points per game) with the draw fixed at 0.27; every
-            price is the probability inverted and scaled by the 0.94 bookmaker margin, capped at 50.00.
-          </p>
-        </section>
-
-        <section className="mt-4 rounded-2xl border border-line bg-white p-5">
-          <h2 className="text-sm font-black uppercase tracking-wider text-fg">How it works</h2>
-          <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-muted">
-            <li>Every new account gets <strong className="text-fg">100 virtual points</strong> — these are not real money.</li>
-            <li>Markets open on every scheduled match: <strong className="text-fg">home win / draw / away win</strong>, <strong className="text-fg">exact scores (0–0 up to 10–0)</strong>, <strong className="text-fg">over/under totals</strong> and <strong className="text-fg">both-teams-to-score</strong> — plus <strong className="text-fg">double chance</strong>, <strong className="text-fg">draw-no-bet</strong>, <strong className="text-fg">half-time result</strong>, <strong className="text-fg">half-time / full-time</strong> and <strong className="text-fg">team goal totals</strong>.</li>
-            <li>Add 2–6 selections from different matches for an <strong className="text-fg">accumulator</strong> — the odds multiply.</li>
-            <li>Stake up to <strong className="text-fg">500 points</strong> per bet (max 5 open bets per match, 10 open accumulators).</li>
-            <li>Odds are automatic — league matches use the standings, other matches standard prices; exact scores and totals run on an expected-goals model. Each card shows both teams&apos; recent form.</li>
-            <li>Betting closes at kick-off and settles at full time from the 10-question scoreline (penalty shootouts don&apos;t affect bets).</li>
-            <li>A winning bet returns <strong className="text-fg">stake × odds</strong> in points; every movement appears in your Wallet history.</li>
-            <li><strong className="text-fg">Claim 20 free points daily</strong> from the Wallet tab, and fantasy keeps paying too — every goal by a player you picked adds <strong className="text-fg">+10 points</strong> straight to your wallet.</li>
-          </ul>
-        </section>
       </div>
     </PublicShell>
   );

@@ -34,6 +34,10 @@ model User {
   // credited with a WELCOME ledger entry on first use).
   virtualPoints Int?
 
+  // Transfer-market value of the player in virtual points — shown on the card
+  // and listings, kept separate from the user's wallet balance.
+  marketValue Int @default(0)
+
   matchesRefereed  Match[]               @relation("MatchReferee")
   rosterSlots      MatchPlayer[]
   requestedSubs    SubstitutionRequest[]
@@ -48,6 +52,8 @@ model User {
   notifications    Notification[]
   walletTxs        WalletTransaction[]
   bets             Bet[]
+  transferListings TransferListing[] @relation("TransferListingPlayer")
+  boughtListings   TransferListing[] @relation("TransferBuyer")
   complaints       Complaint[]
   resolvedComplaints Complaint[] @relation("ComplaintResolver")
   motmMatches      Match[]               @relation("MatchMotm")
@@ -552,6 +558,7 @@ model Team {
   competitionEntries CompetitionTeam[]
   homeMatches        Match[]           @relation("TeamHomeMatches")
   awayMatches        Match[]           @relation("TeamAwayMatches")
+  transferListings   TransferListing[] @relation("TransferListingTeam")
 
   @@index([slug])
 }
@@ -569,6 +576,62 @@ model TeamPlayer {
   @@unique([teamId, userId])
   @@unique([teamId, number])
   @@index([userId])
+}
+
+/**
+ * ----------------------------- Transfer window -----------------------------
+ */
+
+enum TransferWindowStatus {
+  DRAFT
+  OPEN
+  CLOSED
+}
+
+enum TransferListingStatus {
+  LISTED
+  SOLD
+  WITHDRAWN
+}
+
+model TransferWindow {
+  id        String              @id @default(cuid())
+  season    String              // e.g. "2026/27"
+  name      String              // e.g. "Summer 2026"
+  status    TransferWindowStatus @default(DRAFT)
+  openAt    DateTime?
+  closeAt   DateTime?
+  createdAt DateTime          @default(now())
+
+  listings TransferListing[]
+
+  @@index([status])
+  @@index([season])
+}
+
+/**
+ * A player (user) put up for transfer by their club during an open window.
+ * `askingPrice` is in virtual points — paid by the buying club, not credited
+ * to the selling user's account wallet.
+ */
+model TransferListing {
+  id          String              @id @default(cuid())
+  windowId    String
+  window      TransferWindow      @relation(fields: [windowId], references: [id], onDelete: Cascade)
+  playerId    String
+  player      User                @relation("TransferListingPlayer", fields: [playerId], references: [id], onDelete: Cascade)
+  teamId      String              // club that currently holds the player
+  team        Team                @relation("TransferListingTeam", fields: [teamId], references: [id], onDelete: Cascade)
+  askingPrice Int                 // virtual points
+  status      TransferListingStatus @default(LISTED)
+  buyerId     String?
+  buyer       User?               @relation("TransferBuyer", fields: [buyerId], references: [id], onDelete: SetNull)
+  soldAt      DateTime?
+  createdAt   DateTime            @default(now())
+
+  @@index([windowId, status])
+  @@index([playerId])
+  @@index([teamId, status])
 }
 
 /**

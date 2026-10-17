@@ -517,6 +517,59 @@ export function BetTerminal({
   );
 }
 
+export type BetTerminalProps = {
+  signedIn: boolean;
+  balance: number;
+  matches: BetMatch[];
+  bets: BetRow[];
+  txns: TxnRow[];
+  leaderboard: LeaderRow[];
+  myRank: number | null;
+  claimedToday: boolean;
+};
+
+/**
+ * SportyBet-style collapsible betting panel. Takes roughly half the page on
+ * desktop when open, collapses to a single balance bar when shut.
+ */
+export function CollapsibleBetPanel(props: BetTerminalProps) {
+  const [open, setOpen] = React.useState(true);
+
+  return (
+    <div className={cn("flex flex-col gap-2", open ? "lg:w-[52%] max-w-[52rem]" : "w-full")}>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        aria-label={open ? "Collapse betting panel" : "Open betting panel"}
+        className={cn(
+          "flex items-center justify-between gap-2 rounded-xl border-2 px-4 py-3 text-left transition-all",
+          open ? "border-fg/15 bg-bg-elevated" : "border-brand bg-brand/5",
+        )}
+      >
+        <div className="flex items-center gap-2">
+          <span aria-hidden>🪙</span>
+          <span className="font-black text-fg">Betting</span>
+          {props.signedIn ? (
+            <span className="ml-auto text-[11px] font-bold tabular-nums text-muted">
+              {props.balance} pts
+            </span>
+          ) : null}
+        </div>
+        <span className={cn("text-xs font-black transition-transform", open ? "rotate-0" : "rotate-180")}>
+          ▾
+        </span>
+      </button>
+
+      {open ? (
+        <div className="flex-1 min-h-[400px]">
+          <BetTerminal {...props} />
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 /* -------------------------------- market card ------------------------------ */
 
 function MarketCard({ match, legs, onPick }: { match: BetMatch; legs: SlipLeg[]; onPick: (l: SlipLeg) => void }) {
