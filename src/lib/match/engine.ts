@@ -19,7 +19,9 @@ import {
   HALFTIME_SECONDS,
   INCIDENT_ACTIONS,
   INTEGRITY_KIND_LABELS,
+  INTEGRITY_PENALTY,
   INTEGRITY_REPORT_COOLDOWN_MS,
+  PRESENCE_REFRESH_MS,
   integrityActionForSeq,
 } from "@/lib/domain";
 
@@ -1154,13 +1156,9 @@ export async function submitAnswer(
           match.id,
           "INTEGRITY_FLAG",
           `Copy attempt — ${rosterNameOf(match, mySlot.id)}`,
-          `${breach.seq === 1 ? "First" : breach.seq === 2 ? "Second" : "Third"} breach of the match. ${breach.suggested === "WARNING" ? "Referee decision: warning" : breach.suggested === "YELLOW_CARD" ? "Referee decision: yellow card" : "Referee decision: red card"}.`,
+          `${breach.seq === 1 ? "First" : breach.seq === 2 ? "Second" : "Third"} breach of the match. Awaiting the referee's decision.`,
           null,
         );
-        await tx.matchPlayer.update({
-          where: { id: mySlot.id },
-          data: { integrityScore: { decrement: 10 } },
-        });
       }
     }
     if (aiDetected) {
@@ -1183,13 +1181,9 @@ export async function submitAnswer(
           match.id,
           "INTEGRITY_FLAG",
           `AI assistance detected — ${rosterNameOf(match, mySlot.id)}`,
-          `${breach.seq === 1 ? "First" : breach.seq === 2 ? "Second" : "Third"} breach of the match. ${breach.suggested === "WARNING" ? "Referee decision: warning" : breach.suggested === "YELLOW_CARD" ? "Referee decision: yellow card" : "Referee decision: red card"}.`,
+          `${breach.seq === 1 ? "First" : breach.seq === 2 ? "Second" : "Third"} breach of the match. Awaiting the referee's decision.`,
           null,
         );
-        await tx.matchPlayer.update({
-          where: { id: mySlot.id },
-          data: { integrityScore: { decrement: 15 } },
-        });
       }
     }
     await bumpVersion(tx, match.id);
@@ -1380,6 +1374,14 @@ export async function requestSubstitution(
   if (inn.role !== "SUB") return err("The player coming on must be on the bench.");
   if (match.rounds.some((r) => r.status === "OPEN" || r.status === "LOCKED"))
     return err("Wait for the current question to finish before substituting.");
+
+  // One at a time: a request already with the referee cannot be sent again.
+  const pending = await prisma.substitutionRequest.findFirst({
+    where: { matchId: match.id, team: captain.team, status: "PENDING" },
+    select: { id: true },
+  });
+  if (pending)
+    return err("This substitution request was already sent — wait for the referee's decision.");
 
   await prisma.substitutionRequest.create({
     data: {
@@ -1673,26 +1675,14 @@ export async function reportIntegrity(
       );
       const ordinal = created.seq;
       const ordWord = ordinal === 1 ? "First" : ordinal === 2 ? "Second" : "Third";
-      const sanction =
-        created.suggested === "WARNING"
-          ? "Referee decision: warning"
-          : created.suggested === "YELLOW_CARD"
-            ? "Referee decision: yellow card"
-            : "Referee decision: red card";
       await appendTimeline(
         tx,
         match.id,
         "INTEGRITY_FLAG",
         `Copy attempt — ${rosterNameOf(match, slot.id)}`,
-        `${ordWord} breach of the match. ${sanction}.`,
+        `${ordWord} breach of the match. Awaiting the referee's decision.`,
         null,
       );
-      // Decrement player's integrity score based on severity
-      const scorePenalty = input.kind === "AI_ASSISTANCE" ? 15 : 10;
-      await tx.matchPlayer.update({
-        where: { id: slot.id },
-        data: { integrityScore: { decrement: scorePenalty } },
-      });
       await bumpVersion(tx, match.id);
     });
   } catch (e) {
@@ -1706,10 +1696,14 @@ export async function reportIntegrity(
 }
 
 /**
- * The referee (or an admin) issues the card for a breach. Reuses the existing
- * conduct-incident machinery so the sanction shows up on the public card list,
- * the match report and the player's record exactly like a manually booked card,
- * including sending a red-carded player off the field.
+ * The referee (or an admin) issues the card for a breach — this is what
+ * "counting" a breach means. Reuses the existing conduct-incident machinery so
+ * the sanction shows up on the public card list, the match report and the
+ * player's record exactly like a manually booked card, including sending a
+ * red-carded player off the field.
+ *
+ * Counting is also the only thing that moves the player's integrity score:
+ * detection alone never does, and ignored breaches never get here.
  */
 export async function issueIntegrityAction(
   actor: Actor,
@@ -1719,6 +1713,7 @@ export async function issueIntegrityAction(
   const flag = match.integrityFlags.find((f) => f.id === input.flagId);
   if (!flag) return err("That integrity check is not on this match.");
   if (flag.action) return err("A sanction has already been issued for this check.");
+  if (flag.ignoredAt) return err("This breach was ignored — it cannot be counted anymore.");
 
   const slot = match.roster.find((r) => r.id === flag.playerId);
   if (!slot) return err("That player is no longer on this roster.");
@@ -1748,9 +1743,15 @@ export async function issueIntegrityAction(
         note,
       },
     });
-    if (input.action === "RED_CARD") {
-      await tx.matchPlayer.update({ where: { id: slot.id }, data: { role: "OUT" } });
-    }
+    // Counting a breach is what moves the integrity score: detection alone
+    // never does, and ignored breaches never get here.
+    await tx.matchPlayer.update({
+      where: { id: slot.id },
+      data: {
+        integrityScore: { decrement: INTEGRITY_PENALTY[input.action] },
+        ...(input.action === "RED_CARD" ? { role: "OUT" as const } : {}),
+      },
+    });
     await tx.integrityFlag.update({
       where: { id: flag.id },
       data: { action: input.action, issuedById: actor.userId, issuedAt: new Date() },
@@ -1766,6 +1767,31 @@ export async function issueIntegrityAction(
     );
     await bumpVersion(tx, match.id);
   });
+  await publishMatchUpdate(match.code);
+  return ok(undefined);
+}
+
+/**
+ * The referee (or an admin) waves a breach off. Ignoring counts nothing: no
+ * card is issued, the player's integrity score is untouched and the breach
+ * never enters the public sanction tally. The flag stays on the board as an
+ * ignored record so the call can't be quietly re-raised.
+ */
+export async function ignoreIntegrityFlag(
+  actor: Actor,
+  input: { code: string; flagId: string },
+): Promise<ActionResult> {
+  const match = await assertReferee(actor, input.code);
+  const flag = match.integrityFlags.find((f) => f.id === input.flagId);
+  if (!flag) return err("That integrity check is not on this match.");
+  if (flag.action) return err("A sanction has already been issued for this check.");
+  if (flag.ignoredAt) return err("This breach was already ignored.");
+
+  await prisma.integrityFlag.update({
+    where: { id: flag.id },
+    data: { ignoredById: actor.userId, ignoredAt: new Date() },
+  });
+  await prisma.match.update({ where: { id: match.id }, data: { version: { increment: 1 } } });
   await publishMatchUpdate(match.code);
   return ok(undefined);
 }
@@ -1957,13 +1983,42 @@ export async function getPenaltyState(code: string) {
 /* ------------------------------ auth helper --------------------------------- */
 
 /**
- * Cheap reconcile used by client heartbeats: locks an OPEN round whose
- * countdown has expired (whichever client notices first wins — the update is
- * guarded to run exactly once) and returns the current version.
+ * Refresh the viewer's presence row for a match. Throttled to one write per
+ * PRESENCE_REFRESH_MS so a 2.5s heartbeat does not hammer the table — inside
+ * the throttle window the existing lastSeenAt row is simply kept.
  */
-export async function syncMatchState(code: string): Promise<number | null> {
+async function touchMatchPresence(matchId: string, userId: string): Promise<void> {
+  const now = new Date();
+  const existing = await prisma.matchPresence.findUnique({
+    where: { matchId_userId: { matchId, userId } },
+    select: { lastSeenAt: true },
+  });
+  if (existing) {
+    if (now.getTime() - existing.lastSeenAt.getTime() < PRESENCE_REFRESH_MS) return;
+    await prisma.matchPresence.update({
+      where: { matchId_userId: { matchId, userId } },
+      data: { lastSeenAt: now },
+    });
+    return;
+  }
+  try {
+    await prisma.matchPresence.create({ data: { matchId, userId, lastSeenAt: now } });
+  } catch (e) {
+    // Two tabs raced to create the row — the winner's row is enough.
+    if (!(e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002")) throw e;
+  }
+}
+
+/**
+ * Cheap reconcile used by client heartbeats: records the viewer's presence,
+ * locks an OPEN round whose countdown has expired (whichever client notices
+ * first wins — the update is guarded to run exactly once) and returns the
+ * current version.
+ */
+export async function syncMatchState(code: string, userId?: string | null): Promise<number | null> {
   const match = await loadMatchFor(code);
   if (!match) return null;
+  if (userId) await touchMatchPresence(match.id, userId);
   const open = match.rounds.find((r) => r.status === "OPEN");
   if (open && open.closesAt && Date.now() >= open.closesAt.getTime()) {
     await finalizeCurrentRound(code, match);

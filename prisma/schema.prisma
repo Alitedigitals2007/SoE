@@ -40,6 +40,7 @@ model User {
 
   matchesRefereed  Match[]               @relation("MatchReferee")
   rosterSlots      MatchPlayer[]
+  matchPresence    MatchPresence[]
   requestedSubs    SubstitutionRequest[]
   timelineAuthored TimelineEvent[]       @relation("TimelineAuthor")
   teams            TeamPlayer[]
@@ -223,6 +224,7 @@ model Match {
   substitutions   Substitution[]
   incidents       ConductIncident[]
   integrityFlags  IntegrityFlag[]
+  presence        MatchPresence[]
   timeline        TimelineEvent[]
   potmVotes       PotmVote[]
   chatMessages    ChatMessage[]
@@ -520,6 +522,10 @@ model IntegrityFlag {
   action    IncidentAction?
   issuedById String?
   issuedAt   DateTime?
+  // Set when the referee or an admin waves the breach off: nothing is counted,
+  // no card is issued and the player's integrity score is untouched.
+  ignoredById String?
+  ignoredAt   DateTime?
   createdAt  DateTime @default(now())
 
   @@index([matchId, createdAt])
@@ -544,6 +550,27 @@ model TimelineEvent {
   createdAt    DateTime     @default(now())
 
   @@index([matchId, seq])
+}
+
+/**
+ * --------------------------------- Presence ---------------------------------
+ *
+ * Lightweight "who is on the match page right now": every viewer's heartbeat
+ * refreshes lastSeenAt (throttled server-side), and a player counts as online
+ * while their last heartbeat is inside PRESENCE_WINDOW_MS. No websocket
+ * presence service needed — it works in pure polling mode too.
+ */
+
+model MatchPresence {
+  id         String   @id @default(cuid())
+  matchId    String
+  match      Match    @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lastSeenAt DateTime @default(now())
+
+  @@unique([matchId, userId])
+  @@index([matchId, lastSeenAt])
 }
 
 /**

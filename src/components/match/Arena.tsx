@@ -7,6 +7,7 @@ import {
   decideRoundAction,
   decideSubstitutionAction,
   endMatchAction,
+  ignoreIntegrityAction,
   issueIntegrityAction,
   lockRevealAction,
   openNextQuestionAction,
@@ -33,6 +34,7 @@ import {
   INCIDENT_LABELS,
   INTEGRITY_KIND_ICONS,
   INTEGRITY_KIND_LABELS,
+  INTEGRITY_PENALTY,
   type IncidentAction,
   type IncidentType,
   type IntegrityFlagView,
@@ -1083,8 +1085,11 @@ function IntegrityGate({
 /**
  * The referee's anti-copy board. Every breach lands here the moment it happens,
  * with the escalation the rules call for pre-selected: a player's first breach
- * is a warning, their second a yellow, their third and beyond a red. The
- * referee still has to press the button — nothing is booked automatically.
+ * is a warning, their second a yellow, their third and beyond a red.
+ *
+ * Detection alone changes nothing. Counting a breach is a deliberate call —
+ * issuing the card is the only thing that lowers the player's integrity score
+ * (warning −5, yellow −10, red −15) — and ignoring one counts nothing at all.
  */
 function IntegrityBoard({
   snapshot,
@@ -1093,24 +1098,32 @@ function IntegrityBoard({
   snapshot: MatchSnapshot;
   onError: (e: string | null) => void;
 }) {
-  const [busyId, setBusyId] = React.useState<string | null>(null);
+  const [busy, setBusy] = React.useState<string | null>(null);
   const flags = snapshot.integrity.flags;
-  const pending = flags.filter((f) => !f.action);
-  const settled = flags.filter((f) => f.action);
+  const pending = flags.filter((f) => !f.action && !f.ignored);
+  const settled = flags.filter((f) => f.action || f.ignored);
 
   const issue = (flag: IntegrityFlagView, action: IncidentAction) => {
-    setBusyId(flag.id);
+    setBusy(`${flag.id}:${action}`);
     void submit(
       issueIntegrityAction({ code: snapshot.code, flagId: flag.id, action }),
       onError,
-    ).finally(() => setBusyId(null));
+    ).finally(() => setBusy(null));
+  };
+
+  const ignore = (flag: IntegrityFlagView) => {
+    setBusy(`${flag.id}:ignore`);
+    void submit(
+      ignoreIntegrityAction({ code: snapshot.code, flagId: flag.id }),
+      onError,
+    ).finally(() => setBusy(null));
   };
 
   return (
     <Card>
       <CardHeader
         title="Match integrity"
-        description="Copy, paste and fullscreen exits. You decide the card."
+        description="Copy, paste and fullscreen exits. Count a breach or ignore it — nothing happens until you decide."
         aside={
           <Badge tone={pending.length ? "warning" : "neutral"}>
             {flags.length} check{flags.length === 1 ? "" : "s"} · {snapshot.integrity.issuedCount} booked
@@ -1119,8 +1132,10 @@ function IntegrityBoard({
       />
       <div className="p-5">
         <p className="text-xs text-muted">
-          Escalation: first breach a warning, second a yellow card, third a red. Half-time and any
-          pause are exempt.
+          Escalation: first breach a warning, second a yellow card, third a red. Detection never
+          moves a score — counting deducts {INTEGRITY_PENALTY.WARNING} / {INTEGRITY_PENALTY.YELLOW_CARD} /{" "}
+          {INTEGRITY_PENALTY.RED_CARD} for warning / yellow / red, and an ignored breach counts
+          nothing (and can no longer be counted). Half-time and any pause are exempt.
         </p>
 
         {flags.length === 0 ? (
@@ -1152,22 +1167,33 @@ function IntegrityBoard({
                     </p>
                     {f.detail ? <p className="mt-0.5 text-xs text-muted">{f.detail}</p> : null}
                   </div>
-                  <Badge tone="warning">
+                  <Badge tone={f.suggested === "RED_CARD" ? "card-red" : f.suggested === "YELLOW_CARD" ? "card-yellow" : "warning"}>
                     Breach {f.seq} → {INCIDENT_ACTIONS[f.suggested]}
                   </Badge>
                 </div>
-                <div className="mt-3 flex flex-wrap gap-2">
+                <div className="mt-3 flex flex-wrap items-center gap-2">
                   {(Object.keys(INCIDENT_ACTIONS) as IncidentAction[]).map((a) => (
                     <Button
                       key={a}
                       size="sm"
                       variant={a === f.suggested ? "danger" : "secondary"}
-                      loading={busyId === f.id}
+                      loading={busy === `${f.id}:${a}`}
+                      title={`Count this breach — deducts ${INTEGRITY_PENALTY[a]} from the integrity score`}
                       onClick={() => issue(f, a)}
                     >
                       {INCIDENT_ACTIONS[a]}
                     </Button>
                   ))}
+                  <span className="flex-1" />
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    loading={busy === `${f.id}:ignore`}
+                    title="Wave this breach off — nothing is counted and the score stays untouched"
+                    onClick={() => ignore(f)}
+                  >
+                    Ignore
+                  </Button>
                 </div>
               </li>
             ))}
@@ -1176,7 +1202,7 @@ function IntegrityBoard({
 
         {settled.length ? (
           <div className="mt-5 border-t border-line pt-4">
-            <p className="text-xs font-semibold uppercase tracking-widest text-muted">Booked</p>
+            <p className="text-xs font-semibold uppercase tracking-widest text-muted">Decided</p>
             <ul className="mt-2 space-y-1.5" role="list">
               {settled.map((f) => (
                 <li key={f.id} className="flex flex-wrap items-center justify-between gap-2 text-xs">
@@ -1184,8 +1210,8 @@ function IntegrityBoard({
                     {f.playerName} · {INTEGRITY_KIND_LABELS[f.kind]}
                     {f.roundNumber ? ` · Q${f.roundNumber}` : ""}
                   </span>
-                  <Badge tone={f.action === "RED_CARD" ? "danger" : f.action === "YELLOW_CARD" ? "warning" : "neutral"}>
-                    {f.action ? INCIDENT_ACTIONS[f.action] : ""}
+                  <Badge tone={f.action === "RED_CARD" ? "card-red" : f.action === "YELLOW_CARD" ? "card-yellow" : f.action === "WARNING" ? "warning" : "neutral"}>
+                    {f.ignored ? "Ignored" : f.action ? INCIDENT_ACTIONS[f.action] : ""}
                   </Badge>
                 </li>
               ))}
@@ -1759,12 +1785,26 @@ function LineupColumn({
 }) {
   const sorted = [...slots].sort((a, b) => a.number - b.number);
   const colorClass = color === "teama" ? "text-teama" : "text-teamb";
+  const onlineCount = slots.filter((p) => p.online).length;
   return (
     <div>
-      <p className={cn("truncate text-xs font-bold uppercase tracking-wider", colorClass)}>{name}</p>
+      <p className={cn("truncate text-xs font-bold uppercase tracking-wider", colorClass)}>
+        {name}
+        <span className="ml-2 font-semibold normal-case tracking-normal text-subtle">
+          {onlineCount}/{slots.length} online
+        </span>
+      </p>
       <ul className="mt-2 space-y-1">
         {sorted.map((p) => (
           <li key={p.userId} className={cn("flex items-center gap-2 rounded-md px-2 py-1 text-sm", p.role === "STARTER" ? "bg-bg-raised" : "opacity-70")}>
+            <span
+              aria-label={p.online ? "online" : "offline"}
+              title={p.online ? "Online now" : "Not online"}
+              className={cn(
+                "size-1.5 shrink-0 rounded-full",
+                p.online ? (color === "teama" ? "bg-teama" : "bg-teamb") : "border border-line-strong",
+              )}
+            />
             <span className="w-5 text-right text-xs font-bold tabular-nums text-subtle">{p.number}</span>
             <span className="min-w-0 flex-1 truncate font-medium text-fg">{p.name}</span>
             {p.isCaptain ? <span aria-label="captain" className="text-xs text-gold">C</span> : null}

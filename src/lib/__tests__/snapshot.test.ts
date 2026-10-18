@@ -28,6 +28,7 @@ function makeMatch(overrides: Partial<MatchFull> = {}): MatchFull {
     integrityFlags: [],
     substitutions: [],
     requests: [],
+    presence: [],
     _count: { roster: 0 },
     ...overrides,
   } as unknown as MatchFull;

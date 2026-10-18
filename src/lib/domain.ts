@@ -97,13 +97,31 @@ export const INTEGRITY_KIND_ICONS: Record<IntegrityFlagKind, string> = {
 
 /**
  * Escalation rule: a player's nth breach of a match is worth a warning, then a
- * yellow, then a red. Ordinals past three stay at red.
+ * yellow, then a red. Ordinals past three stay at red. Nothing is deducted at
+ * detection time — the score only moves when the referee or an admin COUNTS a
+ * breach, and an ignored breach is never counted at all.
  */
 export function integrityActionForSeq(seq: number): IncidentAction {
   if (seq >= 3) return "RED_CARD";
   if (seq === 2) return "YELLOW_CARD";
   return "WARNING";
 }
+
+/**
+ * Integrity points deducted when a breach is counted (a sanction is issued).
+ * Ignored breaches cost nothing, and detection alone never moves the score.
+ */
+export const INTEGRITY_PENALTY: Record<IncidentAction, number> = {
+  WARNING: 5,
+  YELLOW_CARD: 10,
+  RED_CARD: 15,
+};
+
+/** A player counts as online when their last heartbeat is inside this window. */
+export const PRESENCE_WINDOW_MS = 30_000;
+
+/** How often a viewer's heartbeat refreshes their presence row, in ms. */
+export const PRESENCE_REFRESH_MS = 10_000;
 
 /** Minimum gap between two accepted breach reports from one player, in ms. */
 export const INTEGRITY_REPORT_COOLDOWN_MS = 2000;
@@ -117,8 +135,10 @@ export interface RosterSlotView {
   number: number;
   role: LineupRole;
   isCaptain: boolean;
-  /** 0-100, higher = cleaner record. 100 = no breaches. */
+  /** 0-100, higher = cleaner record. 100 = no breaches counted. */
   integrityScore: number;
+  /** true when the player's client heartbeated the match page recently */
+  online: boolean;
 }
 
 export interface TimelineItemView {
@@ -172,6 +192,8 @@ export interface IntegrityFlagView {
   seq: number;
   suggested: IncidentAction;
   action: IncidentAction | null;
+  /** waved off by the referee/admin: never counted, no score effect */
+  ignored: boolean;
   playerUserId: string;
   playerName: string;
   team: TeamSide;

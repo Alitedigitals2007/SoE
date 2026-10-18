@@ -14,6 +14,7 @@ import {
   decideRound,
   decideSubstitution,
   endMatch,
+  ignoreIntegrityFlag,
   importQuestions,
   issueIntegrityAction as issueIntegrityEngine,
   kickOff,
@@ -264,6 +265,14 @@ export async function issueIntegrityAction(input: {
   return runEngine((actor) => issueIntegrityEngine(actor, input));
 }
 
+/** Referee/admin waves a breach off — nothing is counted and no score moves. */
+export async function ignoreIntegrityAction(input: {
+  code: string;
+  flagId: string;
+}): Promise<ActionResult> {
+  return runEngine((actor) => ignoreIntegrityFlag(actor, input));
+}
+
 export async function lockRevealAction(code: string, force = false): Promise<ActionResult> {
   return runEngine((actor) => lockAndReveal(actor, { code, force }));
 }
@@ -374,7 +383,9 @@ export async function syncMatchAction(
   code: string,
 ): Promise<ActionResult<{ version: number }>> {
   try {
-    const version = await syncMatchState(code);
+    // Heartbeats double as presence pings: the lineup shows who is online.
+    const actor = await currentActor();
+    const version = await syncMatchState(code, actor?.userId ?? null);
     if (version == null) return { ok: false, error: "Match not found." };
     return { ok: true, data: { version } };
   } catch (e) {

@@ -1,17 +1,18 @@
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { scoreMotm } from "@/lib/match/motm";
-import type {
-  AnswerView,
-  IncidentAction,
-  IntegrityBoardView,
-  MatchSnapshot,
-  PenaltyKickView,
-  PenaltyShootoutView,
-  RosterSlotView,
-  RoundView,
-  TeamSide,
-  TimelineItemView,
+import {
+  PRESENCE_WINDOW_MS,
+  type AnswerView,
+  type IncidentAction,
+  type IntegrityBoardView,
+  type MatchSnapshot,
+  type PenaltyKickView,
+  type PenaltyShootoutView,
+  type RosterSlotView,
+  type RoundView,
+  type TeamSide,
+  type TimelineItemView,
 } from "@/lib/domain";
 import { elapsedSecondsSince } from "@/lib/matchCode";
 
@@ -76,6 +77,7 @@ export const matchInclude = {
     },
   },
   motmUser: { select: { id: true, name: true, imageUrl: true } },
+  presence: { select: { userId: true, lastSeenAt: true } },
 } satisfies Prisma.MatchInclude;
 
 export type MatchFull = Prisma.MatchGetPayload<{ include: typeof matchInclude }>;
@@ -158,6 +160,15 @@ export function buildSnapshot(
       viewer.role === "ADMIN" || (viewer.role === "REFEREE" && match.refereeId === viewer.userId);
   const isAdmin = viewer.role === "ADMIN";
 
+  // Readiness: a player is online while their last heartbeat is inside the
+  // presence window (see MatchPresence + syncMatchState).
+  const presenceCutoff = now.getTime() - PRESENCE_WINDOW_MS;
+  const onlineUserIds = new Set(
+    match.presence
+      .filter((p) => p.lastSeenAt.getTime() >= presenceCutoff)
+      .map((p) => p.userId),
+  );
+
   const roster: RosterSlotView[] = match.roster.map((m) => ({
     userId: m.userId,
     name: m.user.name,
@@ -166,6 +177,7 @@ export function buildSnapshot(
     role: m.role,
     isCaptain: m.isCaptain,
     integrityScore: m.integrityScore,
+    online: onlineUserIds.has(m.userId),
   }));
 
   const viewerRosterSlot =
@@ -332,6 +344,7 @@ function buildIntegrity(
           seq: f.seq,
           suggested: f.suggested,
           action: f.action,
+          ignored: f.ignoredAt !== null,
           playerUserId: f.player.userId,
           playerName: f.player.user.name,
           team: f.player.team as TeamSide,
