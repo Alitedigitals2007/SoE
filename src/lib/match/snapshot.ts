@@ -98,7 +98,6 @@ function roundToView(
   round: MatchFull["rounds"][number],
   isReferee: boolean,
   roster: RosterSlotView[],
-  breachedUserIds: string[],
 ): RoundView {
   const answers: AnswerView[] = round.submissions.map((s) => {
     const slot = roster.find((r) => r.userId === s.player.userId);
@@ -115,7 +114,6 @@ function roundToView(
       pasted: isReferee ? s.pasted : undefined,
       // AI detection is also referee-only: players don't know they were flagged.
       aiDetected: isReferee ? s.aiDetected : undefined,
-      breached: isReferee && breachedUserIds.includes(s.player.userId),
     };
   });
 
@@ -189,15 +187,13 @@ export function buildSnapshot(
     type: e.type,
     label: e.label,
     detail: e.detail,
+    card: e.cardAction,
     at: e.createdAt.toISOString(),
     elapsedSec: elapsedSecondsSince(match.startedAt, e.createdAt),
   }));
 
-  // Breach rule: any player with a conduct incident in this match.
-  const breachedUserIds = [...new Set(match.incidents.map((i) => i.player.userId))];
-
   const round: RoundView | null = activeRound
-    ? roundToView(activeRound, isReferee, roster, breachedUserIds)
+    ? roundToView(activeRound, isReferee, roster)
     : null;
 
   const liveOpenRound =
@@ -309,7 +305,6 @@ export function buildSnapshot(
             };
           })
         : [],
-    breachedUserIds,
     motm: buildMotm(match),
     competitionType: (match.competition?.type === "LEAGUE" || match.competition?.type === "CUP") ? match.competition.type : null,
     cupRound: match.cupRound ?? null,
@@ -415,6 +410,7 @@ function buildSummary(
     type: e.type,
     label: e.label,
     detail: e.detail,
+    card: e.cardAction,
     at: e.createdAt.toISOString(),
     elapsedSec: elapsedSecondsSince(match.startedAt, e.createdAt),
   }));

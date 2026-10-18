@@ -81,10 +81,11 @@ async function appendTimeline(
   label: string,
   detail: string | null,
   authoredById: string | null,
+  cardAction?: IncidentAction | null,
 ) {
   const count = await tx.timelineEvent.count({ where: { matchId } });
   return tx.timelineEvent.create({
-    data: { matchId, type: type as never, label, detail, authoredById, seq: count + 1 },
+    data: { matchId, type: type as never, label, detail, authoredById, seq: count + 1, cardAction: cardAction ?? null },
   });
 }
 
@@ -551,15 +552,6 @@ export async function adminEditGoalRound(
   if (!sub) return err("That answer does not belong to this question.");
   const scorerSlot = match.roster.find((r) => r.id === sub.playerId);
   if (!scorerSlot) return err("Could not find the scoring player.");
-
-  // Conduct rule: a player flagged with a breach during this match can't be
-  // awarded a goal here either — pick another submission or record no goal.
-  const breach = await prisma.conductIncident.findFirst({
-    where: { matchId: match.id, playerId: scorerSlot.id },
-    select: { id: true },
-  });
-  if (breach)
-    return err("Foul — that player is under a conduct flag this match, so no goal can be given to their answer.");
 
   // Optional assist: another player on the SAME team as the scorer.
   let assistSlotId: string | null = null;
@@ -1275,40 +1267,6 @@ export async function decideRound(
   if (!scorerSlot) return err("Could not find the scoring player.");
   const scorerTeam = scorerSlot.team;
 
-  // Conduct rule: a player flagged with a breach during this match can't be
-  // awarded a goal — the referee's pick is recorded as a foul instead.
-  const breach = await prisma.conductIncident.findFirst({
-    where: { matchId: match.id, playerId: scorerSlot.id },
-    select: { id: true, action: true },
-  });
-  if (breach) {
-    await prisma.$transaction(
-      async (tx) => {
-        await tx.round.update({
-          where: { id: locked.id },
-          data: { status: "DECIDED", decision: "NO_GOAL", decidedAt: new Date(), goalSubmissionId: null, assistPlayerId: null },
-        });
-        await tx.match.update({
-          where: { id: match.id },
-          data: { currentRound: { increment: 1 } },
-        });
-        await appendTimeline(
-          tx,
-          match.id,
-          "NO_GOAL",
-          `Foul — ${rosterNameOf(match, sub.playerId)} is under a conduct flag`,
-          `Goal disallowed (${breach.action === "RED_CARD" ? "red card" : breach.action === "YELLOW_CARD" ? "yellow card" : "warning"}) · Answer: ${sub.answer}`,
-          actor.userId,
-        );
-        await bumpVersion(tx, match.id);
-        if (match.currentRound + 1 >= HALFTIME_AFTER_QUESTION) await beginHalftime(tx, match.id, actor.userId);
-      },
-      TX_OPTS,
-    );
-    await publishMatchUpdate(match.code);
-    return err("Foul — that player is under a conduct flag this match, so no goal can be given to their answer.");
-  }
-
   // Fantasy managers credited in the transaction below — notified after commit.
   const fantasyNotifyIds: string[] = [];
 
@@ -1588,6 +1546,7 @@ export async function recordIncident(
       `${actionLabel} — ${rosterNameOf(match, slot.id)}`,
       input.note?.trim() || null,
       actor.userId,
+      input.action,
     );
     await bumpVersion(tx, match.id);
   });
@@ -1803,6 +1762,7 @@ export async function issueIntegrityAction(
       `${actionLabel} — ${playerName}`,
       flag.round ? `Copy check on question ${flag.round.number}. ${note}` : `Copy check. ${note}`,
       actor.userId,
+      input.action,
     );
     await bumpVersion(tx, match.id);
   });

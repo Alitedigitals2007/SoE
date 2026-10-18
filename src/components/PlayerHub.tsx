@@ -143,8 +143,8 @@ function Overview({
           { label: "Assists", value: stats.assists, tone: "text-gold-strong" },
           { label: "MOTM", value: stats.motm, tone: "text-gold-strong" },
           { label: "Games", value: stats.matches, tone: "text-fg" },
-          { label: "Yellows", value: stats.yellowCards, tone: "text-warning" },
-          { label: "Reds", value: stats.redCards, tone: "text-danger" },
+          { label: "Yellows", value: stats.yellowCards, tone: "text-card-yellow" },
+          { label: "Reds", value: stats.redCards, tone: "text-card-red" },
         ].map((s) => (
           <div key={s.label} className="rounded-xl border-2 border-fg/10 bg-bg-elevated p-3 text-center shadow-[3px_3px_0_rgba(11,32,48,.06)]">
             <p className={cn("text-2xl font-black tabular-nums", s.tone)}>{s.value}</p>
@@ -334,9 +334,9 @@ function GoalsPanel({ stats }: { stats: PlayerStats }) {
         <h3 className="text-xs font-black uppercase tracking-widest text-gold-strong">Conduct record</h3>
         <div className="mt-2 grid grid-cols-3 gap-2 text-center">
           {[
-            { label: "Warnings", value: stats.warnings, tone: "text-muted" },
-            { label: "Yellow cards", value: stats.yellowCards, tone: "text-warning" },
-            { label: "Red cards", value: stats.redCards, tone: "text-danger" },
+            { label: "Warnings", value: stats.warnings, tone: "text-warning" },
+            { label: "Yellow cards", value: stats.yellowCards, tone: "text-card-yellow" },
+            { label: "Red cards", value: stats.redCards, tone: "text-card-red" },
           ].map((s) => (
             <div key={s.label} className="rounded-xl border border-line bg-white p-3">
               <p className={cn("text-2xl font-black tabular-nums", s.tone)}>{s.value}</p>
@@ -344,9 +344,6 @@ function GoalsPanel({ stats }: { stats: PlayerStats }) {
             </div>
           ))}
         </div>
-        <p className="mt-2 text-[11px] text-subtle">
-          A breach flag blocks goals — any pick from a flagged player becomes a foul instead.
-        </p>
       </section>
     </div>
   );

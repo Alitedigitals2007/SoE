@@ -19,8 +19,8 @@ export function MotmPanel({ snapshot }: { snapshot: MatchSnapshot }) {
   const breakdown = [
     { label: "Goals", value: motm.goals, points: motm.goals * 3, tone: "text-fg" },
     { label: "Assists", value: motm.assists, points: motm.assists * 2, tone: "text-fg" },
-    { label: "Yellow cards", value: motm.yellowCards, points: motm.yellowCards * -1, tone: "text-warning" },
-    { label: "Red cards", value: motm.redCards, points: motm.redCards * -3, tone: "text-danger" },
+    { label: "Yellow cards", value: motm.yellowCards, points: motm.yellowCards * -1, tone: "text-card-yellow" },
+    { label: "Red cards", value: motm.redCards, points: motm.redCards * -3, tone: "text-card-red" },
   ].filter((b) => b.value > 0);
 
   return (

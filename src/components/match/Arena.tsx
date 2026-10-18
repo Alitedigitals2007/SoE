@@ -891,14 +891,6 @@ function LockedStage({
                     <span className="flex min-w-0 items-baseline gap-2">
                       <span className="text-xs font-semibold text-subtle">#{i + 1}</span>
                       <span className="truncate font-medium text-fg"><MathText>{a.answer}</MathText></span>
-                      {a.breached ? (
-                        <span
-                          className="shrink-0 rounded bg-danger/15 px-1.5 py-0.5 text-[10px] font-black text-danger"
-                          title="This player has a conduct incident this match — awarding them the goal records a foul instead"
-                        >
-                          ⚠ breach — no goal
-                        </span>
-                      ) : null}
                       {isReferee && round.correctAnswer && matchesReference(a.answer, round.correctAnswer) ? (
                         <span
                           className="shrink-0 rounded bg-success/15 px-1.5 py-0.5 text-[10px] font-bold text-success"
@@ -1823,14 +1815,19 @@ function TimelineCard({ snapshot }: { snapshot: MatchSnapshot }) {
 
 function TimelineRow({ t }: { t: TimelineItemView }) {
   const clock = t.elapsedSec == null ? "--:--" : fmtClock(t.elapsedSec);
+  // CARD events carry which action was shown, so a warning never looks like a
+  // yellow card and a red card never renders as a yellow square.
+  const card = t.type === "CARD" ? t.card ?? null : null;
   const icon =
-    t.type === "GOAL" ? "⚽" : t.type === "NO_GOAL" ? "❌" : t.type === "KICKOFF" ? "🏟️" : t.type === "FULL_TIME" ? "🏁" : t.type === "CARD" ? "🟨" : t.type === "SUBSTITUTION" ? "🔄" : t.type === "QUESTION_OPEN" ? "❓" : t.type === "PENALTY_SCORED" ? "⚽" : t.type === "PENALTY_MISS" ? "❌" : t.type === "PENALTY_SAVED" ? "🧤" : t.type === "PENALTY_SHOOTOUT_START" ? "🎯" : t.type === "PENALTY_SHOOTOUT_END" ? "🏆" : t.type === "ADMIN_OVERRIDE" ? "✏️" : "🔒";
+    t.type === "GOAL" ? "⚽" : t.type === "NO_GOAL" ? "❌" : t.type === "KICKOFF" ? "🏟️" : t.type === "FULL_TIME" ? "🏁" : t.type === "CARD" ? (card === "RED_CARD" ? "🟥" : card === "YELLOW_CARD" ? "🟨" : "⚠️") : t.type === "SUBSTITUTION" ? "🔄" : t.type === "QUESTION_OPEN" ? "❓" : t.type === "PENALTY_SCORED" ? "⚽" : t.type === "PENALTY_MISS" ? "❌" : t.type === "PENALTY_SAVED" ? "🧤" : t.type === "PENALTY_SHOOTOUT_START" ? "🎯" : t.type === "PENALTY_SHOOTOUT_END" ? "🏆" : t.type === "ADMIN_OVERRIDE" ? "✏️" : "🔒";
+  const labelTone =
+    card === "RED_CARD" ? "text-card-red" : card === "YELLOW_CARD" ? "text-card-yellow" : card === "WARNING" ? "text-warning" : "text-fg";
   return (
     <li className="flex items-start gap-3 py-1.5 text-sm">
       <span className="w-14 shrink-0 pt-0.5 text-xs font-semibold tabular-nums text-subtle">{clock}</span>
       <span aria-hidden className="shrink-0">{icon}</span>
       <div className="min-w-0">
-        <p className="font-medium leading-snug text-fg">{t.label}</p>
+        <p className={cn("font-medium leading-snug", labelTone)}>{t.label}</p>
         {t.detail ? <p className="text-xs text-muted">{t.detail}</p> : null}
       </div>
     </li>

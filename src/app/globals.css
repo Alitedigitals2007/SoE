@@ -26,6 +26,8 @@
   --warning: #cc8100;
   --danger: #d83d48;
   --info: #2364d2;
+  --card-yellow: #fbbf24;
+  --card-red: #ef4444;
   --team-a: #ff6b2c;
   --team-b: #2364d2;
 }
@@ -54,6 +56,8 @@
   --color-warning: #cc8100;
   --color-danger: #d83d48;
   --color-info: #2364d2;
+  --color-card-yellow: #fbbf24;
+  --color-card-red: #ef4444;
   --color-teama: #ff6b2c;
   --color-teamb: #2364d2;
   --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,

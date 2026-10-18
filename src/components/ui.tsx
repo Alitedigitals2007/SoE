@@ -136,6 +136,8 @@ type BadgeTone =
   | "success"
   | "danger"
   | "warning"
+  | "card-yellow"
+  | "card-red"
   | "info"
   | "neutral"
   | "teama"
@@ -147,6 +149,8 @@ const badgeTones: Record<BadgeTone, string> = {
   success: "bg-success/15 text-success border-success/40",
   danger: "bg-danger/15 text-danger border-danger/30",
   warning: "bg-warning/15 text-warning border-warning/30",
+  "card-yellow": "bg-card-yellow text-gold-ink border-card-yellow",
+  "card-red": "bg-card-red text-white border-card-red",
   info: "bg-info/15 text-info border-info/30",
   neutral: "bg-surface text-muted border-line-strong",
   teama: "bg-teama/15 text-teama border-teama/30",

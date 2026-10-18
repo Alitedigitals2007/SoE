@@ -142,6 +142,8 @@ export interface TimelineItemView {
     | "ADMIN_OVERRIDE";
   label: string;
   detail?: string | null;
+  /** CARD events only: which action was shown, so the UI can colour it */
+  card?: IncidentAction | null;
   at: string; // ISO
   elapsedSec: number | null; // seconds since kick-off, null before kick-off
 }
@@ -159,8 +161,6 @@ export interface AnswerView {
   pasted?: boolean;
   /** referee/admin only: server flagged this as potentially AI-generated */
   aiDetected?: boolean;
-  /** referee only — the answering player has a conduct flag (breach rule) */
-  breached?: boolean;
 }
 
 /** One anti-copy breach, as shown on the referee's integrity board. */
@@ -302,8 +302,6 @@ export interface MatchSnapshot {
   /** visible to referee/admin; empty for others */
   pendingRequests: SubRequestView[];
   summary: MatchSummary | null;
-  /** User ids with a conduct incident in this match — the breach rule. */
-  breachedUserIds: string[];
   /** Automatic Player of the Match, computed from performance at full time. */
   motm: {
     userId: string;

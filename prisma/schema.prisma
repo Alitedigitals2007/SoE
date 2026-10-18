@@ -537,6 +537,7 @@ model TimelineEvent {
   roundNumber  Int?
   label        String // human readable one-liner, e.g. "GOAL — David (Newton) 1–0"
   detail       String? // optional second line
+  cardAction   IncidentAction? // set on CARD events: which card/action was shown
   authoredById String?
   authoredBy   User?        @relation("TimelineAuthor", fields: [authoredById], references: [id])
   seq          Int
