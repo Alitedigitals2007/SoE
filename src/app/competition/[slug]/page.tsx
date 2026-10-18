@@ -61,11 +61,6 @@ export default async function CompetitionDetail({ params }: { params: Promise<{ 
         <p className="mt-1 text-sm text-muted">Season {comp.season} · {comp.teams.length} teams</p>
 
         <div className="mt-6 flex flex-wrap items-center gap-3">
-          {comp.status !== "FINISHED" && comp.matches.length > 0 ? (
-            <Link href={`/fantasy/${comp.id}`} className="inline-flex h-10 items-center rounded-lg brand-gradient px-4 text-sm font-semibold text-white shadow-sm hover:brightness-105">
-              ⭐ Pick your fantasy XI
-            </Link>
-          ) : null}
           {showTable && (
             <CsvDownloadButton
               label="Export Standings"

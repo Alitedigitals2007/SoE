@@ -1,5 +1,4 @@
 import { prisma } from "@/lib/prisma";
-import { liveOddsFor } from "@/lib/bet/liveOdds";
 import { PublicShell } from "@/components/site";
 import { MatchLiveCard } from "@/components/live";
 import { Badge } from "@/components/ui";
@@ -8,8 +7,6 @@ export const dynamic = "force-dynamic";
 
 export default async function LivePage() {
   const matches = await prisma.match.findMany({ where: { status: "LIVE" }, orderBy: { startedAt: "asc" } });
-  const odds = await liveOddsFor(matches.map((m) => m.id));
-  const oddsById = Object.fromEntries(odds.map((o) => [o.matchId, o]));
 
   return (
     <PublicShell>
@@ -35,7 +32,7 @@ export default async function LivePage() {
             <p className="mt-1 text-sm text-muted">When a referee kicks off, the match streams here for everyone.</p>
           </div>
         ) : (
-          <MatchLiveCard matches={matches} odds={oddsById} />
+          <MatchLiveCard matches={matches} odds={{}} />
         )}
       </div>
     </PublicShell>

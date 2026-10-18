@@ -4,7 +4,6 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { homePath } from "@/lib/authz";
 import { fantasyBoard } from "@/lib/platform/engine";
-import { ensureWallet } from "@/lib/bet/wallet";
 import { PublicShell } from "@/components/site";
 import { Badge } from "@/components/ui";
 
@@ -16,18 +15,16 @@ export default async function FanDashboard() {
   if (!user) redirect("/login");
   if (user.role !== "USER") redirect(homePath(user.role));
 
-  const [liveCount, comps, walletBalance, openBets] = await Promise.all([
+  const [liveCount, comps] = await Promise.all([
     prisma.match.count({ where: { status: "LIVE" } }),
     prisma.competition.findMany({
       where: { status: { not: "FINISHED" } },
       orderBy: { createdAt: "desc" },
       include: { _count: { select: { teams: true, fantasyEntries: true } } },
     }),
-    ensureWallet(prisma, user.id).then((w) => w.balance),
-    prisma.bet.count({ where: { userId: user.id, status: "PENDING" } }),
   ]);
 
-  const entries = await Promise.all(
+const entries = await Promise.all(
     comps.map(async (c) => {
       const board = await fantasyBoard(c.id);
       const mine = board.find((e) => e.userId === user.id) ?? null;
@@ -45,9 +42,6 @@ export default async function FanDashboard() {
       };
     }),
   );
-
-  const myEntries = entries.filter((e) => e.entry);
-  const points = myEntries.reduce((sum, e) => sum + (e.entry?.points ?? 0), 0);
 
   return (
     <PublicShell>
@@ -70,33 +64,24 @@ export default async function FanDashboard() {
 
         {/* Topline stats */}
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6 mt-6">
-          <Stat label="Fantasy entries" value={myEntries.length} />
-          <Stat label="Total points" value={points} tone="gold" />
-          <Stat label="Wallet" value={walletBalance} tone="gold" />
-          <Stat label="Open bets" value={openBets} />
+          <Stat label="Fantasy entries" value={entries.length} />
           <Stat label="Live matches" value={liveCount} tone={liveCount > 0 ? "danger" : undefined} />
           <Stat label="Active comps" value={comps.length} />
         </div>
 
         {/* Fantasy section */}
         <div className="mt-8">
-          <div className="flex items-center justify-between gap-2">
-            <h2 className="text-lg font-bold text-fg">My fantasy</h2>
-            <Link href="/fantasy" className="text-sm font-semibold text-brand hover:underline">
-              Browse all →
-            </Link>
-          </div>
+          <h2 className="text-lg font-bold text-fg">My fantasy</h2>
 
           {comps.length === 0 ? (
             <p className="mt-3 rounded-2xl border border-dashed border-line-strong bg-bg-elevated p-8 text-center text-sm text-muted">
               No active competitions right now. Fantasy opens once an admin creates one.
             </p>
-          ) : (
+) : (
             <div className="mt-3 grid gap-3 md:grid-cols-2">
               {entries.map((c) => (
-                <Link
+                <div
                   key={c.id}
-                  href={`/fantasy/${c.id}`}
                   className="rounded-2xl border-2 border-fg/15 bg-bg-elevated p-5 shadow-[4px_4px_0_rgba(11,32,48,.06)] transition-all hover:-translate-y-0.5 hover:border-brand/40"
                 >
                   <div className="flex items-start justify-between gap-2">
@@ -121,7 +106,7 @@ export default async function FanDashboard() {
                       <span className="font-semibold text-brand">Build your XI →</span>
                     </div>
                   )}
-                </Link>
+                </div>
               ))}
             </div>
           )}
@@ -131,7 +116,6 @@ export default async function FanDashboard() {
         <div className="mt-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <QuickLink href="/live" icon="📺" title="Watch live" desc="Live quiz matches happening now." />
           <QuickLink href="/fixtures" icon="🗓️" title="Fixtures & results" desc="Scheduled and finished matches." />
-          <QuickLink href="/bet" icon="🎟️" title="Bet with points" desc="Predict fixtures, win virtual points." />
           <QuickLink href="/compare" icon="⚖️" title="Compare" desc="Player and team head-to-heads." />
         </div>
       </div>

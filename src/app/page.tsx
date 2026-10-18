@@ -380,35 +380,6 @@ export default async function Home() {
           </div>
         </section>
 
-        {/* BET PROMO */}
-        <section className="border-b-2 border-fg brand-gradient text-white relative overflow-hidden">
-          <div className="absolute inset-0 opacity-10" style={{ backgroundImage: 'url("data:image/svg+xml,%3Csvg width=\'60\' height=\'60\' viewBox=\'0 0 60 60\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cg fill=\'%23ffffff\' fill-opacity=\'0.2\'%3E%3Ccircle cx=\'30\' cy=\'30\' r=\'2\'/%3E%3C/g%3E%3C/svg%3E")' }} />
-          <div className="relative mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-5 px-4 py-10">
-            <div className="min-w-0">
-              <p className="text-[11px] font-black uppercase tracking-[.25em] text-white/85">New · virtual points betting</p>
-              <p className="mt-1 text-2xl sm:text-3xl font-black uppercase leading-none tracking-tight">Call the score. Win the points.</p>
-              <p className="mt-1.5 max-w-2xl text-sm text-white/85">
-                Auto odds on every scheduled fixture — results, exact scores up to 10–0, goal totals and accumulators.
-                Claim 20 points free daily; new accounts start with 100.
-              </p>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <Link
-                href="/bet"
-                className="inline-flex h-11 items-center rounded-xl bg-white px-5 text-sm font-black uppercase tracking-wider text-brand-deep shadow-md transition-all hover:scale-[1.03] hover:shadow-lg"
-              >
-                Open betting →
-              </Link>
-              <Link
-                href="/register?next=/bet"
-                className="inline-flex h-11 items-center rounded-xl px-5 text-sm font-black uppercase tracking-wider text-white ring-2 ring-white/70 transition-all hover:bg-white/10 hover:ring-white"
-              >
-                Get 100 points
-              </Link>
-            </div>
-          </div>
-        </section>
-
         {/* LIVE NOW */}
         <section className="mx-auto max-w-7xl px-4 py-14">
           <SectionHead
@@ -495,7 +466,7 @@ export default async function Home() {
               {[
                 { n: "01", t: "Follow the game", d: "Register as a fan, explore teams and build your fantasy entry.", icon: "📋" },
                 { n: "02", t: "Win the match", d: "Ten questions, one referee. Answer fast — accepted answers are goals.", icon: "⚽" },
-                { n: "03", t: "Claim the trophy", d: "Win the league table or cut through the knockout bracket, and score fantasy points.", icon: "🏆" },
+                { n: "03", t: "Claim the trophy", d: "Win the league table or cut through the knockout bracket, and lift the trophy.", icon: "🏆" },
               ].map((step) => (
                 <div key={step.n} className="relative rounded-2xl bg-white/10 p-6 backdrop-blur-sm border border-white/10 hover:border-brand/30 hover:bg-white/15 transition-all duration-300 group">
                   <p className="text-3xl font-black text-white/30 group-hover:text-brand/50 transition-colors">{step.n}</p>
