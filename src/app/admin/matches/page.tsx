@@ -108,7 +108,7 @@ export default async function AdminMatchesPage({
 
         <form action="/admin/matches" method="get" className="mt-4 flex max-w-2xl gap-2">
           {setupOnly ? <input type="hidden" name="setup" value="incomplete" /> : null}
-          <Input name="q" value={q} placeholder="Search by code, home or away team…" className="max-w-md" />
+          <Input name="q" defaultValue={q} placeholder="Search by code, home or away team…" className="max-w-md" />
           <button className="rounded-xl bg-fg px-4 py-2.5 font-semibold text-white transition-colors hover:bg-brand">
             Search
           </button>
