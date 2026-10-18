@@ -998,6 +998,8 @@ function DecidedStage({
   onError: (e: string | null) => void;
 }) {
   const isGoal = round.decision === "GOAL";
+  const isNoGoal = round.decision === "NO_GOAL";
+
   return (
     <Card>
       <div className="p-5">
@@ -1011,15 +1013,15 @@ function DecidedStage({
               <span className="font-semibold text-fg"><MathText>{round.winnerAnswer}</MathText></span>
             </p>
           </div>
-        ) : (
-          <div className="animate-pop rounded-lg border border-danger/40 bg-danger/10 p-6 text-center">
-            <p className="text-4xl">❌</p>
-            <h2 className="mt-1 text-2xl font-black uppercase tracking-wide text-danger">No goal</h2>
-            <p className="mt-1 text-sm text-muted">
+        ) : isNoGoal ? (
+          <div className="animate-pop relative overflow-hidden rounded-lg border border-danger/40 bg-danger/10 p-6 text-center">
+            <NoGoalCelebration />
+            <h2 className="relative mt-1 text-2xl font-black uppercase tracking-wide text-danger">No goal</h2>
+            <p className="relative mt-1 text-sm text-muted">
               Correct answer: <span className="font-semibold text-fg"><MathText>{round.correctAnswer}</MathText></span>
             </p>
           </div>
-        )}
+        ) : null}
 
         <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-line pt-4">
           <p className="text-xs text-subtle">Question {round.number} decided — recorded on the timeline.</p>
@@ -1066,9 +1068,10 @@ function IntegrityGate({
   return (
     <div
       role="alert"
-      className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-xl border-2 border-danger/50 bg-danger/10 px-4 py-3"
+      className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-xl border-2 border-danger/50 bg-danger/10 px-4 py-3 relative overflow-hidden"
     >
-      <p className="text-sm font-semibold text-danger">
+      <WarningCelebration />
+      <p className="text-sm font-semibold text-danger relative z-10">
         {!fullscreen
           ? "Fullscreen required — you have been flagged with the referee."
           : "Copy and paste are blocked here — the referee has been told."}
@@ -1248,18 +1251,88 @@ function GoalCelebration() {
       <span className="soe-3d-ball absolute left-1/2 top-1/2 -ml-6 -mt-6 text-5xl drop-shadow-[0_10px_18px_rgba(11,32,48,.45)]">
         ⚽
       </span>
+      {/* Enhanced confetti burst */}
       {CONFETTI.map((p, i) => (
         <span
           key={i}
-          className={`soe-confetti-piece absolute top-0 h-2.5 w-1.5 rounded-sm ${p.color}`}
+          className={`soe-confetti-burst absolute top-0 h-2.5 w-1.5 rounded-sm ${p.color}`}
           style={{
             left: `${p.left}%`,
             ["--drift" as string]: `${p.drift}px`,
             ["--dur" as string]: `${p.dur}s`,
             ["--delay" as string]: `${p.delay}s`,
+            ["--depth" as string]: `${100 + (i % 4) * 80}px`,
           }}
         />
       ))}
+    </div>
+  );
+}
+
+/** 3D no-goal / miss celebration: ball hits post/crossbar, big red X, shock rings. */
+function NoGoalCelebration() {
+  return (
+    <div
+      aria-hidden
+      className="pointer-events-none absolute inset-0 overflow-hidden"
+      style={{ perspective: "700px" }}
+    >
+      {/* Ball hitting post */}
+      <span className="soe-3d-miss absolute left-1/2 top-1/2 -ml-5 -mt-5 text-6xl drop-shadow-[0_12px_24px_rgba(216,61,72,.5)]">
+        ⚽
+      </span>
+      {/* Shock rings */}
+      <span className="soe-shock-ring absolute left-1/2 top-1/2 size-20 rounded-full border-4 border-danger/60" />
+      <span className="soe-shock-ring absolute left-1/2 top-1/2 size-20 rounded-full border-4 border-danger/40" style={{ animationDelay: "0.15s" }} />
+      {/* Big X */}
+      <span className="soe-miss-cross absolute left-1/2 top-1/2 -ml-8 -mt-8 text-7xl font-black text-danger/90 drop-shadow-[0_8px_20px_rgba(216,61,72,.6)]">
+        ✕
+      </span>
+    </div>
+  );
+}
+
+/** 3D card reveal: card flips in from edge with metallic glint. */
+function CardCelebration({ action }: { action: IncidentAction }) {
+  const isRed = action === "RED_CARD";
+  const isYellow = action === "YELLOW_CARD";
+  const cardBg = isRed
+    ? "bg-gradient-to-br from-red-600 via-red-700 to-red-900"
+    : isYellow
+      ? "bg-gradient-to-br from-amber-400 via-amber-500 to-amber-600"
+      : "bg-gradient-to-br from-amber-600 via-amber-700 to-amber-800";
+  const cardBorder = isRed ? "border-red-400" : isYellow ? "border-amber-300" : "border-amber-400";
+  const cardText = isRed ? "🟥" : isYellow ? "🟨" : "⚠️";
+  const label = isRed ? "RED CARD" : isYellow ? "YELLOW CARD" : "WARNING";
+
+  return (
+    <div
+      aria-hidden
+      className="pointer-events-none absolute inset-0 overflow-hidden flex items-center justify-center"
+      style={{ perspective: "900px" }}
+    >
+      <div className={`soe-card-reveal relative ${cardBg} ${cardBorder} rounded-xl border-4 shadow-[0_20px_40px_rgba(11,32,48,.5)] p-6 text-center min-w-[180px]`}>
+        <span className="soe-card-glint" />
+        <span className="relative text-6xl block mb-2 drop-shadow-[0_4px_12px_rgba(0,0,0,.4)]">{cardText}</span>
+        <span className="relative text-xs font-black uppercase tracking-widest text-white/95">{label}</span>
+      </div>
+    </div>
+  );
+}
+
+/** 3D warning pulse for integrity breaches. */
+function WarningCelebration() {
+  return (
+    <div
+      aria-hidden
+      className="pointer-events-none absolute inset-0 overflow-hidden flex items-center justify-center"
+      style={{ perspective: "600px" }}
+    >
+      <span className="soe-warning-ring absolute left-1/2 top-1/2 size-16 rounded-full border-3 border-warning/60" />
+      <span className="soe-warning-ring absolute left-1/2 top-1/2 size-16 rounded-full border-3 border-warning/40" style={{ animationDelay: "0.2s" }} />
+      <span className="soe-warning-3d relative text-5xl drop-shadow-[0_8px_20px_rgba(204,129,0,.5)]">
+        ⚠️
+      </span>
     </div>
   );
 }
@@ -1862,14 +1935,29 @@ function TimelineRow({ t }: { t: TimelineItemView }) {
     t.type === "GOAL" ? "⚽" : t.type === "NO_GOAL" ? "❌" : t.type === "KICKOFF" ? "🏟️" : t.type === "FULL_TIME" ? "🏁" : t.type === "CARD" ? (card === "RED_CARD" ? "🟥" : card === "YELLOW_CARD" ? "🟨" : "⚠️") : t.type === "SUBSTITUTION" ? "🔄" : t.type === "QUESTION_OPEN" ? "❓" : t.type === "PENALTY_SCORED" ? "⚽" : t.type === "PENALTY_MISS" ? "❌" : t.type === "PENALTY_SAVED" ? "🧤" : t.type === "PENALTY_SHOOTOUT_START" ? "🎯" : t.type === "PENALTY_SHOOTOUT_END" ? "🏆" : t.type === "ADMIN_OVERRIDE" ? "✏️" : "🔒";
   const labelTone =
     card === "RED_CARD" ? "text-card-red" : card === "YELLOW_CARD" ? "text-card-yellow" : card === "WARNING" ? "text-warning" : "text-fg";
+
+  // Trigger 3D card celebration on new card events using key-based remount
+  const [celebrationKey, setCelebrationKey] = React.useState(0);
+  React.useEffect(() => {
+    if (t.type === "CARD" && card) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setCelebrationKey((k) => k + 1);
+    }
+  }, [t.id, t.type, card]);
+
   return (
-    <li className="flex items-start gap-3 py-1.5 text-sm">
+    <li className="flex items-start gap-3 py-1.5 text-sm relative">
       <span className="w-14 shrink-0 pt-0.5 text-xs font-semibold tabular-nums text-subtle">{clock}</span>
       <span aria-hidden className="shrink-0">{icon}</span>
       <div className="min-w-0">
         <p className={cn("font-medium leading-snug", labelTone)}>{t.label}</p>
         {t.detail ? <p className="text-xs text-muted">{t.detail}</p> : null}
       </div>
+      {celebrationKey > 0 && card && (
+        <div key={celebrationKey} className="pointer-events-none absolute inset-0 z-10" style={{ perspective: "900px" }}>
+          <CardCelebration action={card} />
+        </div>
+      )}
     </li>
   );
 }
@@ -2110,10 +2198,10 @@ function FullTime({
               <h3 className="text-xs font-bold uppercase tracking-wider text-danger">Cards</h3>
               <ul className="mt-1 space-y-1 text-sm">
                 {summary.cards.map((c, i) => (
-                  <li key={i} className="flex items-center gap-2">
-                    <span aria-hidden className="soe-3d-card text-lg">{c.action === "RED_CARD" ? "🟥" : "🟨"}</span>
+                  <li key={i} className="flex items-center gap-2 relative" style={{ perspective: "900px" }}>
+                    <CardCelebration action={c.action} />
                     <span className="font-medium text-fg">{c.name}</span>
-                    <span className="text-xs text-subtle">{c.action === "RED_CARD" ? "Red" : "Yellow"}</span>
+                    <span className="text-xs text-subtle">{c.action === "RED_CARD" ? "Red" : c.action === "YELLOW_CARD" ? "Yellow" : "Warning"}</span>
                   </li>
                 ))}
               </ul>

@@ -314,3 +314,231 @@ body {
 .soe-3d-card:hover {
   animation: soe-card-spin 0.9s cubic-bezier(0.2, 0.7, 0.25, 1) both;
 }
+
+/* ---------------------- 3D no-goal / miss celebration --------------------- */
+@keyframes soe-miss-wobble {
+  0% {
+    transform: translate3d(0, -80px, -200px) rotate3d(1, 0, 0, 0deg) scale(0.6);
+    opacity: 0;
+  }
+  30% {
+    opacity: 1;
+  }
+  60% {
+    transform: translate3d(0, 20px, 0) rotate3d(1, 0, 0, 540deg) scale(1.15);
+  }
+  80% {
+    transform: translate3d(0, -10px, 40px) rotate3d(1, 0, 0, 720deg) scale(1.05);
+  }
+  100% {
+    transform: translate3d(0, 0, 80px) rotate3d(1, 0, 0, 900deg) scale(1);
+    opacity: 1;
+  }
+}
+@keyframes soe-cross-expand {
+  0% { transform: scale(0.3) rotate(-10deg); opacity: 0; }
+  50% { transform: scale(1.15) rotate(3deg); opacity: 1; }
+  100% { transform: scale(1) rotate(0deg); opacity: 1; }
+}
+@keyframes soe-shock-ring {
+  0% { transform: translate(-50%, -50%) scale(0.15); opacity: 0.8; }
+  100% { transform: translate(-50%, -50%) scale(4); opacity: 0; }
+}
+.soe-3d-miss {
+  animation: soe-miss-wobble 1.5s cubic-bezier(0.22, 0.68, 0.32, 1) both;
+  transform-style: preserve-3d;
+}
+.soe-miss-cross {
+  animation: soe-cross-expand 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  transform-style: preserve-3d;
+}
+.soe-shock-ring {
+  animation: soe-shock-ring 1s ease-out both;
+}
+
+/* ---------------------- 3D card reveal (yellow/red) ---------------------- */
+@keyframes soe-card-reveal {
+  0% {
+    transform: perspective(900px) rotateY(90deg) rotateX(-10deg) scale(0.7) translateY(30px);
+    opacity: 0;
+  }
+  40% {
+    transform: perspective(900px) rotateY(-15deg) rotateX(5deg) scale(1.05) translateY(-8px);
+    opacity: 1;
+  }
+  70% {
+    transform: perspective(900px) rotateY(5deg) rotateX(-3deg) scale(0.98) translateY(4px);
+  }
+  100% {
+    transform: perspective(900px) rotateY(0deg) rotateX(0deg) scale(1) translateY(0);
+    opacity: 1;
+  }
+}
+@keyframes soe-card-glint {
+  0% { transform: translateX(-150%) skewX(-20deg); opacity: 0; }
+  50% { opacity: 1; }
+  100% { transform: translateX(150%) skewX(-20deg); opacity: 0; }
+}
+.soe-card-reveal {
+  animation: soe-card-reveal 0.85s cubic-bezier(0.2, 0.7, 0.25, 1) both;
+  transform-style: preserve-3d;
+}
+.soe-card-glint {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(110deg, transparent 40%, rgba(255,255,255,0.6) 50%, transparent 60%);
+  border-radius: inherit;
+  animation: soe-card-glint 1.2s ease-out 0.3s both;
+  pointer-events: none;
+}
+
+/* ---------------------- 3D warning pulse for breaches ---------------------- */
+@keyframes soe-warning-pulse {
+  0% { transform: perspective(600px) rotateX(-15deg) scale(0.8); opacity: 0; }
+  30% { transform: perspective(600px) rotateX(5deg) scale(1.1); opacity: 1; }
+  60% { transform: perspective(600px) rotateX(-3deg) scale(0.98); }
+  100% { transform: perspective(600px) rotateX(0deg) scale(1); opacity: 1; }
+}
+@keyframes soe-warning-ring {
+  0% { transform: translate(-50%, -50%) scale(0.2); opacity: 0.7; }
+  100% { transform: translate(-50%, -50%) scale(3.5); opacity: 0; }
+}
+.soe-warning-3d {
+  animation: soe-warning-pulse 0.7s cubic-bezier(0.2, 0.7, 0.25, 1) both;
+  transform-style: preserve-3d;
+}
+.soe-warning-ring {
+  animation: soe-warning-ring 1.2s ease-out both;
+}
+
+/* ---------------------- 3D penalty kick celebration ---------------------- */
+@keyframes soe-pk-ball {
+  0% {
+    transform: translate3d(-120%, 20%, -300px) rotate3d(1, 0, 0, 0deg) scale(0.4);
+    opacity: 0;
+  }
+  25% { opacity: 1; }
+  55% {
+    transform: translate3d(0, -5%, 0) rotate3d(1, 0, 0, 540deg) scale(1.1);
+  }
+  100% {
+    transform: translate3d(0, -12%, 120px) rotate3d(1, 0, 0, 900deg) scale(1.2);
+    opacity: 1;
+  }
+}
+@keyframes soe-pk-net-ripple {
+  0% { transform: scaleX(1) scaleY(1); opacity: 0; }
+  30% { transform: scaleX(1.4) scaleY(0.7); opacity: 0.6; }
+  60% { transform: scaleX(0.8) scaleY(1.2); opacity: 0.3; }
+  100% { transform: scaleX(1) scaleY(1); opacity: 0; }
+}
+.soe-pk-ball {
+  animation: soe-pk-ball 1.4s cubic-bezier(0.22, 0.68, 0.32, 1) both;
+  transform-style: preserve-3d;
+}
+.soe-pk-net {
+  animation: soe-pk-net-ripple 0.8s ease-out both;
+  transform-origin: center center;
+}
+
+/* ---------------------- Enhanced confetti for goals ---------------------- */
+@keyframes soe-confetti-burst {
+  0% { transform: translate3d(0, 0, 0) rotate3d(1, 1, 1, 0deg); opacity: 1; }
+  100% { transform: translate3d(var(--drift, 0), 140vh, var(--depth, 200px)) rotate3d(1, 1, 1, 1080deg); opacity: 0; }
+}
+.soe-confetti-burst {
+  animation: soe-confetti-burst var(--dur, 3s) linear var(--delay, 0s) both;
+  transform-style: preserve-3d;
+}
+
+/* ---------------------- 3D pitch grid lines (home page) ---------------------- */
+@keyframes soe-grid-draw {
+  0% { stroke-dashoffset: 1000; opacity: 0; }
+  100% { stroke-dashoffset: 0; opacity: 1; }
+}
+.soe-pitch-grid {
+  animation: soe-grid-draw 2s ease-out both;
+}
+
+/* ---------------------- 3D Pitch visualization (home page hero) ---------------------- */
+.soe-pitch-3d {
+  transform: rotateX(55deg) rotateZ(-12deg) translateZ(-40px) scale(0.9);
+  transform-origin: center center;
+  box-shadow:
+    0 40px 80px -20px rgba(11, 32, 48, 0.5),
+    inset 0 0 100px rgba(0, 0, 0, 0.3);
+  animation: soe-pitch-enter 1.2s cubic-bezier(0.2, 0.7, 0.25, 1) both;
+}
+@keyframes soe-pitch-enter {
+  0% {
+    transform: rotateX(70deg) rotateZ(-12deg) translateZ(-100px) scale(0.6);
+    opacity: 0;
+  }
+  60% {
+    transform: rotateX(50deg) rotateZ(-12deg) translateZ(-20px) scale(1.02);
+  }
+  100% {
+    transform: rotateX(55deg) rotateZ(-12deg) translateZ(-40px) scale(0.9);
+    opacity: 1;
+  }
+}
+
+.soe-floating-ball {
+  animation: soe-ball-float 4s ease-in-out infinite;
+  transform-style: preserve-3d;
+}
+@keyframes soe-ball-float {
+  0%, 100% {
+    transform: translate3d(-50%, -50%, 0) rotateY(0deg) rotateX(-5deg);
+  }
+  25% {
+    transform: translate3d(-50%, -55%, 20px) rotateY(90deg) rotateX(-10deg);
+  }
+  50% {
+    transform: translate3d(-50%, -50%, 40px) rotateY(180deg) rotateX(-5deg);
+  }
+  75% {
+    transform: translate3d(-50%, -55%, 20px) rotateY(270deg) rotateX(-10deg);
+  }
+}
+
+.soe-ambient-particle {
+  animation: soe-particle-drift 6s ease-in-out infinite;
+  transform-style: preserve-3d;
+}
+@keyframes soe-particle-drift {
+  0%, 100% {
+    transform: translate3d(0, 0, 0) scale(1);
+    opacity: 0.4;
+  }
+  50% {
+    transform: translate3d(var(--drift-x, 20px), var(--drift-y, -30px), var(--drift-z, 40px)) scale(1.5);
+    opacity: 0.8;
+  }
+}
+
+/* GPU acceleration helpers */
+.transform-gpu {
+  transform: translateZ(0);
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+.transform-style-3d {
+  transform-style: preserve-3d;
+}
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  .soe-pitch-3d,
+  .soe-floating-ball,
+  .soe-ambient-particle {
+    animation: none !important;
+  }
+  .soe-pitch-3d {
+    transform: rotateX(55deg) rotateZ(-12deg) translateZ(-40px) scale(0.9);
+    opacity: 1;
+  }
+  .soe-floating-ball {
+    transform: translate3d(-50%, -50%, 0) rotateY(0deg) rotateX(-5deg);
+  }
+}
