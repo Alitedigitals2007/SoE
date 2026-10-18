@@ -1107,7 +1107,7 @@ export async function submitAnswer(
     (k) => k.status === "ANSWERED" && k.questionId && k.kickerUserId === actor.userId
   );
 
-  let round = match.rounds.find((r) => r.status === "OPEN");
+  const round = match.rounds.find((r) => r.status === "OPEN");
   const isPenalty = !!penaltyKick && !round;
 
   if (!round && !penaltyKick) return err("There is no open question right now.");
@@ -1117,28 +1117,28 @@ export async function submitAnswer(
   if (actor.role !== "PLAYER") return err("Only players can submit answers.");
   if (mySlot.role !== "STARTER") return err("Only players on the field can answer.");
 
+  // Penalty-specific validation
   if (isPenalty) {
-    // For penalty kicks, only the nominated kicker can answer
     if (penaltyKick!.kickerUserId !== actor.userId) {
       return err("Only the nominated kicker can answer this penalty question.");
     }
-    // Check if already answered
     if (penaltyKick!.answer) return err("You have already answered this penalty question.");
 
-    // Check time limit (half countdown)
     const halfCountdown = Math.max(5, Math.floor(match.countdownSeconds / 2));
     const now = new Date();
-  const openedAt = penaltyKick!.answeredAt;
-  if (openedAt) {
-    const elapsed = now.getTime() - new Date(openedAt).getTime();
-    if (elapsed > halfCountdown * 1000) {
-      return err("Time is up — answer window closed.");
+    const openedAt = penaltyKick!.answeredAt;
+    if (openedAt) {
+      const elapsed = now.getTime() - new Date(openedAt).getTime();
+      if (elapsed > halfCountdown * 1000) {
+        return err("Time is up — answer window closed.");
+      }
     }
   } else {
     // Normal round validation
-    if (round!.submissions.some((s) => s.playerId === mySlot.id))
+    if (round!.submissions.some((s) => s.playerId === mySlot.id)) {
       return err("You have already answered this question.");
-
+    }
+    const now = new Date();
     if (round!.closesAt && now.getTime() > round!.closesAt.getTime()) {
       await finalizeCurrentRound(match.code, match);
       return err("Time is up — answers are closed.");
@@ -1148,96 +1148,39 @@ export async function submitAnswer(
   const answer = input.answer.trim();
   if (!answer) return err("An empty answer cannot be submitted.");
   if (answer.length > 240) return err("Answers must be under 240 characters.");
-  // The client blocks paste outright; this is the belt-and-braces record of it.
   const pasted = input.pasted === true;
 
-  // AI detection heuristic: flag answers that look AI-generated.
-  const aiDetected = detectAIAnswer(answer, round?.openedAt ? now.getTime() - round.openedAt.getTime() : null);
+  const aiDetected = detectAIAnswer(answer, round?.openedAt ? Date.now() - round.openedAt.getTime() : null);
 
   await prisma.$transaction(async (tx) => {
     if (isPenalty) {
-      // Penalty kick answer - update the penalty kick record
       await tx.penaltyKick.update({
         where: { id: penaltyKick!.id },
-        data: {
-          answer,
-          status: "ANSWERED", // Keep as ANSWERED (answer submitted)
-        },
+        data: { answer, status: "ANSWERED" },
       });
-
-      await appendTimeline(
-        tx,
-        match.id,
-        "PENALTY_ANSWER_SUBMITTED",
-        `Penalty answer from ${mySlot.user.name}`,
-        `Answer: ${answer}`,
-        actor.userId,
-      );
+      await appendTimeline(tx, match.id, "PENALTY_ANSWER_SUBMITTED", `Penalty answer from ${mySlot.user.name}`, `Answer: ${answer}`, actor.userId);
     } else {
-      // Normal round submission
       const seq = await tx.submission.count({ where: { roundId: round!.id } });
       const submission = await tx.submission.create({
         data: {
           roundId: round!.id,
           playerId: mySlot.id,
           answer,
-          submittedAt: now,
+          submittedAt: new Date(),
           seq: seq + 1,
           pasted,
           charCount: answer.length,
-          typingMs: round!.openedAt ? Math.max(0, now.getTime() - round!.openedAt.getTime()) : null,
+          typingMs: round!.openedAt ? Math.max(0, Date.now() - round!.openedAt.getTime()) : null,
           aiDetected,
         },
       });
       if (pasted) {
-        const breach = await raiseIntegrityFlag(
-          tx,
-          {
-            matchId: match.id,
-            playerId: mySlot.id,
-            roundId: round!.id,
-            submissionId: submission.id,
-            kind: "COPIED_ANSWER",
-            detail: `Answer pasted into the box for question ${round!.number}`,
-            breachAt: now,
-          },
-          match.integrityFlags,
-        );
-        if (breach) {
-          await appendTimeline(
-            tx,
-            match.id,
-            "INTEGRITY_FLAG",
-            `Copy attempt — ${rosterNameOf(match, mySlot.id)}`,
-            `${breach.seq === 1 ? "First" : breach.seq === 2 ? "Second" : "Third"} breach of the match. Awaiting the referee's decision.`,
-            null,
-          );
-        }
+        const breach = await raiseIntegrityFlag(tx, { matchId: match.id, playerId: mySlot.id, roundId: round!.id, submissionId: submission.id, kind: "COPIED_ANSWER", detail: `Answer pasted into the box for question ${round!.number}`, breachAt: new Date() }, match.integrityFlags);
+        if (breach) await appendTimeline(tx, match.id, "INTEGRITY_FLAG", `Copy attempt — ${rosterNameOf(match, mySlot.id)}`, `${breach.seq === 1 ? "First" : breach.seq === 2 ? "Second" : "Third"} breach of the match. Awaiting the referee's decision.`, null);
       }
       if (aiDetected) {
-        const breach = await raiseIntegrityFlag(
-          tx,
-          {
-            matchId: match.id,
-            playerId: mySlot.id,
-            roundId: round!.id,
-            submissionId: submission.id,
-            kind: "AI_ASSISTANCE",
-            detail: `Answer flagged as potentially AI-generated for question ${round!.number}`,
-            breachAt: now,
-          },
-          match.integrityFlags,
-        );
-        if (breach) {
-          await appendTimeline(
-            tx,
-            match.id,
-            "INTEGRITY_FLAG",
-            `AI assistance detected — ${rosterNameOf(match, mySlot.id)}`,
-            `${breach.seq === 1 ? "First" : breach.seq === 2 ? "Second" : "Third"} breach of the match. Awaiting the referee's decision.`,
-            null,
-          );
-        }
+        const breach = await raiseIntegrityFlag(tx, { matchId: match.id, playerId: mySlot.id, roundId: round!.id, submissionId: submission.id, kind: "AI_ASSISTANCE", detail: `Answer flagged as potentially AI-generated for question ${round!.number}`, breachAt: new Date() }, match.integrityFlags);
+        if (breach) await appendTimeline(tx, match.id, "INTEGRITY_FLAG", `AI assistance detected — ${rosterNameOf(match, mySlot.id)}`, `${breach.seq === 1 ? "First" : breach.seq === 2 ? "Second" : "Third"} breach of the match. Awaiting the referee's decision.`, null);
       }
     }
     await bumpVersion(tx, match.id);

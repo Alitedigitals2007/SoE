@@ -12,7 +12,6 @@ import {
   type PenaltyShootoutView,
   type RosterSlotView,
   type RoundView,
-  type TeamSide,
   type TimelineItemView,
 } from "@/lib/domain";
 import { elapsedSecondsSince } from "@/lib/matchCode";

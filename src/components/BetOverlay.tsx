@@ -4,7 +4,7 @@ import * as React from "react";
 import { createPortal } from "react-dom";
 import { Button, cn, Input } from "@/components/ui";
 import { formatKickoffWat } from "@/lib/format";
-import { marketTitle, selectionLabel } from "@/lib/bet/labels";
+import { marketTitle } from "@/lib/bet/labels";
 
 export type BetOverlayMatch = {
   id: string;
@@ -219,8 +219,7 @@ export function BetOverlay({
 }
 
 function BetMatchCard({ match, onPick, selected }: { match: BetOverlayMatch; onPick: (l: SlipLeg) => void; selected: boolean }) {
-  const isSelected = (market: string, selection: string) =>
-    selected;
+  const isSelected = () => selected;
   
   const outcomes = [
     { sel: "HOME", label: match.homeName, odds: match.odds.home },
@@ -254,7 +253,7 @@ function BetMatchCard({ match, onPick, selected }: { match: BetOverlayMatch; onP
 
       <div className="mt-2 grid grid-cols-3 gap-1.5">
         {outcomes.map((o) => {
-          const on = isSelected("MATCH_RESULT", o.sel);
+          const on = isSelected();
           return (
             <button
               key={o.sel}
@@ -417,12 +416,14 @@ function BetSlip({
 }
 
 export function BetTrigger({ children, matches, ...props }: { children: React.ReactNode; matches: BetOverlayMatch[] } & Omit<React.ComponentProps<typeof BetOverlay>, "matches">) {
-  const [overlayOpen, setOverlayOpen] = React.useState(false);
+  const [, setOverlayOpen] = React.useState(false);
 
   return (
     <>
       {React.Children.map(children, (child) =>
-        React.isValidElement(child) ? React.cloneElement(child, { onClick: () => setOverlayOpen(true) }) : child
+        React.isValidElement(child)
+          ? React.cloneElement(child as React.ReactElement<{ onClick?: () => void }>, { onClick: () => setOverlayOpen(true) })
+          : child
       )}
       <BetOverlay matches={matches} {...props} onClose={() => setOverlayOpen(false)} />
     </>

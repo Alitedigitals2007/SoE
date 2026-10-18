@@ -240,7 +240,7 @@ export default async function BetPage() {
                   legs: legs.map((l) => ({ matchId: l.matchId, market: l.market as never, selection: l.selection })),
                   stake,
                 });
-            return { ok: r.ok, msg: r.error ?? "Bet placed" };
+            return { ok: r.ok, msg: r.ok ? "Bet placed" : r.error };
           }}
         >
           <Button
