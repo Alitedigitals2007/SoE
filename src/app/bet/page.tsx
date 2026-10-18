@@ -228,20 +228,6 @@ export default async function BetPage() {
           matches={matches as BetOverlayMatch[]}
           balance={balance}
           signedIn={!!user}
-          onPlaceBet={async (legs, stake) => {
-            const r = legs.length === 1
-              ? await (await import("@/app/actions/bet")).placeBetAction({
-                  matchId: legs[0].matchId,
-                  market: legs[0].market as never,
-                  selection: legs[0].selection,
-                  stake,
-                })
-              : await (await import("@/app/actions/bet")).placeAccaAction({
-                  legs: legs.map((l) => ({ matchId: l.matchId, market: l.market as never, selection: l.selection })),
-                  stake,
-                });
-            return { ok: r.ok, msg: r.ok ? "Bet placed" : r.error };
-          }}
         >
           <Button
             className="fixed bottom-6 right-6 z-40 inline-flex h-14 items-center gap-2 rounded-full brand-gradient px-6 text-base font-semibold text-white shadow-lg animate-pulse hover:brightness-105"

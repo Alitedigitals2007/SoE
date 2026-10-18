@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import { Button, cn, Input } from "@/components/ui";
 import { formatKickoffWat } from "@/lib/format";
 import { marketTitle } from "@/lib/bet/labels";
+import { placeBetAction, placeAccaAction } from "@/app/actions/bet";
 
 export type BetOverlayMatch = {
   id: string;
@@ -40,13 +41,11 @@ export function BetOverlay({
   matches,
   balance = 0,
   signedIn = false,
-  onPlaceBet,
   onClose,
 }: {
   matches: BetOverlayMatch[];
   balance?: number;
   signedIn?: boolean;
-  onPlaceBet?: (legs: SlipLeg[], stake: number) => Promise<{ ok: boolean; msg: string }>;
   onClose?: () => void;
 }) {
   const [open, setOpen] = React.useState(true);
@@ -109,15 +108,17 @@ export function BetOverlay({
     setBusy(true);
     setNotice(null);
     try {
-      const result = onPlaceBet ? await onPlaceBet(legs, stake) : { ok: true, msg: "Bet placed (demo)" };
-      if (result.ok) {
+      const r = legs.length === 1
+        ? await placeBetAction({ matchId: legs[0].matchId, market: legs[0].market as never, selection: legs[0].selection, stake })
+        : await placeAccaAction({ legs: legs.map((l) => ({ matchId: l.matchId, market: l.market as never, selection: l.selection })), stake });
+      if (r.ok) {
         setWallet((w) => w - stake);
-        setNotice({ ok: true, msg: result.msg });
+        setNotice({ ok: true, msg: "Bet placed" });
         setLegs([]);
         setStakeStr("");
         setSlipOpen(false);
       } else {
-        setNotice({ ok: false, msg: result.msg });
+        setNotice({ ok: false, msg: r.error ?? "Failed to place bet" });
       }
     } catch {
       setNotice({ ok: false, msg: "Could not place the bet — please try again." });
@@ -416,7 +417,7 @@ function BetSlip({
 }
 
 
-export function BetTrigger({ children, matches, ...props }: { children: React.ReactNode; matches: BetOverlayMatch[] } & Omit<React.ComponentProps<typeof BetOverlay>, "matches">) {
+export function BetTrigger({ children, matches, ...props }: { children: React.ReactNode; matches: BetOverlayMatch[] } & Omit<React.ComponentProps<typeof BetOverlay>, "matches" | "onPlaceBet">) {
   const [, setOverlayOpen] = React.useState(false);
 
   return (
