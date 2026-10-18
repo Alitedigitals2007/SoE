@@ -8,7 +8,7 @@ function pad(n: number) {
 
 export function KickoffCountdown({ scheduledAt, label = "Kick-off in" }: { scheduledAt: string; label?: string }) {
   const target = new Date(scheduledAt).getTime();
-  const [now, setNow] = React.useState(Date.now());
+  const [now, setNow] = React.useState(() => Date.now());
 
   React.useEffect(() => {
     const t = window.setInterval(() => setNow(Date.now()), 1000);

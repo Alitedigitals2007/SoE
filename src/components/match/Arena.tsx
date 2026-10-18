@@ -4,6 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 import {
   adminSubstituteAction,
+  decidePenaltyKickAction,
   decideRoundAction,
   decideSubstitutionAction,
   endMatchAction,
@@ -11,6 +12,7 @@ import {
   issueIntegrityAction,
   lockRevealAction,
   openNextQuestionAction,
+  openPenaltyQuestionAction,
   pauseMatchAction,
   recordIncidentAction,
   requestSubstitutionAction,
@@ -1292,6 +1294,32 @@ function NoGoalCelebration() {
   );
 }
 
+/** 3D penalty kick celebration: ball flies to net with ripple effect. */
+function PenaltyKickCelebration({ scored }: { scored: boolean }) {
+  return (
+    <div
+      aria-hidden
+      className="pointer-events-none absolute inset-0 overflow-hidden flex items-center justify-center"
+      style={{ perspective: "800px" }}
+    >
+      {/* Ball flying to net */}
+      <span className="soe-pk-ball absolute left-1/2 top-1/2 -ml-6 -mt-6 text-5xl drop-shadow-[0_10px_20px_rgba(11,32,48,.5)]">
+        ⚽
+      </span>
+      {/* Net ripple on goal */}
+      {scored && (
+        <span className="soe-pk-net absolute left-1/2 top-1/2 -ml-16 -mt-16 size-32 border-4 border-white/40 rounded-full bg-white/10" />
+      )}
+      {/* Miss indicator */}
+      {!scored && (
+        <span className="absolute left-1/2 top-1/2 -ml-10 -mt-10 text-4xl font-black text-danger/90 drop-shadow-[0_4px_12px_rgba(216,61,72,.6)]">
+          ✕
+        </span>
+      )}
+    </div>
+  );
+}
+
 /** 3D card reveal: card flips in from edge with metallic glint. */
 function CardCelebration({ action }: { action: IncidentAction }) {
   const isRed = action === "RED_CARD";
@@ -1966,20 +1994,32 @@ function TimelineRow({ t }: { t: TimelineItemView }) {
 
 function PenaltyShootoutCard({ snapshot, onError }: { snapshot: MatchSnapshot; onError: (e: string | null) => void }) {
   const ps = snapshot.penaltyShootout;
-  const side = ps?.currentKickTeam ?? "HOME";
-  const sideStarters = React.useMemo(
-    () => (ps ? snapshot.roster.filter((r) => r.team === side && r.role === "STARTER") : []),
-    [snapshot.roster, side, ps],
-  );
-  // The taker is derived: keep whatever the referee picked while it is still
-  // a valid starter for the kicking side, otherwise fall back to the captain.
+  const isReferee = snapshot.viewer.isReferee;
+  const isComplete = ps?.status === "COMPLETE";
+
+  // Find the current penalty kick and its state
+  const currentKick = ps?.kicks
+    .filter((k) => k.status === "PENDING_QUESTION" || k.status === "ANSWERED")
+    .sort((a, b) => a.sequence - b.sequence)[0];
+
+  const nextKickTeam = ps?.currentKickTeam ?? "HOME";
+  const nextTeamStarters = snapshot.roster.filter((r) => r.team === nextKickTeam && r.role === "STARTER");
+  const captain = nextTeamStarters.find((r) => r.isCaptain);
+  const isCaptain = snapshot.viewer.player?.userId === captain?.userId;
+  const isKicker = currentKick && snapshot.viewer.player?.userId === currentKick.kickerUserId;
+
+  // Captain picks the taker (stored locally until submitted)
   const [picked, setPicked] = React.useState<string | null>(null);
-  const defaultTaker = (sideStarters.find((r) => r.isCaptain) ?? sideStarters[0])?.userId ?? "";
-  const taker = picked && sideStarters.some((s) => s.userId === picked) ? picked : defaultTaker;
+  const defaultTaker = captain?.userId ?? nextTeamStarters[0]?.userId ?? "";
+  const taker = picked && nextTeamStarters.some((s) => s.userId === picked) ? picked : defaultTaker;
 
   if (!ps) return null;
-  const isReferee = snapshot.viewer.isReferee;
-  const isComplete = ps.status === "COMPLETE";
+
+  const kickStatus = currentKick?.status ?? "PENDING_QUESTION";
+  const showNominate = !currentKick || kickStatus === "PENDING_QUESTION";
+  const showOpenQuestion = currentKick && kickStatus === "PENDING_QUESTION" && (isCaptain || isReferee);
+  const showQuestion = kickStatus === "ANSWERED" && currentKick?.questionId;
+  const showDecide = kickStatus === "ANSWERED" && currentKick?.answer;
 
   return (
     <Card>
@@ -2010,30 +2050,102 @@ function PenaltyShootoutCard({ snapshot, onError }: { snapshot: MatchSnapshot; o
       <div className="p-5">
         <PenaltyKicksList kicks={ps.kicks} homeName={snapshot.homeName} awayName={snapshot.awayName} />
 
-        {!isComplete && isReferee && (
+        {!isComplete && showNominate && (isCaptain || isReferee) && (
           <div className="mt-5 border-t border-line pt-4">
             <p className="text-xs text-subtle mr-2">
-              Next kick: {ps.currentKickTeam === "HOME" ? snapshot.homeName : snapshot.awayName}
+              Next kick: {nextKickTeam === "HOME" ? snapshot.homeName : snapshot.awayName}
+              {isCaptain && <span className="ml-2 text-gold">(Captain&apos;s call)</span>}
             </p>
             <div className="mt-2 flex flex-wrap items-center gap-3">
               <label className="flex items-center gap-2 text-xs font-semibold text-muted">
                 Who takes it?
                 <Select value={taker} onChange={(e) => setPicked(e.target.value)} className="w-44 py-1 text-xs">
-                  {sideStarters.map((p) => (
+                  {nextTeamStarters.map((p) => (
                     <option key={p.userId} value={p.userId}>
                       {p.isCaptain ? `${p.name} (C)` : p.name}
                     </option>
                   ))}
                 </Select>
               </label>
-              <Button variant="pitch" onClick={() => submit(takePenaltyKickAction(snapshot.code, true, taker), onError)}>
-                Scored
-              </Button>
-              <Button variant="danger" onClick={() => submit(takePenaltyKickAction(snapshot.code, false, taker), onError)}>
-                Missed
+              <Button
+                variant="pitch"
+                onClick={() => submit(takePenaltyKickAction(snapshot.code, taker), onError)}
+                disabled={!taker}
+              >
+                Nominate kicker
               </Button>
             </div>
-            <p className="mt-2 text-[11px] text-subtle">Nominate the taker first — the first player to volunteer usually earns it.</p>
+            <p className="mt-2 text-[11px] text-subtle">
+              {isCaptain
+                ? "Captain nominates the taker. 3 kicks each, then sudden death."
+                : "Referee confirms (captain unavailable). 3 kicks each, then sudden death."}
+            </p>
+          </div>
+        )}
+
+        {!isComplete && showOpenQuestion && (
+          <div className="mt-5 border-t border-line pt-4">
+            <p className="text-xs text-subtle mr-2">
+              Kicker nominated: {currentKick.kickerName ?? "Unknown"} ({currentKick.team === "HOME" ? snapshot.homeName : snapshot.awayName})
+            </p>
+            <div className="mt-2 flex flex-wrap items-center gap-3">
+              <Button variant="pitch" onClick={() => submit(openPenaltyQuestionAction(snapshot.code), onError)}>
+                Open question (half time)
+              </Button>
+            </div>
+            <p className="mt-2 text-[11px] text-subtle">Opens a question for the kicker with half the normal time.</p>
+          </div>
+        )}
+
+        {!isComplete && showNominate && !isCaptain && !isReferee && captain && (
+          <div className="mt-5 border-t border-line pt-4 text-center">
+            <p className="text-xs text-subtle">
+              Waiting for {captain.name} (C) to nominate the taker…
+            </p>
+          </div>
+        )}
+
+        {!isComplete && showNominate && !isCaptain && !isReferee && !captain && isReferee && (
+          <div className="mt-5 border-t border-line pt-4 text-center">
+            <p className="text-xs text-subtle">No captain set for this side — referee to nominate.</p>
+          </div>
+        )}
+
+        {!isComplete && showQuestion && currentKick?.question && (
+          <div className="mt-5 border-t border-line pt-4">
+            <p className="text-xs text-subtle mr-2">
+              Question open for {currentKick.kickerName ?? "Kicker"} ({currentKick.team === "HOME" ? snapshot.homeName : snapshot.awayName})
+            </p>
+            <div className="mt-3 p-4 rounded-lg border border-gold/30 bg-gold/10">
+              <p className="text-sm font-semibold text-fg">
+                <MathText>{currentKick.question.text}</MathText>
+              </p>
+              <p className="mt-2 text-xs text-gold">
+                Half time: {Math.max(5, Math.floor(snapshot.countdownSeconds / 2))}s
+              </p>
+              {currentKick.answer ? (
+                <p className="mt-2 text-sm text-muted">
+                  Answer submitted: <span className="font-semibold text-fg"><MathText>{currentKick.answer}</MathText></span>
+                </p>
+              ) : (
+                <p className="mt-2 text-sm text-subtle">Waiting for answer…</p>
+              )}
+            </div>
+          </div>
+        )}
+
+        {!isComplete && showDecide && isReferee && currentKick && (
+          <div className="mt-5 border-t border-line pt-4">
+            <p className="text-xs text-subtle mr-2">Decide the penalty:</p>
+            <div className="mt-2 flex flex-wrap items-center gap-3">
+              <Button variant="pitch" onClick={() => submit(decidePenaltyKickAction(snapshot.code, "GOAL"), onError)}>
+                ⚽ Goal
+              </Button>
+              <Button variant="danger" onClick={() => submit(decidePenaltyKickAction(snapshot.code, "NO_GOAL"), onError)}>
+                ❌ No goal
+              </Button>
+            </div>
+            <p className="mt-2 text-[11px] text-subtle">Judge the kicker&apos;s answer.</p>
           </div>
         )}
 
@@ -2066,9 +2178,10 @@ function PenaltyKicksList({
   }
 
   const maxRounds = Math.max(5, pairs.length);
+  const lastKick = kicks[kicks.length - 1];
 
   return (
-    <div className="space-y-1">
+    <div className="space-y-1 relative">
       <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted mb-2">
         <span className="w-20 text-right">{homeName}</span>
         <span className="flex-1 text-center">Kicks</span>
@@ -2086,25 +2199,39 @@ function PenaltyKicksList({
           <div
             key={kickNum}
             className={cn(
-              "flex items-center gap-2 rounded px-2 py-1.5 text-sm",
+              "flex items-center gap-2 rounded px-2 py-1.5 text-sm relative",
               isCurrentPair && "bg-gold/10 border border-gold/30",
             )}
           >
-            <div className="w-20 flex justify-end">
+            <div className="w-20 flex justify-end relative">
               {homeKick ? (
-                <span className={cn("font-semibold", homeKick.scored ? "text-success" : "text-danger")}>
-                  {homeKick.scored ? "✓" : "✗"}
-                </span>
+                <>
+                  <span className={cn("font-semibold relative z-10", homeKick.scored ? "text-success" : "text-danger")}>
+                    {homeKick.scored ? "✓" : "✗"}
+                  </span>
+                  {lastKick && lastKick === homeKick && (
+                    <div className="absolute inset-0 pointer-events-none" style={{ perspective: "800px" }}>
+                      <PenaltyKickCelebration scored={homeKick.scored} />
+                    </div>
+                  )}
+                </>
               ) : null}
             </div>
             <span className={cn("w-8 text-center text-xs font-bold", isCurrentPair ? "text-gold" : "text-subtle")}>
               {kickNum}
             </span>
-            <div className="w-20 text-left">
+            <div className="w-20 text-left relative">
               {awayKick ? (
-                <span className={cn("font-semibold", awayKick.scored ? "text-success" : "text-danger")}>
-                  {awayKick.scored ? "✓" : "✗"}
-                </span>
+                <>
+                  <span className={cn("font-semibold relative z-10", awayKick.scored ? "text-success" : "text-danger")}>
+                    {awayKick.scored ? "✓" : "✗"}
+                  </span>
+                  {lastKick && lastKick === awayKick && (
+                    <div className="absolute inset-0 pointer-events-none" style={{ perspective: "800px" }}>
+                      <PenaltyKickCelebration scored={awayKick.scored} />
+                    </div>
+                  )}
+                </>
               ) : null}
             </div>
           </div>

@@ -11,6 +11,7 @@ import {
   addQuestion,
   autoCompleteSetup,
   bulkAddPlayers,
+  decidePenaltyKick,
   decideRound,
   decideSubstitution,
   endMatch,
@@ -21,6 +22,7 @@ import {
   lockAndReveal,
   MatchGuardError,
   openNextQuestion,
+  openPenaltyQuestion,
   pauseMatch,
   postponeMatch,
   recordIncident,
@@ -296,8 +298,16 @@ export async function startPenaltiesAction(code: string): Promise<ActionResult> 
   return runEngine((actor) => startPenalties(actor, { code }));
 }
 
-export async function takePenaltyKickAction(code: string, scored: boolean, takerUserId?: string): Promise<ActionResult> {
-  return runEngine((actor) => takePenaltyKick(actor, { code, scored, takerUserId }));
+export async function takePenaltyKickAction(code: string, takerUserId?: string): Promise<ActionResult> {
+  return runEngine((actor) => takePenaltyKick(actor, { code, takerUserId }));
+}
+
+export async function openPenaltyQuestionAction(code: string): Promise<ActionResult> {
+  return runEngine((actor) => openPenaltyQuestion(actor, { code }));
+}
+
+export async function decidePenaltyKickAction(code: string, decision: "GOAL" | "NO_GOAL"): Promise<ActionResult> {
+  return runEngine((actor) => decidePenaltyKick(actor, { code, decision }));
 }
 
 /* ------------------------------ substitutions ------------------------------ */

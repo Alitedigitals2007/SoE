@@ -252,6 +252,14 @@ export interface PenaltyKickView {
   team: TeamSide;
   scored: boolean;
   sequence: number;
+  status: "PENDING_QUESTION" | "ANSWERED" | "DECIDED";
+  questionId?: string;
+  question?: { id: string; text: string; referenceAnswer: string };
+  answer?: string;
+  answeredAt?: string;
+  decidedAt?: string;
+  kickerUserId?: string;
+  kickerName?: string;
 }
 
 export interface PenaltyShootoutView {

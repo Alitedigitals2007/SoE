@@ -4,8 +4,9 @@ import { prisma } from "@/lib/prisma";
 import { formGuides, oddsForMatches } from "@/lib/bet/odds";
 import { ensureWallet } from "@/lib/bet/wallet";
 import { PublicShell } from "@/components/site";
-import { Badge } from "@/components/ui";
+import { Badge, Button } from "@/components/ui";
 import { CollapsibleBetPanel, RedeemLookup, type BetMatch, type BetRow, type BetLegRow, type LeaderRow, type TxnRow } from "@/components/bet";
+import { BetTrigger, type BetOverlayMatch } from "@/components/BetOverlay";
 import { selectionLabel } from "@/lib/bet/labels";
 import { selectionResults } from "@/lib/bet/engine";
 import { MathBlock } from "@/components/MathText";
@@ -221,6 +222,35 @@ export default async function BetPage() {
             </div>
           </div>
         ) : null}
+
+        {/* Floating bet button for quick H2H access */}
+        <BetTrigger
+          matches={matches as BetOverlayMatch[]}
+          balance={balance}
+          signedIn={!!user}
+          onPlaceBet={async (legs, stake) => {
+            const r = legs.length === 1
+              ? await (await import("@/app/actions/bet")).placeBetAction({
+                  matchId: legs[0].matchId,
+                  market: legs[0].market as never,
+                  selection: legs[0].selection,
+                  stake,
+                })
+              : await (await import("@/app/actions/bet")).placeAccaAction({
+                  legs: legs.map((l) => ({ matchId: l.matchId, market: l.market as never, selection: l.selection })),
+                  stake,
+                });
+            return { ok: r.ok, msg: r.error ?? "Bet placed" };
+          }}
+        >
+          <Button
+            className="fixed bottom-6 right-6 z-40 inline-flex h-14 items-center gap-2 rounded-full brand-gradient px-6 text-base font-semibold text-white shadow-lg animate-pulse hover:brightness-105"
+            aria-label="Open bet overlay"
+          >
+            <span aria-hidden>🪙</span>
+            <span>Bet now</span>
+          </Button>
+        </BetTrigger>
 
         <div className="mt-6 grid gap-6 lg:grid-cols-[1fr_1fr]">
           <div className="min-w-0">

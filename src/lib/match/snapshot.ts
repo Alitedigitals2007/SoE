@@ -8,6 +8,7 @@ import {
   type IntegrityBoardView,
   type MatchSnapshot,
   type PenaltyKickView,
+  type TeamSide,
   type PenaltyShootoutView,
   type RosterSlotView,
   type RoundView,
@@ -15,6 +16,14 @@ import {
   type TimelineItemView,
 } from "@/lib/domain";
 import { elapsedSecondsSince } from "@/lib/matchCode";
+
+// Local type for PenaltyKick with included relations from loadMatchFor
+type PenaltyKickWithIncludes = Prisma.PenaltyKickGetPayload<{
+  include: {
+    question: { select: { id: true; text: true; referenceAnswer: true } };
+    kicker: { select: { id: true; name: true } };
+  };
+}>;
 
 export const matchInclude = {
   referee: { select: { id: true, name: true } },
@@ -242,10 +251,18 @@ export function buildSnapshot(
   const ps = match.penaltyShootout;
   let penaltyShootout: PenaltyShootoutView | null = null;
   if (ps) {
-    const kicks: PenaltyKickView[] = ps.kicks.map((k) => ({
+    const kicks: PenaltyKickView[] = (ps.kicks as PenaltyKickWithIncludes[]).map((k) => ({
       team: k.team as TeamSide,
       scored: k.score,
       sequence: k.sequence,
+      status: k.status as "PENDING_QUESTION" | "ANSWERED" | "DECIDED",
+      questionId: k.questionId ?? undefined,
+      question: k.question ? { id: k.question.id, text: k.question.text, referenceAnswer: k.question.referenceAnswer } : undefined,
+      answer: k.answer ?? undefined,
+      answeredAt: k.answeredAt?.toISOString() ?? undefined,
+      decidedAt: k.decidedAt?.toISOString() ?? undefined,
+      kickerUserId: k.kickerUserId ?? undefined,
+      kickerName: k.kicker?.name ?? undefined,
     }));
     const totalKicks = kicks.length;
     let currentKickTeam: TeamSide | null = null;

@@ -60,7 +60,13 @@ async function loadMatchFor(code: string, tx: PrismaClient | Tx = prisma) {
       questions: { orderBy: { order: "asc" } },
       penaltyShootout: {
         include: {
-          kicks: { orderBy: { sequence: "asc" } },
+          kicks: {
+            orderBy: { sequence: "asc" },
+            include: {
+              question: { select: { id: true, text: true, referenceAnswer: true } },
+              kicker: { select: { id: true, name: true } },
+            },
+          },
         },
       },
     },
@@ -1094,20 +1100,49 @@ export async function submitAnswer(
   if (!match) return err("Match not found.");
   if (match.status !== "LIVE") return err("The match is not live.");
   if (match.pausedAt) return err("The match is paused right now.");
-  const round = match.rounds.find((r) => r.status === "OPEN");
-  if (!round) return err("There is no open question right now.");
+
+  // Check for penalty kick question first
+  const ps = match.penaltyShootout;
+  const penaltyKick = ps?.kicks?.find(
+    (k) => k.status === "ANSWERED" && k.questionId && k.kickerUserId === actor.userId
+  );
+
+  let round = match.rounds.find((r) => r.status === "OPEN");
+  const isPenalty = !!penaltyKick && !round;
+
+  if (!round && !penaltyKick) return err("There is no open question right now.");
 
   const mySlot = match.roster.find((r) => r.userId === actor.userId);
   if (!mySlot) return err("You are not part of this match.");
   if (actor.role !== "PLAYER") return err("Only players can submit answers.");
   if (mySlot.role !== "STARTER") return err("Only players on the field can answer.");
-  if (round.submissions.some((s) => s.playerId === mySlot.id))
-    return err("You have already answered this question.");
 
-  const now = new Date();
-  if (round.closesAt && now.getTime() > round.closesAt.getTime()) {
-    await finalizeCurrentRound(match.code, match);
-    return err("Time is up — answers are closed.");
+  if (isPenalty) {
+    // For penalty kicks, only the nominated kicker can answer
+    if (penaltyKick!.kickerUserId !== actor.userId) {
+      return err("Only the nominated kicker can answer this penalty question.");
+    }
+    // Check if already answered
+    if (penaltyKick!.answer) return err("You have already answered this penalty question.");
+
+    // Check time limit (half countdown)
+    const halfCountdown = Math.max(5, Math.floor(match.countdownSeconds / 2));
+    const now = new Date();
+  const openedAt = penaltyKick!.answeredAt;
+  if (openedAt) {
+    const elapsed = now.getTime() - new Date(openedAt).getTime();
+    if (elapsed > halfCountdown * 1000) {
+      return err("Time is up — answer window closed.");
+    }
+  } else {
+    // Normal round validation
+    if (round!.submissions.some((s) => s.playerId === mySlot.id))
+      return err("You have already answered this question.");
+
+    if (round!.closesAt && now.getTime() > round!.closesAt.getTime()) {
+      await finalizeCurrentRound(match.code, match);
+      return err("Time is up — answers are closed.");
+    }
   }
 
   const answer = input.answer.trim();
@@ -1117,73 +1152,92 @@ export async function submitAnswer(
   const pasted = input.pasted === true;
 
   // AI detection heuristic: flag answers that look AI-generated.
-  const aiDetected = detectAIAnswer(answer, round.openedAt ? now.getTime() - round.openedAt.getTime() : null);
+  const aiDetected = detectAIAnswer(answer, round?.openedAt ? now.getTime() - round.openedAt.getTime() : null);
 
   await prisma.$transaction(async (tx) => {
-    const seq = await tx.submission.count({ where: { roundId: round.id } });
-    const submission = await tx.submission.create({
-      data: {
-        roundId: round.id,
-        playerId: mySlot.id,
-        answer,
-        submittedAt: now,
-        seq: seq + 1,
-        pasted,
-        charCount: answer.length,
-        typingMs: round.openedAt ? Math.max(0, now.getTime() - round.openedAt.getTime()) : null,
-        aiDetected,
-      },
-    });
-    if (pasted) {
-      // A pasted answer is judged on its merits, but the breach is logged so the
-      // referee sees it on the answer board and can issue the card.
-      const breach = await raiseIntegrityFlag(
-        tx,
-        {
-          matchId: match.id,
-          playerId: mySlot.id,
-          roundId: round.id,
-          submissionId: submission.id,
-          kind: "COPIED_ANSWER",
-          detail: `Answer pasted into the box for question ${round.number}`,
-          breachAt: now,
+    if (isPenalty) {
+      // Penalty kick answer - update the penalty kick record
+      await tx.penaltyKick.update({
+        where: { id: penaltyKick!.id },
+        data: {
+          answer,
+          status: "ANSWERED", // Keep as ANSWERED (answer submitted)
         },
-        match.integrityFlags,
+      });
+
+      await appendTimeline(
+        tx,
+        match.id,
+        "PENALTY_ANSWER_SUBMITTED",
+        `Penalty answer from ${mySlot.user.name}`,
+        `Answer: ${answer}`,
+        actor.userId,
       );
-      if (breach) {
-        await appendTimeline(
+    } else {
+      // Normal round submission
+      const seq = await tx.submission.count({ where: { roundId: round!.id } });
+      const submission = await tx.submission.create({
+        data: {
+          roundId: round!.id,
+          playerId: mySlot.id,
+          answer,
+          submittedAt: now,
+          seq: seq + 1,
+          pasted,
+          charCount: answer.length,
+          typingMs: round!.openedAt ? Math.max(0, now.getTime() - round!.openedAt.getTime()) : null,
+          aiDetected,
+        },
+      });
+      if (pasted) {
+        const breach = await raiseIntegrityFlag(
           tx,
-          match.id,
-          "INTEGRITY_FLAG",
-          `Copy attempt — ${rosterNameOf(match, mySlot.id)}`,
-          `${breach.seq === 1 ? "First" : breach.seq === 2 ? "Second" : "Third"} breach of the match. Awaiting the referee's decision.`,
-          null,
+          {
+            matchId: match.id,
+            playerId: mySlot.id,
+            roundId: round!.id,
+            submissionId: submission.id,
+            kind: "COPIED_ANSWER",
+            detail: `Answer pasted into the box for question ${round!.number}`,
+            breachAt: now,
+          },
+          match.integrityFlags,
         );
+        if (breach) {
+          await appendTimeline(
+            tx,
+            match.id,
+            "INTEGRITY_FLAG",
+            `Copy attempt — ${rosterNameOf(match, mySlot.id)}`,
+            `${breach.seq === 1 ? "First" : breach.seq === 2 ? "Second" : "Third"} breach of the match. Awaiting the referee's decision.`,
+            null,
+          );
+        }
       }
-    }
-    if (aiDetected) {
-      const breach = await raiseIntegrityFlag(
-        tx,
-        {
-          matchId: match.id,
-          playerId: mySlot.id,
-          roundId: round.id,
-          submissionId: submission.id,
-          kind: "AI_ASSISTANCE",
-          detail: `Answer flagged as potentially AI-generated for question ${round.number}`,
-          breachAt: now,
-        },
-        match.integrityFlags,
-      );
-      if (breach) {
-        await appendTimeline(
+      if (aiDetected) {
+        const breach = await raiseIntegrityFlag(
           tx,
-          match.id,
-          "INTEGRITY_FLAG",
-          `AI assistance detected — ${rosterNameOf(match, mySlot.id)}`,
-          `${breach.seq === 1 ? "First" : breach.seq === 2 ? "Second" : "Third"} breach of the match. Awaiting the referee's decision.`,
-          null,
+          {
+            matchId: match.id,
+            playerId: mySlot.id,
+            roundId: round!.id,
+            submissionId: submission.id,
+            kind: "AI_ASSISTANCE",
+            detail: `Answer flagged as potentially AI-generated for question ${round!.number}`,
+            breachAt: now,
+          },
+          match.integrityFlags,
         );
+        if (breach) {
+          await appendTimeline(
+            tx,
+            match.id,
+            "INTEGRITY_FLAG",
+            `AI assistance detected — ${rosterNameOf(match, mySlot.id)}`,
+            `${breach.seq === 1 ? "First" : breach.seq === 2 ? "Second" : "Third"} breach of the match. Awaiting the referee's decision.`,
+            null,
+          );
+        }
       }
     }
     await bumpVersion(tx, match.id);
@@ -1902,7 +1956,7 @@ export async function startPenalties(actor: Actor, input: { code: string }): Pro
 
 export async function takePenaltyKick(
   actor: Actor,
-  input: { code: string; scored: boolean; takerUserId?: string },
+  input: { code: string; takerUserId?: string },
 ): Promise<ActionResult> {
   const match = await assertReferee(actor, input.code);
   if (match.status !== "LIVE" && match.status !== "FINISHED")
@@ -1910,6 +1964,10 @@ export async function takePenaltyKick(
   const ps = match.penaltyShootout;
   if (!ps) return err("No penalty shootout in progress.");
   if (ps.status === "COMPLETE") return err("The penalty shootout is already complete.");
+
+  // Check if there's already a pending question for this team
+  const pendingKick = ps.kicks.find((k) => k.status === "PENDING_QUESTION" || k.status === "ANSWERED");
+  if (pendingKick) return err("A penalty question is already open — decide it first.");
 
   const kicks = ps.kicks;
   const total = kicks.length + 1; // sequence of THIS kick (1-based)
@@ -1923,49 +1981,194 @@ export async function takePenaltyKick(
   if (!taker) return err(`No active player is available on ${teamNameOf(match, teamSide)} to take the penalty.`);
   const takerName = taker.user.name;
 
-  // Prospective scores including this kick.
-  const aScore = ps.teamAScore + (teamSide === "HOME" && input.scored ? 1 : 0);
-  const bScore = ps.teamBScore + (teamSide === "AWAY" && input.scored ? 1 : 0);
-
-  // Kicks taken by each team after this one (HOME kicks on odd sequences).
-  const aTaken = Math.ceil(total / 2);
-  const bTaken = Math.floor(total / 2);
-
-  let winner: "HOME" | "AWAY" | null = null;
-  if (aScore > bScore + (5 - bTaken)) winner = "HOME"; // away cannot catch up in regulation
-  else if (bScore > aScore + (5 - aTaken)) winner = "AWAY"; // home cannot catch up in regulation
-  else if (total >= 10 && aScore !== bScore) winner = aScore > bScore ? "HOME" : "AWAY";
-
-  const newStatus = winner ? "COMPLETE" : "IN_PROGRESS";
-
   await prisma.$transaction(async (tx) => {
+    // Create the penalty kick in PENDING_QUESTION state
     await tx.penaltyKick.create({
       data: {
         shootoutId: ps.id,
         team: teamSide,
-        score: input.scored,
+        score: false, // Will be set when referee decides
         sequence: total,
+        status: "PENDING_QUESTION",
+        kickerUserId: taker.userId,
+      },
+    });
+
+    const teamName = teamSide === "HOME" ? match.homeName : match.awayName;
+    await appendTimeline(
+      tx,
+      match.id,
+      "PENALTY_KICK_START",
+      `Penalty kick for ${takerName} (${teamName})`,
+      `Captain nominated ${takerName}. Waiting for question to be opened.`,
+      actor.userId,
+    );
+
+    await bumpVersion(tx, match.id);
+  });
+  await publishMatchUpdate(match.code);
+  return ok(undefined);
+}
+
+/* --------------------------- penalty kick question flow ---------------------- */
+
+/**
+ * Captain/referee opens a penalty question for the nominated kicker.
+ * Picks an unused question from the bank, opens it for the kicker only
+ * with half the normal countdown time.
+ */
+export async function openPenaltyQuestion(
+  actor: Actor,
+  input: { code: string },
+): Promise<ActionResult> {
+  const match = await assertReferee(actor, input.code);
+  if (match.status !== "LIVE" && match.status !== "FINISHED")
+    return err("Penalties can only be taken after the questions have been decided.");
+  const ps = match.penaltyShootout;
+  if (!ps) return err("No penalty shootout in progress.");
+  if (ps.status === "COMPLETE") return err("The penalty shootout is already complete.");
+
+  // Find the current pending penalty kick (should be the latest one with PENDING_QUESTION)
+  const currentKick = ps.kicks
+    .filter((k) => k.status === "PENDING_QUESTION")
+    .sort((a, b) => a.sequence - b.sequence)[0];
+  if (!currentKick) return err("No pending penalty kick to answer.");
+
+  // Get the kicker from the penalty kick record
+  const kickerUserId = currentKick.kickerUserId;
+  if (!kickerUserId) return err("No kicker nominated for this penalty kick.");
+
+  const sideRoster = match.roster.filter((r) => r.team === currentKick.team && r.role === "STARTER");
+  const kicker = sideRoster.find((r) => r.userId === kickerUserId);
+  if (!kicker) return err("Nominated kicker is not an active player for this team.");
+
+  // Pick an unused question from the bank (roundNumber == null)
+  const unusedQuestions = match.questions.filter((q) => q.roundNumber == null);
+  if (unusedQuestions.length === 0) return err("No unused questions available in the bank.");
+  const question = unusedQuestions[0]; // Take the first unused
+
+  const now = new Date();
+  const halfCountdown = Math.max(5, Math.floor(match.countdownSeconds / 2)); // Half time, min 5s
+
+  await prisma.$transaction(async (tx) => {
+    // Update the penalty kick with the question and timing
+    await tx.penaltyKick.update({
+      where: { id: currentKick.id },
+      data: {
+        questionId: question.id,
+        status: "ANSWERED", // Question opened, waiting for answer
+        answeredAt: now,
+      },
+    });
+
+    // Mark question as used for penalties
+    await tx.question.update({
+      where: { id: question.id },
+      data: { roundNumber: 99 }, // Special marker for penalty questions
+    });
+
+    await appendTimeline(
+      tx,
+      match.id,
+      "PENALTY_QUESTION_OPEN",
+      `Penalty question for ${kicker.user.name} (${currentKick.team === "HOME" ? match.homeName : match.awayName})`,
+      `Half time: ${halfCountdown}s — ${question.text}`,
+      actor.userId,
+    );
+
+    await bumpVersion(tx, match.id);
+  });
+  await publishMatchUpdate(match.code);
+  return ok(undefined);
+}
+
+/**
+ * Referee decides the penalty kick: GOAL or NO_GOAL based on the kicker's answer.
+ */
+export async function decidePenaltyKick(
+  actor: Actor,
+  input: { code: string; decision: "GOAL" | "NO_GOAL" },
+): Promise<ActionResult> {
+  const match = await assertReferee(actor, input.code);
+  if (match.status !== "LIVE" && match.status !== "FINISHED")
+    return err("Penalties can only be decided during or after a live match.");
+  const ps = match.penaltyShootout;
+  if (!ps) return err("No penalty shootout in progress.");
+  if (ps.status === "COMPLETE") return err("The penalty shootout is already complete.");
+
+  // Find the current penalty kick awaiting decision
+  const currentKick = ps.kicks
+    .filter((k) => k.status === "ANSWERED")
+    .sort((a, b) => a.sequence - b.sequence)[0];
+  if (!currentKick) return err("No penalty kick awaiting decision.");
+
+  const teamSide = currentKick.team as "HOME" | "AWAY";
+  // Get kicker name from the penalty kick record
+  const kickerName = currentKick.kicker?.name ?? "the kicker";
+
+  const scored = input.decision === "GOAL";
+
+  // Prospective scores including this kick
+  const kicks = ps.kicks;
+  const total = kicks.length; // currentKick is already in the list
+  const aTaken = Math.ceil(total / 2);
+  const bTaken = Math.floor(total / 2);
+  const aScore = ps.teamAScore + (teamSide === "HOME" && scored ? 1 : 0);
+  const bScore = ps.teamBScore + (teamSide === "AWAY" && scored ? 1 : 0);
+
+  const REGULATION_KICKS_PER_TEAM = 3;
+  let winner: "HOME" | "AWAY" | null = null;
+  if (aTaken <= REGULATION_KICKS_PER_TEAM && bTaken <= REGULATION_KICKS_PER_TEAM) {
+    if (aScore > bScore + (REGULATION_KICKS_PER_TEAM - bTaken)) winner = "HOME";
+    else if (bScore > aScore + (REGULATION_KICKS_PER_TEAM - aTaken)) winner = "AWAY";
+  } else if (total >= REGULATION_KICKS_PER_TEAM * 2 && aScore !== bScore) {
+    winner = aScore > bScore ? "HOME" : "AWAY";
+  }
+
+  const newStatus = winner ? "COMPLETE" : "IN_PROGRESS";
+
+  await prisma.$transaction(async (tx) => {
+    await tx.penaltyKick.update({
+      where: { id: currentKick.id },
+      data: {
+        score: scored,
+        status: "DECIDED",
+        decidedAt: new Date(),
       },
     });
 
     await tx.penaltyShootout.update({
       where: { id: ps.id },
       data: {
-        teamAScore: teamSide === "HOME" && input.scored ? { increment: 1 } : undefined,
-        teamBScore: teamSide === "AWAY" && input.scored ? { increment: 1 } : undefined,
+        teamAScore: teamSide === "HOME" && scored ? { increment: 1 } : undefined,
+        teamBScore: teamSide === "AWAY" && scored ? { increment: 1 } : undefined,
         status: newStatus,
         winner,
       },
     });
 
     const teamName = teamSide === "HOME" ? match.homeName : match.awayName;
-    const label = input.scored ? "Penalty scored" : "Penalty missed";
-    const detail = `${takerName} (${teamName}) — ${input.scored ? "Scored" : "Missed"}`;
-    await appendTimeline(tx, match.id, input.scored ? "PENALTY_SCORED" : "PENALTY_MISS", label, detail, actor.userId);
+    const label = scored ? "Penalty scored" : "Penalty missed";
+    const detail = `${kickerName} (${teamName}) — ${scored ? "Scored" : "Missed"}`;
+    await appendTimeline(
+      tx,
+      match.id,
+      scored ? "PENALTY_SCORED" : "PENALTY_MISS",
+      label,
+      detail,
+      actor.userId,
+    );
 
     if (newStatus === "COMPLETE") {
       const winnerTeam = winner === "HOME" ? match.homeName : match.awayName;
-      await appendTimeline(tx, match.id, "PENALTY_SHOOTOUT_END", "Penalty shootout complete", `${winnerTeam} wins`, actor.userId);
+      await appendTimeline(
+        tx,
+        match.id,
+        "PENALTY_SHOOTOUT_END",
+        "Penalty shootout complete",
+        `${winnerTeam} wins`,
+        actor.userId,
+      );
     }
 
     await bumpVersion(tx, match.id);

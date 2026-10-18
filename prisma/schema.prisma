@@ -61,6 +61,7 @@ model User {
   complaints       Complaint[]
   resolvedComplaints Complaint[] @relation("ComplaintResolver")
   motmMatches      Match[]               @relation("MatchMotm")
+  penaltyKicks     PenaltyKick[]         @relation("PenaltyKickKicker")
 }
 
 /**
@@ -286,7 +287,8 @@ model Question {
   referenceAnswer String
   roundNumber     Int? // null = prepared but not part of the 10 to be played
 
-  rounds Round[]
+  rounds        Round[]
+  penaltyKicks  PenaltyKick[] @relation("PenaltyKickQuestion")
 
   @@unique([matchId, order])
   @@unique([matchId, roundNumber])
@@ -306,6 +308,12 @@ enum RoundStatus {
 enum RoundDecision {
   GOAL
   NO_GOAL
+}
+
+enum PenaltyKickStatus {
+  PENDING_QUESTION
+  ANSWERED
+  DECIDED
 }
 
 model Round {
@@ -776,13 +784,21 @@ model PenaltyShootout {
 }
 
 model PenaltyKick {
-  id         String          @id @default(cuid())
-  shootoutId String
-  shootout   PenaltyShootout @relation(fields: [shootoutId], references: [id], onDelete: Cascade)
-  team       String // "HOME" | "AWAY"
-  score      Boolean
-  sequence   Int // 1-based kick order
-  createdAt  DateTime        @default(now())
+  id              String            @id @default(cuid())
+  shootoutId      String
+  shootout        PenaltyShootout   @relation(fields: [shootoutId], references: [id], onDelete: Cascade)
+  team            String            // "HOME" | "AWAY"
+  score           Boolean
+  sequence        Int               // 1-based kick order
+  kickerUserId    String?
+  kicker          User?             @relation("PenaltyKickKicker", fields: [kickerUserId], references: [id], onDelete: SetNull)
+  questionId      String?
+  question        Question?         @relation("PenaltyKickQuestion", fields: [questionId], references: [id], onDelete: SetNull)
+  answer          String?
+  status          PenaltyKickStatus @default(PENDING_QUESTION)
+  answeredAt      DateTime?
+  decidedAt       DateTime?
+  createdAt       DateTime          @default(now())
 
   @@unique([shootoutId, sequence])
 }
