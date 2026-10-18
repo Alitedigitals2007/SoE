@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "prisma generate && node scripts/resolve-failed-migrations.mjs && prisma migrate deploy && next build",
+    "build:webpack": "prisma generate && node scripts/resolve-failed-migrations.mjs && prisma migrate deploy && NEXT_TURBOPACK=0 next build",
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
